@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@langchain/langgraph": "npm:@langchain/langgraph@^0.2",
+    "@langchain/core": "npm:@langchain/core@^0.2"
+  }
+}
