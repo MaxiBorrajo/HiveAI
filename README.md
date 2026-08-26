@@ -32,27 +32,25 @@ Deno se eligió sobre Node deliberadamente: su sistema de módulos por URL y cac
 
 ## Modo desarrollo (hot reload)
 
-Para levantar el proyecto y ver los cambios en tiempo real, ubicate en `frontend/` y ejecutá el entorno de desarrollo de Deno Desktop:
+Para tener recarga en vivo de ambas partes de la aplicación al mismo tiempo, el entorno de desarrollo se levanta en dos terminales separadas. Desarrollaremos sobre el navegador web estándar, y empaquetaremos al final.
 
+**1. Levantar el Backend (API)**
+En una terminal, desde la raíz del proyecto, arranca el servidor de Deno con reinicio automático:
+```bash
+deno task dev
+```
+*(Esto levanta el backend en `http://localhost:8000` y observará los cambios en `main.ts` y la carpeta `backend/`)*.
+
+**2. Levantar el Frontend (Vite)**
+En otra terminal, entra a la carpeta del frontend y levanta Vite:
 ```bash
 cd frontend
 deno desktop --hmr .
 ```
+*(Esto levanta el entorno de interfaz en `http://localhost:5173` con Hot Module Replacement (HMR) ultrarrápido).*
 
-Esto levanta el servidor de Vite con **Hot Module Replacement (HMR)** y abre automáticamente la ventana de la aplicación de escritorio. Cuando edites componentes React, lógica o estilos, los cambios se reflejan al instante sin reiniciar.
-
-El comando corre desde `frontend/` aunque también cargue el backend: `server.ts` resuelve esa importación.
-
-## Generar el ejecutable (build)
-
-Para compilar la aplicación y producir un binario listo para distribuir:
-
-```bash
-cd frontend
-deno desktop build .
-```
-
-Usa la configuración de `deno.json`, empaquetando el frontend y el motor web configurado (`webview` o `cef`).
+**3. Visualizar**
+Abre tu navegador web en `http://localhost:5173`. Todos los cambios que hagas en React se reflejarán instantáneamente, y si cambias la lógica del backend, la API se reiniciará sola de fondo.
 
 ---
 

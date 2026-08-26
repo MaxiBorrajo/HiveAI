@@ -14,4 +14,12 @@ export default defineConfig({
     // Externalizamos las librerías del backend para que Vite no intente procesarlas (se resuelven por Deno)
     external: ["../backend/mod.ts", "@langchain/langgraph", "@langchain/core"],
   },
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
 });

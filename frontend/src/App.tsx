@@ -1,17 +1,42 @@
-import { Logo } from "@/components/logo/Logo";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Logo } from "./components/logo/Logo.tsx";
+import { Button } from "./components/ui/button.tsx";
+import { Textarea } from "./components/ui/textarea.tsx";
+import { Badge } from "./components/ui/badge.tsx";
+import { Avatar, AvatarFallback } from "./components/ui/avatar.tsx";
+import { Separator } from "./components/ui/separator.tsx";
+import { Skeleton } from "./components/ui/skeleton.tsx";
+import { TooltipProvider } from "./components/ui/tooltip.tsx";
+import { useEffect, useState } from "react";
+import axios from "axios";
 
 function App() {
+  const [backendResponse, setBackendResponse] = useState<string>(
+    "Cargando respuesta del backend...",
+  );
+
+  useEffect(() => {
+    // Le pegamos directo a localhost:8000 usando axios
+    axios
+      .get("http://localhost:8000/")
+      .then((res) => setBackendResponse(res.data))
+      .catch((err) => setBackendResponse(`Error de conexión: ${err.message}`));
+  }, []);
+
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-background text-foreground p-8 font-sans">
         <div className="max-w-4xl mx-auto space-y-12">
+          {/* MUESTRA LA RESPUESTA DEL BACKEND AQUÍ */}
+          <section className="p-6 bg-primary/10 border border-primary rounded-lg text-center space-y-2">
+            <h2 className="text-display text-primary">
+              Respuesta de Deno (Backend):
+            </h2>
+            <div
+              className="text-lg bg-background p-4 rounded border"
+              dangerouslySetInnerHTML={{ __html: backendResponse }}
+            />
+          </section>
+
           {/* Cabecera / Logo */}
           <section className="space-y-4">
             <Logo size={48} withWordmark />
@@ -174,8 +199,8 @@ function App() {
                 <div className="flex items-center space-x-4">
                   <Skeleton className="h-12 w-12 rounded-full" />
                   <div className="space-y-2">
-                    <Skeleton className="h-4 w-[250px]" />
-                    <Skeleton className="h-4 w-[200px]" />
+                    <Skeleton className="h-4 w-62.5" />
+                    <Skeleton className="h-4 w-50" />
                   </div>
                 </div>
               </div>
