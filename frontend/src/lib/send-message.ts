@@ -1,21 +1,28 @@
 import type { Message } from "@/types/chat";
 
-// TODO: reemplazar por una llamada real al backend (POST http://localhost:8000/chat)
+// TODO: usar selectedPluginIds cuando HiveMind soporte selección de plugins.
 export async function sendMessage(
-  _history: Message[],
-  content: string,
-  selectedPluginIds: string[],
+  history: Message[],
+  _content: string,
+  _selectedPluginIds: string[],
 ): Promise<Message> {
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  const response = await fetch("http://localhost:8000/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      messages: history.map((m) => ({ role: m.role, content: m.content })),
+    }),
+  });
 
-  const pluginsInfo =
-    selectedPluginIds.length > 0
-      ? `Plugins activos: ${selectedPluginIds.join(", ")}.`
-      : "Sin plugins activos.";
+  if (!response.ok) {
+    throw new Error(`El backend respondió con estado ${response.status}`);
+  }
+
+  const data: { content: string } = await response.json();
 
   return {
     id: crypto.randomUUID(),
     role: "agent",
-    content: `Recibí tu mensaje: "${content}". ${pluginsInfo} Todavía estoy mockeada, HiveQueen no está conectada de verdad.`,
+    content: data.content,
   };
 }
