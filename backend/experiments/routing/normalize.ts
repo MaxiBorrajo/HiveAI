@@ -1,8 +1,5 @@
-import type {
-  AIMessageChunk,
-  MessageStructure,
-  MessageToolSet,
-} from "@langchain/core/messages";
+import type { AIMessage } from "@langchain/core/messages";
+import type { PipelineResult } from "./strategies/pipeline.ts";
 
 export interface NormalizedResult {
   selected_plugin: string | null;
@@ -17,9 +14,23 @@ export interface NormalizedResult {
   raw: unknown;
 }
 
-export function normalize(
-  rawResult: AIMessageChunk<MessageStructure<MessageToolSet>>,
-): NormalizedResult {
+const isPipelineResult = (r: unknown): r is PipelineResult =>
+  typeof r === "object" && r !== null && "selectorRaw" in r;
+
+function accumulate(
+  messages: (AIMessage | null)[],
+  result: NormalizedResult,
+): void {
+  for (const msg of messages) {
+    if (!msg) continue;
+    result.input_tokens += msg.usage_metadata?.input_tokens ?? 0;
+    result.output_tokens += msg.usage_metadata?.output_tokens ?? 0;
+    const duration = msg.response_metadata?.total_duration as number | undefined;
+    result.duration_ms += (duration ?? 0) / 1_000_000;
+  }
+}
+
+export function normalize(raw: AIMessage | PipelineResult): NormalizedResult {
   const result: NormalizedResult = {
     selected_plugin: null,
     params: null,
@@ -30,116 +41,37 @@ export function normalize(
     invocations: 0,
     format_error: false,
     multiple_tool_calls: false,
-    raw: rawResult,
+    raw,
   };
 
-  const messages: AIMessageChunk<MessageStructure<MessageToolSet>>[] = [];
-
-  const isToolCalling = (
-    obj: AIMessageChunk<MessageStructure<MessageToolSet>>,
-  ) =>
-    obj &&
-    typeof obj === "object" &&
-    ("tool_calls" in obj || "invalid_tool_calls" in obj);
-
-  if (isToolCalling(rawResult)) {
-    processToolCalling(rawResult, result, messages);
-  } else if (
-    Array.isArray(rawResult) &&
-    rawResult.length > 0 &&
-    isToolCalling(rawResult[0])
-  ) {
-    processToolCalling(rawResult[0], result, messages);
-  } else {
-    processPipeline(rawResult, result, messages);
+  if (isPipelineResult(raw)) {
+    accumulate([raw.selectorRaw, raw.parametrizadorRaw], result);
+    result.invocations = raw.parametrizadorRaw ? 2 : 1;
+    result.selected_plugin = raw.selectedName;
+    result.params = raw.params;
+    result.abstained = raw.abstained;
+    result.format_error = raw.formatError;
+    return result;
   }
 
-  for (const msg of messages) {
-    if (msg?.usage_metadata) {
-      result.input_tokens += msg.usage_metadata.input_tokens || 0;
-      result.output_tokens += msg.usage_metadata.output_tokens || 0;
-    }
-    if (msg?.response_metadata?.total_duration) {
-      result.duration_ms +=
-        (msg.response_metadata.total_duration as number) / 1_000_000;
-    }
-  }
-
-  return result;
-}
-
-function processToolCalling(
-  msg: AIMessageChunk<MessageStructure<MessageToolSet>>,
-  result: NormalizedResult,
-  messages: AIMessageChunk<MessageStructure<MessageToolSet>>[],
-) {
-  messages.push(msg);
+  accumulate([raw], result);
   result.invocations = 1;
 
-  const invalidCalls = msg.invalid_tool_calls || [];
-  const validCalls = msg.tool_calls || [];
-
-  if (invalidCalls.length > 0 && validCalls.length === 0) {
-    result.format_error = true;
-    return;
-  }
+  const validCalls = raw.tool_calls ?? [];
+  const invalidCalls = raw.invalid_tool_calls ?? [];
 
   if (validCalls.length === 0) {
-    result.abstained = true;
-    return;
-  }
-
-  if (validCalls.length > 1) {
-    result.multiple_tool_calls = true;
-  }
-
-  result.selected_plugin = validCalls[0].name;
-  result.params = validCalls[0].args;
-}
-
-function processPipeline(
-  rawResult: AIMessageChunk<MessageStructure<MessageToolSet>>,
-  result: NormalizedResult,
-  messages: AIMessageChunk<MessageStructure<MessageToolSet>>[],
-) {
-  const steps = Array.isArray(rawResult) ? rawResult : [rawResult];
-  result.invocations = steps.length;
-
-  for (const step of steps) {
-    if (step && step.raw) {
-      messages.push(step.raw);
-    }
-  }
-
-  if (steps.length === 0) {
-    result.format_error = true;
-    return;
-  }
-
-  const selectorStep = steps[0];
-
-  if (!selectorStep || !selectorStep.parsed) {
-    result.format_error = true;
-    return;
-  }
-
-  if (selectorStep.parsed === "NINGUNO_APLICA") {
-    result.abstained = true;
-    return;
-  }
-
-  result.selected_plugin = selectorStep.parsed;
-
-  if (steps.length > 1) {
-    const paramStep = steps[1];
-    if (!paramStep || !paramStep.parsed) {
+    if (invalidCalls.length > 0) {
       result.format_error = true;
-      result.selected_plugin = null;
     } else {
-      result.params = paramStep.parsed;
+      result.abstained = true;
     }
-  } else {
-    result.format_error = true;
-    result.selected_plugin = null;
+    return result;
   }
+
+  result.multiple_tool_calls = validCalls.length > 1;
+  result.selected_plugin = validCalls[0].name;
+  result.params = validCalls[0].args as Record<string, unknown>;
+
+  return result;
 }

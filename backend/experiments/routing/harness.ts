@@ -37,29 +37,21 @@ export async function harness(
   const validationResults = [];
 
   for (let index = 0; index < repetitionsPerQuery; index++) {
-    let results = [];
+    const result =
+      strategy === "tool-calling"
+        ? await toolCalling(query.query, minimalCatalogOfPlugins)
+        : await pipelineCalling(query.query, minimalCatalogOfPlugins);
 
-    if (strategy === "tool-calling") {
-      results.push(await toolCalling(query.query, minimalCatalogOfPlugins));
-    } else {
-      results.push(await pipelineCalling(query.query, minimalCatalogOfPlugins));
-    }
-
-    for (const result of results) {
-      const normalizeResult = normalize(
-        result as AIMessageChunk<MessageStructure<MessageToolSet>>,
-      );
-      validationResults.push(
-        evaluate(
-          normalizeResult,
-          query,
-          minimalCatalogOfPlugins,
-          strategy,
-          pluginsSize,
-          repetitionsPerQuery,
-        ),
-      );
-    }
+    validationResults.push(
+      evaluate(
+        normalize(result),
+        query,
+        minimalCatalogOfPlugins,
+        strategy,
+        pluginsSize,
+        index + 1,
+      ),
+    );
   }
 
   return validationResults;

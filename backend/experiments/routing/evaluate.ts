@@ -28,10 +28,10 @@ export interface Verdict {
  * Evalúa el resultado normalizado contra la consulta esperada.
  *
  * @param strictDefaults
- * Si es true: todo campo debe coincidir exactamente con expected_params.
- * Si es false: un campo cuyo valor difiere del esperado se ignora si el pedido
- * no lo mencionaba y el valor devuelto es el default del schema.
- * Los campos que el pedido sí determina deben coincidir siempre.
+ * Si es true: los campos que el modelo agregó por su cuenta deben respetar el
+ * valor por defecto declarado en el schema.
+ * Si es false: esos campos se ignoran.
+ * En ambos casos, los campos presentes en expected_params deben coincidir.
  */
 export function evaluate(
   result: NormalizedResult,
@@ -52,27 +52,23 @@ export function evaluate(
     selection_correct = result.selected_plugin === query.expected_plugin;
   }
 
-  const hallucinated_plugin =
-    result.selected_plugin !== null &&
+  const hallucinated_plugin = result.selected_plugin !== null &&
     result.selected_plugin !== "NINGUNO_APLICA" &&
     !catalog.some((p) => p.name === result.selected_plugin);
 
   let params_valid: boolean | null = null;
   let params_correct: boolean | null = null;
 
-  if (
-    selection_correct &&
-    !result.abstained &&
-    query.expected_plugin !== null
-  ) {
+  if (selection_correct && !result.abstained && query.expected_plugin !== null) {
     const plugin = catalog.find((p) => p.name === query.expected_plugin);
+
     if (plugin && result.params) {
       const parseResult = plugin.schema.safeParse(result.params);
       params_valid = parseResult.success;
 
       if (params_valid) {
         params_correct = compareParams(
-          result.params as Record<string, any>,
+          result.params as Record<string, unknown>,
           query.expected_params,
           plugin.schema,
           strictDefaults,
@@ -105,68 +101,78 @@ export function evaluate(
   };
 }
 
-function getZodDefault(zodType: any): any {
-  if (!zodType) return undefined;
-  if (typeof zodType._def?.defaultValue === "function") {
-    return zodType._def.defaultValue();
-  }
-  if (zodType._def?.innerType) {
-    return getZodDefault(zodType._def.innerType);
-  }
-  return undefined;
+interface JsonSchemaShape {
+  properties?: Record<string, { default?: unknown }>;
 }
 
-function deepEqual(a: any, b: any): boolean {
+const defaultsCache = new WeakMap<object, Record<string, unknown>>();
+
+function getSchemaDefaults(
+  schema: z.ZodObject<z.ZodRawShape>,
+): Record<string, unknown> {
+  const cached = defaultsCache.get(schema);
+  if (cached) return cached;
+
+  const jsonSchema = schema.toJSONSchema() as JsonSchemaShape;
+  const defaults: Record<string, unknown> = {};
+
+  for (const [key, prop] of Object.entries(jsonSchema.properties ?? {})) {
+    if (prop && "default" in prop) {
+      defaults[key] = prop.default;
+    }
+  }
+
+  defaultsCache.set(schema, defaults);
+  return defaults;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (a == null || b == null) return false;
+  if (a === null || b === null || a === undefined || b === undefined) {
+    return false;
+  }
   if (typeof a !== "object" || typeof b !== "object") return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
-  if (Array.isArray(a)) {
+
+  if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], b[i])) return false;
-    }
-    return true;
+    return a.every((item, i) => deepEqual(item, b[i]));
   }
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
+
+  const objA = a as Record<string, unknown>;
+  const objB = b as Record<string, unknown>;
+  const keysA = Object.keys(objA);
+  const keysB = Object.keys(objB);
+
   if (keysA.length !== keysB.length) return false;
-  for (const key of keysA) {
-    if (!keysB.includes(key) || !deepEqual(a[key], b[key])) return false;
-  }
-  return true;
+
+  return keysA.every((key) =>
+    Object.hasOwn(objB, key) && deepEqual(objA[key], objB[key])
+  );
 }
 
 function compareParams(
-  actual: Record<string, any>,
-  expected: Record<string, any>,
-  schema: z.ZodObject<any>,
+  actual: Record<string, unknown>,
+  expected: Record<string, unknown>,
+  schema: z.ZodObject<z.ZodRawShape>,
   strictDefaults: boolean,
 ): boolean {
-  if (strictDefaults) {
-    const actualKeys = Object.keys(actual);
-    const expectedKeys = Object.keys(expected);
-    if (actualKeys.length !== expectedKeys.length) return false;
-    for (const key of expectedKeys) {
-      if (!deepEqual(actual[key], expected[key])) return false;
-    }
-    return true;
-  } else {
-    const shape = schema.shape;
-    const actualKeys = Object.keys(actual);
-    const expectedKeys = Object.keys(expected);
-
-    for (const key of expectedKeys) {
-      if (!deepEqual(actual[key], expected[key])) return false;
-    }
-
-    for (const key of actualKeys) {
-      if (!expectedKeys.includes(key)) {
-        const fieldSchema = shape[key];
-        const defaultValue = getZodDefault(fieldSchema);
-        if (!deepEqual(actual[key], defaultValue)) return false;
-      }
-    }
-    return true;
+  for (const key of Object.keys(expected)) {
+    if (!Object.hasOwn(actual, key)) return false;
+    if (!deepEqual(actual[key], expected[key])) return false;
   }
+
+  if (!strictDefaults) return true;
+
+  const shape = schema.shape;
+  const defaults = getSchemaDefaults(schema);
+
+  for (const key of Object.keys(actual)) {
+    if (key in expected) continue;
+    if (!(key in shape)) return false;
+    if (!(key in defaults)) return false;
+    if (!deepEqual(actual[key], defaults[key])) return false;
+  }
+
+  return true;
 }

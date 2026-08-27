@@ -19,7 +19,10 @@ export const MOCK_PLUGINS: MockPlugin[] = [
   },
   {
     name: "shell_exec",
-    description: "Ejecuta un comando de shell arbitrario en el sistema operativo local. Ideal para tareas genéricas que no tengan un plugin específico.",
+    description: `Ejecuta un comando de shell arbitrario en el sistema operativo local.
+Usar solo cuando ninguna otra herramienta del catálogo cubra la tarea:
+si existe un plugin específico para lo que se pide, corresponde ese
+y no este.`,
     schema: z.object({
       command: z.string().describe("Comando exacto a ejecutar, por ejemplo 'npm install'"),
       cwd: z.string().default(".").describe("Directorio de trabajo donde se ejecutará el comando"),
@@ -28,7 +31,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
   },
   {
     name: "file_read",
-    description: "Lee todo el contenido de texto de un archivo local. No usar para leer metadatos, estructurar partes de JSON, ni listar directorios.",
+    description: "Lee y devuelve el contenido completo de texto de un archivo local. No busca archivos ni lista directorios: requiere la ruta exacta del archivo.",
     schema: z.object({
       path: z.string().describe("Ruta absoluta o relativa del archivo a leer"),
       encoding: z.enum(["utf8", "ascii", "base64"]).default("utf8").describe("Codificación de caracteres esperada")
