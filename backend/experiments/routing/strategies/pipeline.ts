@@ -31,6 +31,7 @@ export async function pipelineCalling(
   const selectorModel = new ChatOllama({
     model: MODEL,
     think: false,
+    numCtx: 8192,
     temperature: 0.0,
     format: z.toJSONSchema(SelectorResponse),
   });
@@ -87,6 +88,7 @@ export async function pipelineCalling(
     model: MODEL,
     think: false,
     temperature: 0.0,
+    numCtx: 8192,
     format: z.toJSONSchema(selectedPlugin.schema),
   });
 

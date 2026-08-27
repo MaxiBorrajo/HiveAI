@@ -9,7 +9,12 @@ import {
 import { ChatOllama } from "@langchain/ollama";
 import { SystemMessage } from "@langchain/core/messages";
 import z from "zod";
-import { HIVE_QUEEN_SYSTEM_PROMPT } from "./constants.ts";
+import {
+  RESPONDER_SYSTEM_PROMPT,
+  SELECTOR_SYSTEM_PROMPT,
+} from "./constants.ts";
+import { HiveMicrokernel } from "../microkernel/hive-microkernel.ts";
+import { tool } from "@langchain/core/tools";
 
 export const HiveAIState = new StateSchema({
   messages: MessagesValue,
@@ -20,14 +25,14 @@ export const HiveAIState = new StateSchema({
   result: z.string(),
 });
 
-const HiveQueen: GraphNode<typeof HiveAIState> = async (state) => {
+const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (state) => {
   const responder = new ChatOllama({
     model: state.model,
     think: true,
   });
 
   const response = await responder.invoke([
-    new SystemMessage(HIVE_QUEEN_SYSTEM_PROMPT),
+    new SystemMessage(RESPONDER_SYSTEM_PROMPT),
     ...state.messages,
   ]);
 
@@ -38,32 +43,56 @@ const HiveQueen: GraphNode<typeof HiveAIState> = async (state) => {
 };
 
 const Selector: GraphNode<typeof HiveAIState> = async (state) => {
-  return {
-  };
-};
+  const microkernel = HiveMicrokernel.getInstance();
+  const plugins = microkernel.getRegisteredPlugins();
 
-const Parameterizer: GraphNode<typeof HiveAIState> = async (state) => {
- 
-  return {
-  };
-};
+  const tools = plugins.map((c) =>
+    tool(async (input: unknown) => await c.process(input), {
+      name: c.name,
+      description: c.description,
+      schema: c.schema,
+    }),
+  );
 
-const Validator: GraphNode<typeof HiveAIState> = async (state) => {
- 
+  const selectorModel = new ChatOllama({
+    model: state.model,
+    think: false,
+    temperature: 0.0,
+    numCtx: 8192,
+  });
+
+  const modelWithTools = selectorModel.bindTools(tools);
+
+  const response = await modelWithTools.invoke([
+    new SystemMessage(SELECTOR_SYSTEM_PROMPT),
+    ...state.messages,
+  ]);
 
   return {
+    messages: [response],
+    model: state.model,
   };
 };
 
 const Executor: GraphNode<typeof HiveAIState> = async (state) => {
+  const responder = new ChatOllama({
+    model: state.model,
+    think: true,
+  });
 
+  const response = await responder.invoke([
+    new SystemMessage(RESPONDER_SYSTEM_PROMPT),
+    ...state.messages,
+  ]);
 
   return {
+    messages: [response],
+    model: state.model,
   };
 };
 
 export const HiveMind = new StateGraph(HiveAIState)
-  .addNode("HiveQueen", HiveQueen)
-  .addEdge(START, "HiveQueen")
-  .addEdge("HiveQueen", END)
+  .addNode("Selector", Selector)
+  .addEdge(START, "Selector")
+  .addEdge("Selector", END)
   .compile();

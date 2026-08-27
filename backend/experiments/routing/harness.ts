@@ -4,11 +4,6 @@ import { pipelineCalling } from "./strategies/pipeline.ts";
 import { toolCalling } from "./strategies/tool-calling.ts";
 import { evaluate } from "./evaluate.ts";
 import { normalize } from "./normalize.ts";
-import {
-  AIMessageChunk,
-  MessageStructure,
-  MessageToolSet,
-} from "@langchain/core/messages";
 
 export async function harness(
   query: RoutingQuery,

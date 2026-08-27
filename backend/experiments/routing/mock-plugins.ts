@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 
 export interface MockPlugin {
@@ -10,246 +9,446 @@ export interface MockPlugin {
 export const MOCK_PLUGINS: MockPlugin[] = [
   {
     name: "file_search",
-    description: "Busca archivos en el sistema de archivos local cuyo nombre coincida con un patrón glob. Devuelve rutas absolutas. No busca dentro del contenido de los archivos.",
+    description:
+      "Busca archivos en el sistema de archivos local cuyo nombre coincida con un patrón glob. Devuelve rutas. No busca dentro del contenido de los archivos ni lista un directorio completo.",
     schema: z.object({
-      pattern: z.string().describe("Patrón glob del nombre a buscar, por ejemplo *.ts"),
-      root: z.string().default(".").describe("Directorio raíz desde donde iniciar la búsqueda"),
-      limit: z.number().int().min(1).max(200).default(50).describe("Cantidad máxima de resultados a devolver")
-    })
+      pattern: z
+        .string()
+        .describe("Patrón glob del nombre a buscar, por ejemplo *.ts"),
+      root: z
+        .string()
+        .default(".")
+        .describe("Directorio raíz desde donde iniciar la búsqueda"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .default(50)
+        .describe("Cantidad máxima de resultados a devolver"),
+    }),
   },
   {
     name: "shell_exec",
-    description: `Ejecuta un comando de shell arbitrario en el sistema operativo local.
-Usar solo cuando ninguna otra herramienta del catálogo cubra la tarea:
-si existe un plugin específico para lo que se pide, corresponde ese
-y no este.`,
+    description:
+      "Ejecuta un comando de shell arbitrario en el sistema operativo local. Cubre tareas de sistema sin plugin propio, como mover archivos, cambiar permisos o comprimir carpetas.",
     schema: z.object({
-      command: z.string().describe("Comando exacto a ejecutar, por ejemplo 'npm install'"),
-      cwd: z.string().default(".").describe("Directorio de trabajo donde se ejecutará el comando"),
-      timeout_ms: z.number().int().min(1000).default(30000).describe("Tiempo límite en milisegundos para abortar el proceso")
-    })
+      command: z
+        .string()
+        .describe("Comando exacto a ejecutar, por ejemplo 'chmod +x deploy.sh'"),
+      cwd: z
+        .string()
+        .default(".")
+        .describe("Directorio de trabajo donde se ejecutará el comando"),
+      timeout_ms: z
+        .number()
+        .int()
+        .min(1000)
+        .default(30000)
+        .describe("Tiempo límite en milisegundos para abortar el proceso"),
+    }),
   },
   {
     name: "file_read",
-    description: "Lee y devuelve el contenido completo de texto de un archivo local. No busca archivos ni lista directorios: requiere la ruta exacta del archivo.",
+    description:
+      "Lee y devuelve el contenido completo de texto de un archivo local. Requiere la ruta exacta: no busca archivos ni lista directorios.",
     schema: z.object({
-      path: z.string().describe("Ruta absoluta o relativa del archivo a leer"),
-      encoding: z.enum(["utf8", "ascii", "base64"]).default("utf8").describe("Codificación de caracteres esperada")
-    })
+      path: z
+        .string()
+        .describe("Ruta absoluta o relativa del archivo a leer"),
+      encoding: z
+        .enum(["utf8", "ascii", "base64"])
+        .default("utf8")
+        .describe("Codificación de caracteres esperada"),
+    }),
   },
   {
     name: "content_search",
-    description: "Busca texto o expresiones regulares dentro del contenido de los archivos de un directorio. No debe usarse para encontrar archivos solo por su nombre.",
+    description:
+      "Busca un texto o expresión regular dentro del contenido de los archivos de un directorio. No sirve para encontrar archivos por su nombre.",
     schema: z.object({
-      query: z.string().describe("Texto exacto o expresión regular a buscar dentro de los archivos"),
-      is_regex: z.boolean().default(false).describe("Si es true, interpreta la query como expresión regular"),
-      directory: z.string().default(".").describe("Directorio base para iniciar la búsqueda en profundidad")
-    })
+      query: z
+        .string()
+        .describe("Texto exacto o expresión regular a buscar dentro de los archivos"),
+      is_regex: z
+        .boolean()
+        .default(false)
+        .describe("Si es true, interpreta la query como expresión regular"),
+      directory: z
+        .string()
+        .default(".")
+        .describe("Directorio base desde donde buscar en profundidad"),
+    }),
   },
   {
     name: "git_exec",
-    description: "Ejecuta comandos de git en el repositorio actual de forma controlada. Usar este plugin en lugar de shell_exec exclusivo para todo lo relacionado a git.",
+    description:
+      "Ejecuta comandos de git sobre el repositorio local: commits, ramas, historial, estado. Es el plugin indicado para cualquier operación de git.",
     schema: z.object({
-      args: z.array(z.string()).describe("Argumentos del comando git, por ejemplo ['commit', '-m', 'Fix']"),
-      repo_path: z.string().default(".").describe("Ruta al directorio que contiene el repositorio .git")
-    })
+      args: z
+        .array(z.string())
+        .describe("Argumentos del comando git, por ejemplo ['commit', '-m', 'Fix']"),
+      repo_path: z
+        .string()
+        .default(".")
+        .describe("Ruta al directorio que contiene el repositorio .git"),
+    }),
   },
   {
     name: "file_metadata",
-    description: "Obtiene información de metadatos de un archivo (tamaño, fecha de creación, permisos). No lee ni devuelve el contenido de texto del archivo.",
+    description:
+      "Devuelve los metadatos de un archivo: tamaño, fecha de modificación y permisos. No devuelve el contenido del archivo.",
     schema: z.object({
-      path: z.string().describe("Ruta del archivo del cual obtener metadatos")
-    })
+      path: z
+        .string()
+        .describe("Ruta del archivo del cual obtener metadatos"),
+    }),
   },
   {
     name: "python_exec",
-    description: "Ejecuta un archivo .py utilizando el entorno Python del proyecto de manera asilada. Preferible frente a shell_exec para lanzar scripts de Python.",
+    description:
+      "Ejecuta un archivo .py con el entorno Python del proyecto, de manera aislada. Es el plugin indicado para correr scripts de Python.",
     schema: z.object({
-      script_path: z.string().describe("Ruta al archivo Python a ejecutar"),
-      args: z.array(z.string()).default([]).describe("Lista de argumentos posicionales para el script")
-    })
+      script_path: z
+        .string()
+        .describe("Ruta al archivo Python a ejecutar"),
+      args: z
+        .array(z.string())
+        .default([])
+        .describe("Lista de argumentos posicionales para el script"),
+    }),
   },
   {
     name: "directory_list",
-    description: "Lista el contenido inmediato de un directorio (solo archivos y subcarpetas). No busca recursivamente y no aplica patrones de filtrado de búsqueda.",
+    description:
+      "Lista el contenido inmediato de un directorio: archivos y subcarpetas de ese nivel. No baja recursivamente ni filtra por patrón.",
     schema: z.object({
-      path: z.string().describe("Ruta del directorio a listar"),
-      show_hidden: z.boolean().default(false).describe("Incluir archivos y carpetas ocultas que comienzan con punto")
-    })
+      path: z
+        .string()
+        .describe("Ruta del directorio a listar"),
+      show_hidden: z
+        .boolean()
+        .default(false)
+        .describe("Incluir archivos y carpetas ocultos que comienzan con punto"),
+    }),
   },
   {
     name: "json_read",
-    description: "Extrae un valor puntual de un archivo JSON usando una ruta de objeto (dot notation). Es más eficiente que leer todo el archivo entero a memoria.",
+    description:
+      "Extrae un valor puntual de un archivo JSON indicando la ruta de la propiedad. Evita cargar el archivo entero cuando solo se necesita un dato.",
     schema: z.object({
-      path: z.string().describe("Ruta al archivo JSON local"),
-      json_path: z.string().describe("Ruta de la propiedad a extraer, ej: 'dependencies.zod'")
-    })
+      path: z
+        .string()
+        .describe("Ruta al archivo JSON local"),
+      json_path: z
+        .string()
+        .describe("Ruta de la propiedad a extraer, por ejemplo 'dependencies.zod'"),
+    }),
   },
   {
     name: "system_metrics",
-    description: "Recupera estadísticas de consumo de CPU, memoria RAM y uso de disco de la máquina donde se ejecuta el agente local.",
+    description:
+      "Devuelve el consumo actual de CPU, memoria y disco de la máquina local. No informa qué procesos están corriendo.",
     schema: z.object({
-      include_disk: z.boolean().default(false).describe("Incluir métricas de latencia de entrada/salida del disco duro")
-    })
+      include_disk: z
+        .boolean()
+        .default(false)
+        .describe("Incluir métricas de entrada/salida de disco"),
+    }),
   },
   {
     name: "http_request",
-    description: "Realiza una petición HTTP a una URL externa. Útil para verificar servicios de red, consultar APIs, o descargar información remota rápida.",
+    description:
+      "Hace una petición HTTP a una URL externa y devuelve la respuesta. Sirve para consultar APIs o descargar información remota.",
     schema: z.object({
-      url: z.string().describe("Dirección URL completa incluyendo protocolo, ej: 'https://api.ejemplo.com'"),
-      method: z.enum(["GET", "POST", "PUT", "DELETE"]).default("GET").describe("Verbo HTTP a utilizar en la solicitud")
-    })
+      url: z
+        .string()
+        .describe("URL completa incluyendo protocolo, por ejemplo 'https://api.ejemplo.com'"),
+      method: z
+        .enum(["GET", "POST", "PUT", "DELETE"])
+        .default("GET")
+        .describe("Verbo HTTP a utilizar"),
+    }),
   },
   {
     name: "db_query",
-    description: "Ejecuta sentencias SQL en la base de datos SQLite local configurada para el proyecto actual. No soporta PostgreSQL ni conexiones a base de datos externa.",
+    description:
+      "Ejecuta una sentencia SQL sobre una base de datos SQLite local. No se conecta a bases de datos remotas ni a PostgreSQL.",
     schema: z.object({
-      query: z.string().describe("Consulta SQL completa a ejecutar (ej: SELECT, INSERT, UPDATE)"),
-      db_path: z.string().describe("Ruta al archivo local de la base de datos SQLite (.db o .sqlite)")
-    })
+      query: z
+        .string()
+        .describe("Consulta SQL completa a ejecutar"),
+      db_path: z
+        .string()
+        .describe("Ruta al archivo local de la base SQLite (.db o .sqlite)"),
+    }),
   },
   {
     name: "dev_server",
-    description: "Inicia el servidor local de desarrollo del proyecto. Mantiene el proceso activo en un hilo separado para pruebas manuales o automatizadas.",
+    description:
+      "Levanta el servidor de desarrollo del proyecto y lo deja corriendo en segundo plano. No compila para producción.",
     schema: z.object({
-      port: z.number().int().min(1024).max(65535).default(3000).describe("Puerto TCP en el que levantará el servidor local"),
-      hot_reload: z.boolean().default(true).describe("Habilitar la recarga automática al detectar cambios en archivos")
-    })
+      port: z
+        .number()
+        .int()
+        .min(1024)
+        .max(65535)
+        .default(3000)
+        .describe("Puerto TCP donde levantar el servidor"),
+      hot_reload: z
+        .boolean()
+        .default(true)
+        .describe("Recargar automáticamente al detectar cambios en archivos"),
+    }),
   },
   {
     name: "unit_test",
-    description: "Ejecuta la suite de pruebas unitarias del proyecto y devuelve el resultado detallado. Soporta filtrado por patrón de nombre del bloque de prueba.",
+    description:
+      "Corre la suite de tests del proyecto y devuelve el resultado. Permite filtrar qué casos ejecutar por nombre.",
     schema: z.object({
-      filter: z.string().optional().describe("Texto o patrón para filtrar los casos de prueba a ejecutar"),
-      update_snapshots: z.boolean().default(false).describe("Si es true, actualiza los snapshots visuales de las pruebas que fallen")
-    })
+      filter: z
+        .string()
+        .optional()
+        .describe("Texto o patrón para filtrar los casos de prueba a ejecutar"),
+      update_snapshots: z
+        .boolean()
+        .default(false)
+        .describe("Actualizar los snapshots de las pruebas que fallen"),
+    }),
   },
   {
     name: "github_issue",
-    description: "Abre un issue nuevo en el repositorio de GitHub remoto vinculado al proyecto. Útil para reportar bugs, mejoras o llevar registro de tareas técnicas.",
+    description:
+      "Crea un issue nuevo en el repositorio de GitHub del proyecto. Sirve para reportar bugs o registrar tareas pendientes.",
     schema: z.object({
-      title: z.string().describe("Título corto y descriptivo del issue"),
-      body: z.string().describe("Cuerpo detallado del issue utilizando el formato Markdown"),
-      labels: z.array(z.string()).default([]).describe("Lista de etiquetas para clasificar el issue, ej: ['bug', 'frontend']")
-    })
+      title: z
+        .string()
+        .describe("Título corto y descriptivo del issue"),
+      body: z
+        .string()
+        .describe("Cuerpo detallado del issue en formato Markdown"),
+      labels: z
+        .array(z.string())
+        .default([])
+        .describe("Etiquetas para clasificar el issue, por ejemplo ['bug', 'frontend']"),
+    }),
   },
   {
     name: "code_format",
-    description: "Formatea automáticamente un archivo de código fuente utilizando las reglas de estilo (Prettier, Black, etc) del entorno del proyecto.",
+    description:
+      "Formatea un archivo de código según las reglas de estilo del proyecto. Solo cambia el formato: no detecta errores ni malas prácticas.",
     schema: z.object({
-      file_path: z.string().describe("Ruta al archivo de código fuente a formatear")
-    })
+      file_path: z
+        .string()
+        .describe("Ruta al archivo de código a formatear"),
+    }),
   },
   {
     name: "code_lint",
-    description: "Ejecuta el analizador estático (linter) sobre un archivo de código en busca de errores y anti-patrones estructurales en la sintaxis.",
+    description:
+      "Analiza un archivo de código con el linter del proyecto y reporta errores y malas prácticas. No reformatea el código por sí solo.",
     schema: z.object({
-      file_path: z.string().describe("Ruta del archivo a analizar"),
-      auto_fix: z.boolean().default(false).describe("Si es true, aplica las correcciones automáticas seguras que soporte el linter")
-    })
+      file_path: z
+        .string()
+        .describe("Ruta del archivo a analizar"),
+      auto_fix: z
+        .boolean()
+        .default(false)
+        .describe("Aplicar las correcciones automáticas que soporte el linter"),
+    }),
   },
   {
     name: "docker_logs",
-    description: "Extrae las líneas finales del registro de eventos (stdout/stderr) de un contenedor de Docker local en ejecución.",
+    description:
+      "Devuelve las últimas líneas del log de un contenedor Docker que está corriendo localmente.",
     schema: z.object({
-      container_name: z.string().describe("Nombre o identificador parcial del contenedor Docker"),
-      lines: z.number().int().min(1).max(5000).default(100).describe("Cantidad máxima de las líneas más recientes a extraer y devolver")
-    })
+      container_name: z
+        .string()
+        .describe("Nombre o identificador parcial del contenedor"),
+      lines: z
+        .number()
+        .int()
+        .min(1)
+        .max(5000)
+        .default(100)
+        .describe("Cantidad de líneas más recientes a devolver"),
+    }),
   },
   {
     name: "process_list",
-    description: "Consulta los procesos actuales que corren en el sistema operativo local. Es útil para verificar si un servicio de fondo está realmente activo.",
+    description:
+      "Lista los procesos que están corriendo en el sistema local. Sirve para verificar si un servicio está activo. No informa consumo de recursos de la máquina.",
     schema: z.object({
-      filter: z.string().optional().describe("Filtro de búsqueda parcial por nombre del proceso ejecutable, ej: 'node' o 'nginx'")
-    })
+      filter: z
+        .string()
+        .optional()
+        .describe("Filtro parcial por nombre del proceso, por ejemplo 'node'"),
+    }),
   },
   {
     name: "process_kill",
-    description: "Cierra o termina forzosamente un proceso del sistema operativo mediante el envío de señales utilizando su identificador numérico (PID).",
+    description:
+      "Termina un proceso del sistema a partir de su PID. Requiere conocer el identificador numérico del proceso.",
     schema: z.object({
-      pid: z.number().int().describe("Identificador numérico (PID) del proceso a terminar"),
-      force: z.boolean().default(false).describe("Usa la señal SIGKILL en lugar de SIGTERM si es seteado en true para un cierre abrupto")
-    })
+      pid: z
+        .number()
+        .int()
+        .describe("Identificador numérico (PID) del proceso a terminar"),
+      force: z
+        .boolean()
+        .default(false)
+        .describe("Usar SIGKILL en lugar de SIGTERM para un cierre abrupto"),
+    }),
   },
   {
     name: "host_ping",
-    description: "Envía paquetes ICMP a una dirección de red remota para verificar si un servidor externo está respondiendo, su latencia y si existe pérdida de conexión.",
+    description:
+      "Envía paquetes ICMP a un host para verificar si responde y medir la latencia. No indica qué puertos tiene abiertos.",
     schema: z.object({
-      host: z.string().describe("Dirección IP o nombre de dominio a diagnosticar"),
-      count: z.number().int().min(1).max(10).default(4).describe("Cantidad secuencial de paquetes ICMP a transmitir en la prueba")
-    })
+      host: z
+        .string()
+        .describe("Dirección IP o nombre de dominio a diagnosticar"),
+      count: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .default(4)
+        .describe("Cantidad de paquetes ICMP a enviar"),
+    }),
   },
   {
     name: "port_scan",
-    description: "Verifica qué puertos TCP están abiertos y en estado de escucha en una máquina local o remota especificada para auditar su seguridad o actividad.",
+    description:
+      "Verifica qué puertos están abiertos y escuchando en una máquina. No comprueba si el host responde a ping ni qué servicio corre detrás.",
     schema: z.object({
-      host: z.string().default("localhost").describe("Dirección IP o dominio a escanear"),
-      protocol: z.enum(["tcp", "udp"]).default("tcp").describe("Protocolo de transporte (capa 4) a escanear")
-    })
+      host: z
+        .string()
+        .default("localhost")
+        .describe("Dirección IP o dominio a escanear"),
+      protocol: z
+        .enum(["tcp", "udp"])
+        .default("tcp")
+        .describe("Protocolo de transporte a escanear"),
+    }),
   },
   {
     name: "csv_to_json",
-    description: "Convierte una cadena de texto sin procesar en formato CSV a un array de objetos JSON para facilitar su manipulación estructurada dentro del sistema.",
+    description:
+      "Convierte un archivo CSV local a formato JSON. Devuelve el resultado como un array de objetos.",
     schema: z.object({
-      csv: z.string().describe("Contenido original en bruto en formato de valores separados por el carácter delimitador"),
-      delimiter: z.string().default(",").describe("Carácter simple que se utiliza para delimitar las columnas del texto")
-    })
+      path: z
+        .string()
+        .describe("Ruta al archivo CSV a convertir"),
+      delimiter: z
+        .string()
+        .default(",")
+        .describe("Carácter que separa las columnas del archivo"),
+    }),
   },
   {
     name: "string_hash",
-    description: "Genera la representación criptográfica asimétrica en formato hash (unidireccional) de un texto claro utilizando un algoritmo de seguridad especificado.",
+    description:
+      "Calcula el hash de un texto con el algoritmo indicado. Es unidireccional: no cifra ni permite recuperar el texto original.",
     schema: z.object({
-      text: z.string().describe("Cadena de texto confidencial en claro para convertir a la suma de hash"),
-      algorithm: z.enum(["md5", "sha1", "sha256", "sha512"]).default("sha256").describe("Tipo de algoritmo de hashing seguro a aplicar al texto")
-    })
+      text: z
+        .string()
+        .describe("Texto del cual calcular el hash"),
+      algorithm: z
+        .enum(["md5", "sha1", "sha256", "sha512"])
+        .default("sha256")
+        .describe("Algoritmo de hash a aplicar"),
+    }),
   },
   {
     name: "calendar_event",
-    description: "Agenda un nuevo evento o cita de trabajo de duración determinada en el calendario virtual principal del desarrollador autenticado.",
+    description:
+      "Agenda un evento en el calendario del usuario. No lee ni consulta eventos existentes.",
     schema: z.object({
-      title: z.string().describe("Título principal o resumen del asunto del evento a crear"),
-      datetime_iso: z.string().describe("Fecha y hora exacta de inicio de la reunión en formato estándar ISO 8601"),
-      duration_mins: z.number().int().min(5).default(30).describe("Duración estimada en minutos de todo el encuentro")
-    })
+      title: z
+        .string()
+        .describe("Título del evento a crear"),
+      datetime_iso: z
+        .string()
+        .describe("Fecha y hora de inicio en formato ISO 8601"),
+      duration_mins: z
+        .number()
+        .int()
+        .min(5)
+        .default(30)
+        .describe("Duración del evento en minutos"),
+    }),
   },
   {
     name: "slack_message",
-    description: "Envía un texto a un canal de Slack público/privado o un mensaje directo a un usuario del equipo. Ideal para notificar de un fallo, avance de tarea o deploy.",
+    description:
+      "Envía un mensaje a un canal de Slack o a un usuario del equipo. Sirve para avisar de un deploy, un fallo o el avance de una tarea.",
     schema: z.object({
-      target: z.string().describe("Nombre textual del canal destino (ej: '#general') o nombre del usuario en la plataforma"),
-      message: z.string().describe("Contenido en texto plano o con notación de markdown simplificada a enviar a Slack")
-    })
+      target: z
+        .string()
+        .describe("Canal destino, por ejemplo '#general', o nombre del usuario"),
+      message: z
+        .string()
+        .describe("Contenido del mensaje a enviar"),
+    }),
   },
   {
     name: "weather_forecast",
-    description: "Obtiene información climática en tiempo real y el pronóstico meteorológico a corto plazo consultando una API externa mediante una ubicación geográfica.",
+    description:
+      "Devuelve el clima actual y el pronóstico a corto plazo para una ubicación.",
     schema: z.object({
-      location: z.string().describe("Nombre identificatorio de la ciudad (o coordenadas geográficas simples separadas por coma)"),
-      unit: z.enum(["celsius", "fahrenheit"]).default("celsius").describe("Preferencia de sistema métrico o imperial para devolver la temperatura")
-    })
+      location: z
+        .string()
+        .describe("Nombre de la ciudad o coordenadas separadas por coma"),
+      unit: z
+        .enum(["celsius", "fahrenheit"])
+        .default("celsius")
+        .describe("Unidad de temperatura a devolver"),
+    }),
   },
   {
     name: "text_translate",
-    description: "Llama a un servicio remoto de traducción neuronal y convierte de manera precisa una oración o párrafo de un idioma de origen a otro idioma de destino.",
+    description:
+      "Traduce un texto de un idioma a otro usando un servicio de traducción remoto.",
     schema: z.object({
-      text: z.string().describe("Cuerpo de texto original que necesita ser analizado y traducido"),
-      target_lang: z.string().describe("Código abreviado de idioma de dos letras que se espera (destino), ej: 'es' para español"),
-      source_lang: z.string().optional().describe("Código de idioma del texto original. Si no se provee, la API intentará autodetectarlo")
-    })
+      text: z
+        .string()
+        .describe("Texto a traducir"),
+      target_lang: z
+        .string()
+        .describe("Código de dos letras del idioma destino, por ejemplo 'es'"),
+      source_lang: z
+        .string()
+        .optional()
+        .describe("Código del idioma original. Si se omite, se autodetecta"),
+    }),
   },
   {
     name: "math_eval",
-    description: "Parsea y evalúa algebraicamente una expresión o ecuación en formato de cadena y retorna numéricamente el valor final preciso de la operación completa.",
+    description:
+      "Evalúa una expresión matemática pasada como texto y devuelve el resultado numérico.",
     schema: z.object({
-      expression: z.string().describe("Ecuación, cálculo o expresión matemática simple a computar, ej: '2 + (3 * 4) / 10'")
-    })
+      expression: z
+        .string()
+        .describe("Expresión a calcular, por ejemplo '2 + (3 * 4) / 10'"),
+    }),
   },
   {
     name: "uuid_generate",
-    description: "Crea de forma aleatoria y estandarizada identificadores universales únicos (UUID) versión 4. Muy útil para inyectar como IDs o tokens de prueba temporales.",
+    description:
+      "Genera identificadores únicos (UUID v4) al azar. Sirve para crear IDs o tokens de prueba.",
     schema: z.object({
-      uppercase: z.boolean().default(false).describe("Si el flag es true, devuelve el UUID generado pero con todos sus caracteres alfabéticos en mayúscula"),
-      count: z.number().int().min(1).max(50).default(1).describe("Cantidad numérica de UUIDs diferentes y aleatorios a generar y devolver de una sola vez")
-    })
-  }
+      uppercase: z
+        .boolean()
+        .default(false)
+        .describe("Devolver el UUID en mayúsculas"),
+      count: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .default(1)
+        .describe("Cantidad de UUIDs a generar"),
+    }),
+  },
 ];

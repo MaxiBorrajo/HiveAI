@@ -65,11 +65,8 @@ export class HiveMicrokernel {
     this.plugins.delete(name);
   }
 
-  getRegisteredPlugins(): { name: string; description: string }[] {
-    return Array.from(this.plugins.values()).map((bp) => ({
-      name: bp.name,
-      description: bp.description,
-    }));
+  getRegisteredPlugins(): BeePlugin[] {
+    return Array.from(this.plugins.values()).map((bp) => bp);
   }
 
   async loadAndRegister(beePluginPath: string): Promise<boolean> {

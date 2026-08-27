@@ -9,6 +9,7 @@ export interface Verdict {
   strategy: string;
   catalog_size: number;
   run: number;
+  free_text_params: boolean;
   expected_plugin: string | null;
   actual_plugin: string | null;
   selection_correct: boolean;
@@ -52,14 +53,19 @@ export function evaluate(
     selection_correct = result.selected_plugin === query.expected_plugin;
   }
 
-  const hallucinated_plugin = result.selected_plugin !== null &&
+  const hallucinated_plugin =
+    result.selected_plugin !== null &&
     result.selected_plugin !== "NINGUNO_APLICA" &&
     !catalog.some((p) => p.name === result.selected_plugin);
 
   let params_valid: boolean | null = null;
   let params_correct: boolean | null = null;
 
-  if (selection_correct && !result.abstained && query.expected_plugin !== null) {
+  if (
+    selection_correct &&
+    !result.abstained &&
+    query.expected_plugin !== null
+  ) {
     const plugin = catalog.find((p) => p.name === query.expected_plugin);
 
     if (plugin && result.params) {
@@ -82,6 +88,7 @@ export function evaluate(
   return {
     query_id: query.id,
     category: query.category,
+    free_text_params: query.free_text_params ?? false,
     strategy,
     catalog_size,
     run,
@@ -146,8 +153,8 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
   if (keysA.length !== keysB.length) return false;
 
-  return keysA.every((key) =>
-    Object.hasOwn(objB, key) && deepEqual(objA[key], objB[key])
+  return keysA.every(
+    (key) => Object.hasOwn(objB, key) && deepEqual(objA[key], objB[key]),
   );
 }
 

@@ -9,6 +9,7 @@ export async function toolCalling(query: string, catalog: MockPlugin[]) {
     model: MODEL,
     think: false,
     temperature: 0.0,
+    numCtx: 8192,
   });
 
   const tools = catalog.map((c) =>
