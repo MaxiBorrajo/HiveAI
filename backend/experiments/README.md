@@ -1,0 +1,1 @@
+Las queries y plugins fueron hechos con IA y corregidos a mano para que sean lo más humanos posibles.
