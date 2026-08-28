@@ -29,6 +29,7 @@ const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (state) => {
     model: state.model,
     think: false,
     keepAlive: "10m",
+    numCtx: 8192,
   });
 
   const response = await responder.invoke([

@@ -1,4 +1,4 @@
-export const MODEL = "qwen3:8b";
+export const MODEL = "qwen3:4b";
 
 export const TOOL_CALLING_PROMPT = `Elegí del catálogo la herramienta que resuelve el pedido del usuario e invocala con los parámetros correctos.
 Si ninguna lo resuelve, no invoques nada y respondé únicamente: NINGUNO_APLICA`;

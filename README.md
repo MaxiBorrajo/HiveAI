@@ -39,7 +39,7 @@ En una terminal, desde la raíz del proyecto, arranca el servidor de Deno con re
 ```bash
 deno task dev
 ```
-*(Esto levanta el backend en `http://localhost:8000` y observará los cambios en `main.ts` y la carpeta `backend/`)*.
+*(Esto levanta el backend en `http://localhost:8001` y observará los cambios en `main.ts` y la carpeta `backend/`)*.
 
 **2. Levantar el Frontend (Vite)**
 En otra terminal, entra a la carpeta del frontend y levanta Vite:

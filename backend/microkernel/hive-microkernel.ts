@@ -25,6 +25,10 @@ export class HiveMicrokernel {
     this.config.set(patch);
   }
 
+  getConfig(){
+    return this.config
+  }
+
   private buildContext(pluginName: string): BeeContext {
     return {
       getDataDir: () => join(this.config.get("dataDir"), "plugins", pluginName),

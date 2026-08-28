@@ -1,14 +1,8 @@
 import { HiveMicrokernel } from "./microkernel/hive-microkernel.ts";
 import { HiveMind } from "./ai/hive-queen.ts";
-import {
-  HumanMessage,
-  AIMessage,
-  BaseMessageLike,
-  BaseMessage,
-} from "@langchain/core/messages";
+import { HumanMessage, BaseMessage } from "@langchain/core/messages";
 import { join } from "node:path";
-import { Messages, MessagesValue } from "@langchain/langgraph";
-import { BaseCache } from "@langchain/core/caches";
+import { ChatOllama } from "@langchain/ollama";
 // 1. Configuramos el Backend
 const hive = HiveMicrokernel.getInstance();
 const homeDir = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -23,11 +17,11 @@ async function main() {
     "/home/maxi/Documents/HiveAI/backend/plugins/current-datetime",
   );
 
-  console.log(hive.getRegisteredPlugins());
+  console.log(hive.getRegisteredPlugins().map((p) => p.name));
 }
 
 main().then(() =>
-  Deno.serve((req: Request) => {
+  Deno.serve({ port: 8001 }, (req: Request) => {
     console.log(req);
     const url = new URL(req.url);
     const headers = {
@@ -66,11 +60,8 @@ async function handleChat(
 ): Promise<Response> {
   const body = await req.json();
 
-  // Extraemos la consulta del usuario, soportando { message: "..." }
-  // o haciendo fallback al último mensaje si el frontend sigue mandando el array viejo
   const userText = body.message;
 
-  // Agregamos solo el mensaje nuevo al historial que vive en memoria
   chatHistory.push(new HumanMessage(userText));
 
   const result = await HiveMind.invoke({
@@ -78,13 +69,23 @@ async function handleChat(
     model: MODEL,
   });
 
-  console.log(result);
+  console.log(result.messages);
 
-  // Actualizamos el historial completo con la salida del grafo
-  // (incluye ToolMessages, AIMessages con tool_calls, etc)
   chatHistory = result.messages;
 
   const lastMessage = chatHistory[chatHistory.length - 1];
 
   return Response.json({ content: lastMessage.content }, { headers });
+}
+
+export async function warmUp(model: string): Promise<void> {
+  try {
+    const start = performance.now();
+    await new ChatOllama({ model, think: false, keepAlive: "10m" }).invoke([
+      new HumanMessage("ok"),
+    ]);
+    console.log(`Modelo listo en ${Math.round(performance.now() - start)}ms`);
+  } catch (error) {
+    console.warn("No se pudo precargar el modelo:", error);
+  }
 }
