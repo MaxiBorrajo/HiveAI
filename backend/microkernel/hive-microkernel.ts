@@ -11,6 +11,7 @@ const REQUIRED_FIELDS = ["name", "description", "schema", "process"] as const;
 export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
+  private activePlugins: Set<string> = new Set();
   private config = new HiveConfig({ dataDir: "", model: "" });
 
   public static getInstance(): HiveMicrokernel {
@@ -64,6 +65,34 @@ export class HiveMicrokernel {
     console.log(`Sending bee away from the hive: '${name}'`);
     await plugin.dispose?.();
     this.plugins.delete(name);
+    this.activePlugins.delete(name);
+  }
+
+  activate(name: string): boolean {
+    if (!this.plugins.has(name)) {
+      console.warn(
+        `WARNING: Tried to activate '${name}' but it is not registered. Registered bees: [${Array.from(this.plugins.keys()).join(", ")}]`,
+      );
+      return false;
+    }
+
+    this.activePlugins.add(name);
+    console.log(
+      `Bee '${name}' activated. Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
+    );
+    return true;
+  }
+
+  deactivate(name: string): boolean {
+    const removed = this.activePlugins.delete(name);
+    console.log(
+      `Bee '${name}' deactivated (was active: ${removed}). Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
+    );
+    return removed;
+  }
+
+  isActive(name: string): boolean {
+    return this.activePlugins.has(name);
   }
 
   getRegisteredPlugins(): BeePlugin[] {
@@ -77,9 +106,15 @@ export class HiveMicrokernel {
   }
 
   getTools() {
-    return Array.from(this.plugins.values()).map((plugin) =>
-      this.transformToTool(plugin),
+    const plugins = Array.from(this.activePlugins)
+      .map((name) => this.plugins.get(name))
+      .filter((plugin): plugin is BeePlugin => plugin != null);
+
+    console.log(
+      `Bees offered to the Selector: [${plugins.map((p) => p.name).join(", ")}]`,
     );
+
+    return plugins.map((plugin) => this.transformToTool(plugin));
   }
 
   getTool(name: string) {

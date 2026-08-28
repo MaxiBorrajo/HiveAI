@@ -13,18 +13,11 @@ export function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking]);
-
-  function togglePlugin(id: string) {
-    setSelectedPluginIds((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
-  }
 
   async function handleSend() {
     const content = input.trim();
@@ -34,6 +27,7 @@ export function Chat() {
       id: crypto.randomUUID(),
       role: "user",
       content,
+      timestamp: Date.now(),
     };
 
     const nextHistory = [...messages, userMessage];
@@ -42,7 +36,7 @@ export function Chat() {
     setIsThinking(true);
 
     try {
-      const reply = await sendMessage(content, selectedPluginIds);
+      const reply = await sendMessage(content);
       setMessages((prev) => [...prev, reply]);
     } catch (error) {
       setMessages((prev) => [
@@ -55,6 +49,7 @@ export function Chat() {
               ? `No se pudo obtener respuesta: ${error.message}`
               : "No se pudo obtener respuesta del agente.",
           isError: true,
+          timestamp: Date.now(),
         },
       ]);
     } finally {
@@ -123,7 +118,7 @@ export function Chat() {
         </div>
       </div>
 
-      <PluginList selectedIds={selectedPluginIds} onToggle={togglePlugin} />
+      <PluginList />
     </div>
   );
 }
@@ -142,6 +137,20 @@ function ChatMessage({ message }: { message: Message }) {
       }`}
     >
       {message.content}
+      <div
+        className={`mt-1 flex items-center gap-1.5 text-[10px] opacity-60 ${isAgent ? "justify-start" : "justify-end"}`}
+      >
+        <span>
+          {new Date(message.timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </span>
+        {!!message.usedTools?.length && (
+          <span>· usó {message.usedTools.join(", ")}</span>
+        )}
+      </div>
     </div>
   );
 

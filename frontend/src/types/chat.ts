@@ -3,4 +3,6 @@ export interface Message {
   role: "user" | "agent";
   content: string;
   isError?: boolean;
+  timestamp: number;
+  usedTools?: string[];
 }
