@@ -42,7 +42,7 @@ export function Chat() {
     setIsThinking(true);
 
     try {
-      const reply = await sendMessage(nextHistory, content, selectedPluginIds);
+      const reply = await sendMessage(content, selectedPluginIds);
       setMessages((prev) => [...prev, reply]);
     } catch (error) {
       setMessages((prev) => [

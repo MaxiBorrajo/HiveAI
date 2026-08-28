@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
+import { tool } from "@langchain/core/tools";
 
 const REQUIRED_FIELDS = ["name", "description", "schema", "process"] as const;
 
@@ -69,6 +70,51 @@ export class HiveMicrokernel {
     return Array.from(this.plugins.values()).map((bp) => bp);
   }
 
+  getPlugin(name: string) {
+    const plugin = this.plugins.get(name);
+
+    return plugin;
+  }
+
+  getTools() {
+    return Array.from(this.plugins.values()).map((plugin) =>
+      this.transformToTool(plugin),
+    );
+  }
+
+  getTool(name: string) {
+    const plugin = this.getPlugin(name);
+
+    if (!plugin) {
+      return plugin;
+    }
+
+    return this.transformToTool(plugin);
+  }
+
+  private transformToTool(
+    plugin: BeePlugin,
+  ): import("@langchain/core/tools").DynamicStructuredTool<
+    z.ZodObject<z.core.$ZodLooseShape, z.core.$strip>,
+    Record<string, unknown>,
+    Record<string, unknown>,
+    string,
+    unknown,
+    string
+  > {
+    return tool(
+      async (input: unknown) => {
+        const result = await this.execute(plugin.name, input);
+        return result.message;
+      },
+      {
+        name: plugin.name,
+        description: plugin.description,
+        schema: plugin.schema,
+      },
+    );
+  }
+
   async loadAndRegister(beePluginPath: string): Promise<boolean> {
     try {
       const entryPoint = resolve(Deno.cwd(), beePluginPath, "index.ts");
@@ -105,7 +151,7 @@ export class HiveMicrokernel {
     name: string,
     data: unknown,
   ): Promise<{ success: boolean; message: string }> {
-    const plugin = this.plugins.get(name);
+    const plugin = this.getPlugin(name);
 
     if (!plugin) {
       const errorMessage = `ERROR: Bee '${name}' is not part of the hive.`;

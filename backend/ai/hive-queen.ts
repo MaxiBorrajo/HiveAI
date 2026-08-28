@@ -7,28 +7,28 @@ import {
   END,
 } from "@langchain/langgraph";
 import { ChatOllama } from "@langchain/ollama";
-import { SystemMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import z from "zod";
 import {
   RESPONDER_SYSTEM_PROMPT,
   SELECTOR_SYSTEM_PROMPT,
 } from "./constants.ts";
 import { HiveMicrokernel } from "../microkernel/hive-microkernel.ts";
-import { tool } from "@langchain/core/tools";
 
 export const HiveAIState = new StateSchema({
   messages: MessagesValue,
   model: z.string(),
-  selectedPlugin: z.string(), //pasar a schema
-  parameteres: z.json(),
-  errors: z.array(z.string()),
-  result: z.string(),
 });
 
 const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (state) => {
   const responder = new ChatOllama({
     model: state.model,
-    think: true,
+    think: false,
+    keepAlive: "10m",
   });
 
   const response = await responder.invoke([
@@ -38,61 +38,87 @@ const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (state) => {
 
   return {
     messages: [response],
-    model: state.model,
   };
 };
 
 const Selector: GraphNode<typeof HiveAIState> = async (state) => {
   const microkernel = HiveMicrokernel.getInstance();
-  const plugins = microkernel.getRegisteredPlugins();
-
-  const tools = plugins.map((c) =>
-    tool(async (input: unknown) => await c.process(input), {
-      name: c.name,
-      description: c.description,
-      schema: c.schema,
-    }),
-  );
 
   const selectorModel = new ChatOllama({
     model: state.model,
     think: false,
     temperature: 0.0,
     numCtx: 8192,
+    keepAlive: "10m",
   });
 
-  const modelWithTools = selectorModel.bindTools(tools);
+  const response = await selectorModel
+    .bindTools(microkernel.getTools())
+    .invoke([new SystemMessage(SELECTOR_SYSTEM_PROMPT), ...state.messages]);
 
-  const response = await modelWithTools.invoke([
-    new SystemMessage(SELECTOR_SYSTEM_PROMPT),
-    ...state.messages,
-  ]);
+  if (!response.tool_calls?.length) {
+    return { messages: [] };
+  }
 
-  return {
-    messages: [response],
-    model: state.model,
-  };
+  return { messages: [response] };
 };
 
 const Executor: GraphNode<typeof HiveAIState> = async (state) => {
-  const responder = new ChatOllama({
-    model: state.model,
-    think: true,
-  });
+  const lastMessage = state.messages.at(-1);
 
-  const response = await responder.invoke([
-    new SystemMessage(RESPONDER_SYSTEM_PROMPT),
-    ...state.messages,
-  ]);
+  if (lastMessage == null || !AIMessage.isInstance(lastMessage)) {
+    return { messages: [] };
+  }
 
-  return {
-    messages: [response],
-    model: state.model,
-  };
+  const microkernel = HiveMicrokernel.getInstance();
+  const results: ToolMessage[] = [];
+
+  for (const toolCall of lastMessage.tool_calls ?? []) {
+    const tool = microkernel.getTool(toolCall.name);
+
+    if (!tool) {
+      results.push(
+        new ToolMessage({
+          tool_call_id: toolCall.id ?? "",
+          name: toolCall.name,
+          content: `There is no tool named '${toolCall.name}' in the hive.`,
+          status: "error",
+        }),
+      );
+      continue;
+    }
+
+    try {
+      results.push(await tool.invoke(toolCall));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      results.push(
+        new ToolMessage({
+          tool_call_id: toolCall.id ?? "",
+          name: toolCall.name,
+          content: `Tool '${toolCall.name}' failed: ${detail}`,
+          status: "error",
+        }),
+      );
+    }
+  }
+
+  return { messages: results };
+};
+
+const shouldExecute = (state: typeof HiveAIState.State) => {
+  const last = state.messages.at(-1);
+  return AIMessage.isInstance(last) && last.tool_calls?.length
+    ? "Executor"
+    : "HiveQueen";
 };
 
 export const HiveMind = new StateGraph(HiveAIState)
   .addNode("Selector", Selector)
+  .addNode("Executor", Executor)
+  .addNode("HiveQueen", HiveQueenResponder)
   .addEdge(START, "Selector")
-  .addEdge("Selector", END)
+  .addConditionalEdges("Selector", shouldExecute, ["Executor", "HiveQueen"])
+  .addEdge("Executor", "HiveQueen")
+  .addEdge("HiveQueen", END)
   .compile();
