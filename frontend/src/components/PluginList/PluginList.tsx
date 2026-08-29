@@ -39,7 +39,7 @@ export function PluginList() {
         <h2 className="text-xs font-mono text-muted-foreground">Plugins</h2>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-3 p-4">
           {plugins === null && (
             <>

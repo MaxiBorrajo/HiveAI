@@ -19,12 +19,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MODEL = "qwen3:8b";
 
 async function main() {
-  await hive.loadAndRegister(
-    join(__dirname, "plugins", "counter"),
-  );
-  await hive.loadAndRegister(
-    join(__dirname, "plugins", "current-datetime"),
-  );
+  const pluginsDir = join(__dirname, "plugins");
+
+  for await (const entry of Deno.readDir(pluginsDir)) {
+    if (entry.isDirectory) {
+      await hive.loadAndRegister(join(pluginsDir, entry.name));
+    }
+  }
 
   console.log(hive.getRegisteredPlugins());
 }

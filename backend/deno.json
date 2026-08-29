@@ -6,7 +6,7 @@
     "types": ["npm:@types/node"]
   },
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --allow-write --allow-read main.ts",
+    "dev": "deno run --watch --allow-net --allow-env --allow-write --allow-read --allow-sys=homedir --allow-run=cmd,where,whoami,hostname,systeminfo,tasklist,ls,pwd,cat,which,uname,ps,df,du,date,env,find main.ts",
      "experiment": "deno run -A experiments/routing/run.ts"
   },
   "imports": {
