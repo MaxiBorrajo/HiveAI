@@ -2,7 +2,7 @@ import { ChatOllama } from "@langchain/ollama";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { AIMessage } from "@langchain/core/messages";
 import z from "zod";
-import { MODEL, PARAMETRIZADOR_PROMPT, SELECTOR_PROMPT } from "../constants.ts";
+import {  PARAMETRIZADOR_PROMPT, SELECTOR_PROMPT } from "../constants.ts";
 import type { MockPlugin } from "../mock-plugins.ts";
 
 export interface PipelineResult {
@@ -23,13 +23,14 @@ const serializeCatalog = (catalog: MockPlugin[]) =>
 
 export async function pipelineCalling(
   query: string,
+  model: string,
   catalog: MockPlugin[],
 ): Promise<PipelineResult> {
   const possiblePlugins = [...catalog.map((c) => c.name), "NINGUNO_APLICA"];
   const SelectorResponse = z.enum(possiblePlugins);
 
   const selectorModel = new ChatOllama({
-    model: MODEL,
+    model,
     think: false,
     numCtx: 8192,
     temperature: 0.0,
@@ -85,7 +86,7 @@ export async function pipelineCalling(
   }
 
   const parametrizadorModel = new ChatOllama({
-    model: MODEL,
+    model,
     think: false,
     temperature: 0.0,
     numCtx: 8192,

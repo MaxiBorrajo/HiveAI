@@ -1,12 +1,12 @@
 import { ChatOllama } from "@langchain/ollama";
-import { MODEL, TOOL_CALLING_PROMPT } from "../constants.ts";
+import { TOOL_CALLING_PROMPT } from "../constants.ts";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { MockPlugin } from "../mock-plugins.ts";
 import { tool } from "@langchain/core/tools";
 
-export async function toolCalling(query: string, catalog: MockPlugin[]) {
+export async function toolCalling(query: string, model: string, catalog: MockPlugin[]) {
   const toolCaller = new ChatOllama({
-    model: MODEL,
+    model,
     think: false,
     temperature: 0.0,
     numCtx: 8192,

@@ -5,6 +5,7 @@ import type { z } from "zod";
 
 export interface Verdict {
   query_id: string;
+  model: string;
   category: string;
   strategy: string;
   catalog_size: number;
@@ -37,6 +38,7 @@ export interface Verdict {
 export function evaluate(
   result: NormalizedResult,
   query: RoutingQuery,
+  model:string,
   catalog: MockPlugin[],
   strategy: string,
   catalog_size: number,
@@ -87,6 +89,7 @@ export function evaluate(
 
   return {
     query_id: query.id,
+    model,
     category: query.category,
     free_text_params: query.free_text_params ?? false,
     strategy,

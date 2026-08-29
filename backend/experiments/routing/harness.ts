@@ -7,6 +7,7 @@ import { normalize } from "./normalize.ts";
 
 export async function harness(
   query: RoutingQuery,
+  model: string,
   pluginsSize: number,
   strategy: "tool-calling" | "pipeline",
   repetitionsPerQuery: number,
@@ -34,13 +35,14 @@ export async function harness(
   for (let index = 0; index < repetitionsPerQuery; index++) {
     const result =
       strategy === "tool-calling"
-        ? await toolCalling(query.query, minimalCatalogOfPlugins)
-        : await pipelineCalling(query.query, minimalCatalogOfPlugins);
+        ? await toolCalling(query.query, model, minimalCatalogOfPlugins)
+        : await pipelineCalling(query.query, model, minimalCatalogOfPlugins);
 
     validationResults.push(
       evaluate(
         normalize(result),
         query,
+        model,
         minimalCatalogOfPlugins,
         strategy,
         pluginsSize,
