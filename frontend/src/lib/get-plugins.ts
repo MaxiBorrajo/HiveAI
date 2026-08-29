@@ -3,6 +3,7 @@ import type { Plugin } from "@/types/plugin";
 interface BackendPlugin {
   name: string;
   description: string;
+  active: boolean;
 }
 
 export async function getPlugins(): Promise<Plugin[]> {
@@ -13,5 +14,16 @@ export async function getPlugins(): Promise<Plugin[]> {
     id: plugin.name,
     name: plugin.name,
     description: plugin.description,
+    active: plugin.active,
   }));
+}
+
+export async function setPluginActive(
+  name: string,
+  active: boolean,
+): Promise<void> {
+  await fetch(
+    `http://localhost:8000/plugins/${encodeURIComponent(name)}/${active ? "activate" : "deactivate"}`,
+    { method: "POST" },
+  );
 }

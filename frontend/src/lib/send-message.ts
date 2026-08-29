@@ -1,27 +1,24 @@
 import type { Message } from "@/types/chat";
 
-// TODO: usar selectedPluginIds cuando HiveMind soporte selección de plugins.
-export async function sendMessage(
-  _content: string,
-  _selectedPluginIds: string[],
-): Promise<Message> {
-  const response = await fetch("http://localhost:8001/chat", {
+export async function sendMessage(content: string): Promise<Message> {
+  const response = await fetch("http://localhost:8000/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      message: _content,
-    }),
+    body: JSON.stringify({ message: content }),
   });
 
   if (!response.ok) {
     throw new Error(`El backend respondió con estado ${response.status}`);
   }
 
-  const data: { content: string } = await response.json();
+  const data: { content: string; usedTools?: string[] } =
+    await response.json();
 
   return {
     id: crypto.randomUUID(),
     role: "agent",
     content: data.content,
+    timestamp: Date.now(),
+    usedTools: data.usedTools,
   };
 }

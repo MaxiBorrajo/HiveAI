@@ -26,7 +26,7 @@ export const HiveAIState = new StateSchema({
 
 const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (state) => {
   const responder = new ChatOllama({
-    model: state.model,
+    model: state.model, 
     think: false,
     keepAlive: "10m",
     numCtx: 8192,
@@ -56,6 +56,10 @@ const Selector: GraphNode<typeof HiveAIState> = async (state) => {
   const response = await selectorModel
     .bindTools(microkernel.getTools())
     .invoke([new SystemMessage(SELECTOR_SYSTEM_PROMPT), ...state.messages]);
+
+  console.log(
+    `Selector decided: [${(response.tool_calls ?? []).map((tc) => tc.name).join(", ") || "none"}]`,
+  );
 
   if (!response.tool_calls?.length) {
     return { messages: [] };
