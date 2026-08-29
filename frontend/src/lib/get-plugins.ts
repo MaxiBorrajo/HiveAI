@@ -7,7 +7,7 @@ interface BackendPlugin {
 }
 
 export async function getPlugins(): Promise<Plugin[]> {
-  const response = await fetch("http://localhost:8001/plugins");
+  const response = await fetch("http://localhost:8000/plugins");
   const plugins: BackendPlugin[] = await response.json();
 
   return plugins.map((plugin) => ({

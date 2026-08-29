@@ -24,29 +24,29 @@ const EXCLUDED_DIR_NAMES = new Set([
   "System Volume Information",
 ]);
 
-export default class BuscarArchivosPlugin implements BeePlugin {
-  name = "buscar_archivos";
+export default class FileSearchPlugin implements BeePlugin {
+  name = "file_search";
   description =
-    "Busca un archivo o carpeta en el sistema por su nombre (o parte del nombre) y devuelve la ruta completa donde se encuentra, si existe. Por defecto busca en las carpetas comunes del usuario (Escritorio, Documentos, Descargas, carpeta de usuario); opcionalmente se le puede indicar una carpeta específica donde buscar.";
+    "Searches for a file or folder in the system by its name (or part of it) and returns the full path where it is located, if it exists. By default, it searches in the user's common folders (Desktop, Documents, Downloads, home folder); optionally, a specific folder can be provided to search in.";
 
   schema = z.object({
-    nombre: z
+    name: z
       .string()
       .describe(
-        "Nombre del archivo o carpeta a buscar, por ejemplo 'informe.pdf' o 'informe'. La búsqueda no distingue mayúsculas/minúsculas y hace match parcial.",
+        "Name of the file or folder to search for, for example 'report.pdf' or 'report'. The search is case-insensitive and performs a partial match.",
       ),
-    carpeta: z
+    folder: z
       .string()
       .optional()
       .describe(
-        "Ruta absoluta de una carpeta específica donde buscar. Si se omite, se busca en las carpetas comunes del usuario (Desktop, Documents, Downloads y el home).",
+        "Absolute path of a specific folder to search in. If omitted, it searches in the user's common folders (Desktop, Documents, Downloads, and home).",
       ),
-    maxResultados: z
+    maxResults: z
       .number()
       .int()
       .min(1)
       .default(DEFAULT_MAX_RESULTS)
-      .describe("Cantidad máxima de coincidencias a devolver."),
+      .describe("Maximum number of matches to return."),
   }) as any;
 
   initialize(_context: BeeContext): void {}
@@ -61,18 +61,18 @@ export default class BuscarArchivosPlugin implements BeePlugin {
     ];
   }
 
-  // Recorre `dir` en paralelo (con concurrencia acotada) buscando coincidencias.
-  // `matches`/`seen` son compartidos entre todas las ramas para poder cortar
-  // apenas se llega a `maxResultados`, sin que cada rama tenga que esperar a las demás.
+  // Traverses `dir` in parallel (with bounded concurrency) looking for matches.
+  // `matches`/`seen` are shared among all branches to be able to cut off
+  // as soon as `maxResults` is reached, without each branch waiting for the others.
   private async searchDir(
     dir: string,
     depth: number,
     searchTerm: string,
     matches: string[],
     seen: Set<string>,
-    maxResultados: number,
+    maxResults: number,
   ): Promise<void> {
-    if (depth < 0 || matches.length >= maxResultados) return;
+    if (depth < 0 || matches.length >= maxResults) return;
 
     let entries: Deno.DirEntry[];
     try {
@@ -87,7 +87,7 @@ export default class BuscarArchivosPlugin implements BeePlugin {
     const subDirs: string[] = [];
 
     for (const entry of entries) {
-      if (matches.length >= maxResultados) return;
+      if (matches.length >= maxResults) return;
 
       const fullPath = join(dir, entry.name);
 
@@ -102,7 +102,7 @@ export default class BuscarArchivosPlugin implements BeePlugin {
     }
 
     await this.runWithConcurrency(subDirs, MAX_CONCURRENCY, (subDir) =>
-      this.searchDir(subDir, depth - 1, searchTerm, matches, seen, maxResultados),
+      this.searchDir(subDir, depth - 1, searchTerm, matches, seen, maxResults),
     );
   }
 
@@ -127,19 +127,19 @@ export default class BuscarArchivosPlugin implements BeePlugin {
   async process(input: unknown): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
-      return `Los parámetros proporcionados son inválidos. Error: ${parsed.error.message}`;
+      return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { nombre, carpeta, maxResultados } = parsed.data;
-    const searchTerm = nombre.toLowerCase();
+    const { name, folder, maxResults } = parsed.data;
+    const searchTerm = name.toLowerCase();
 
-    const searchDirs = carpeta ? [carpeta] : this.getDefaultSearchDirs();
+    const searchDirs = folder ? [folder] : this.getDefaultSearchDirs();
 
-    if (carpeta) {
+    if (folder) {
       try {
-        await Deno.stat(carpeta);
+        await Deno.stat(folder);
       } catch {
-        return `La carpeta indicada no existe o no es accesible: ${carpeta}`;
+        return `The specified folder does not exist or is not accessible: ${folder}`;
       }
     }
 
@@ -148,19 +148,19 @@ export default class BuscarArchivosPlugin implements BeePlugin {
 
     await Promise.all(
       searchDirs.map((dir) =>
-        this.searchDir(dir, DEFAULT_MAX_DEPTH, searchTerm, matches, seen, maxResultados),
+        this.searchDir(dir, DEFAULT_MAX_DEPTH, searchTerm, matches, seen, maxResults),
       ),
     );
 
     if (matches.length === 0) {
-      const donde = carpeta
-        ? `en la carpeta '${carpeta}'`
-        : "en las carpetas comunes del usuario (Desktop, Documents, Downloads, home)";
-      return `No se encontró ningún archivo o carpeta que coincida con '${nombre}' ${donde}.`;
+      const where = folder
+        ? `in the folder '${folder}'`
+        : "in the user's common folders (Desktop, Documents, Downloads, home)";
+      return `No file or folder matching '${name}' was found ${where}.`;
     }
 
-    const limitados = matches.slice(0, maxResultados);
-    const lista = limitados.map((p) => `- ${p}`).join("\n");
-    return `Se encontraron ${limitados.length} coincidencia(s) para '${nombre}':\n${lista}`;
+    const limited = matches.slice(0, maxResults);
+    const list = limited.map((p) => `- ${p}`).join("\n");
+    return `Found ${limited.length} match(es) for '${name}':\n${list}`;
   }
 }

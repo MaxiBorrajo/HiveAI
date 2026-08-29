@@ -103,7 +103,7 @@ async function handleChat(
     model: MODEL,
   });
 
-  console.log(result.messages);
+  console.log(result.messages.slice(-1, -4));
 
   chatHistory = result.messages;
 

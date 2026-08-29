@@ -27,7 +27,7 @@ export const HiveAIState = new StateSchema({
 const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (state) => {
   const responder = new ChatOllama({
     model: state.model, 
-    think: false,
+    think: true,
     keepAlive: "10m",
     numCtx: 8192,
   });
@@ -47,8 +47,7 @@ const Selector: GraphNode<typeof HiveAIState> = async (state) => {
 
   const selectorModel = new ChatOllama({
     model: state.model,
-    think: false,
-    temperature: 0.0,
+    think: true,
     numCtx: 8192,
     keepAlive: "10m",
   });
