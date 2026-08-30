@@ -1,5 +1,6 @@
 import type { AIMessage } from "@langchain/core/messages";
 import type { PipelineResult } from "./strategies/pipeline.ts";
+import type { PEVResult } from "./strategies/plan-execution-verification.ts";
 
 export interface NormalizedResult {
   selected_plugin: string | null;
@@ -11,11 +12,16 @@ export interface NormalizedResult {
   invocations: number;
   format_error: boolean;
   multiple_tool_calls: boolean;
+  selection_attempts_final?: number;
+  parametrizer_attempts_final?: number;
   raw: unknown;
 }
 
 const isPipelineResult = (r: unknown): r is PipelineResult =>
   typeof r === "object" && r !== null && "selectorRaw" in r;
+
+const isPEVResult = (r: unknown): r is PEVResult =>
+  typeof r === "object" && r !== null && "selectedTool" in r;
 
 function accumulate(
   messages: (AIMessage | null)[],
@@ -30,7 +36,9 @@ function accumulate(
   }
 }
 
-export function normalize(raw: AIMessage | PipelineResult): NormalizedResult {
+export function normalize(
+  raw: AIMessage | PipelineResult | PEVResult,
+): NormalizedResult {
   const result: NormalizedResult = {
     selected_plugin: null,
     params: null,
@@ -51,6 +59,20 @@ export function normalize(raw: AIMessage | PipelineResult): NormalizedResult {
     result.params = raw.params;
     result.abstained = raw.abstained;
     result.format_error = raw.formatError;
+    return result;
+  }
+
+  if (isPEVResult(raw)) {
+    accumulate(raw.messages, result);
+    result.invocations = raw.messages.length;
+    result.selected_plugin =
+      raw.selectedTool === "NINGUNO_APLICA" ? null : raw.selectedTool;
+    result.abstained = raw.selectedTool === "NINGUNO_APLICA";
+    result.params = raw.args?.params ?? null;
+    result.format_error = false;
+    result.multiple_tool_calls = false;
+    result.selection_attempts_final = raw.selectionAttempts;
+    result.parametrizer_attempts_final = raw.parametrizerAttempts;
     return result;
   }
 

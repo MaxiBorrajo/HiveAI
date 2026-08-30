@@ -2,6 +2,7 @@ import { MOCK_PLUGINS } from "./mock-plugins.ts";
 import type { RoutingQuery } from "./queries.ts";
 import { pipelineCalling } from "./strategies/pipeline.ts";
 import { toolCalling } from "./strategies/tool-calling.ts";
+import { PEV } from "./strategies/plan-execution-verification.ts";
 import { evaluate } from "./evaluate.ts";
 import { normalize } from "./normalize.ts";
 
@@ -9,7 +10,7 @@ export async function harness(
   query: RoutingQuery,
   model: string,
   pluginsSize: number,
-  strategy: "tool-calling" | "pipeline",
+  strategy: "tool-calling" | "pipeline" | "plan-execution-verification",
   repetitionsPerQuery: number,
 ) {
   if (pluginsSize <= 0) {
@@ -36,7 +37,9 @@ export async function harness(
     const result =
       strategy === "tool-calling"
         ? await toolCalling(query.query, model, minimalCatalogOfPlugins)
-        : await pipelineCalling(query.query, model, minimalCatalogOfPlugins);
+        : strategy === "pipeline"
+          ? await pipelineCalling(query.query, model, minimalCatalogOfPlugins)
+          : await PEV(query.query, model, minimalCatalogOfPlugins);
 
     validationResults.push(
       evaluate(

@@ -19,12 +19,12 @@ const outputPath = join(RESULTS_DIR, `${runId}.jsonl`);
 
 await Deno.mkdir(RESULTS_DIR, { recursive: true });
 
-for (const query of queries) {
+for (const query of queries.slice(0, 1)) {
   const verdicts = await harness(
     query,
     model,
     Number(catalog),
-    strategy as "tool-calling" | "pipeline",
+    strategy as "tool-calling" | "pipeline" | "plan-execution-verification",
     Number(runs),
   );
 
