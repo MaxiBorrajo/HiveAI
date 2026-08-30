@@ -19,7 +19,7 @@ const outputPath = join(RESULTS_DIR, `${runId}.jsonl`);
 
 await Deno.mkdir(RESULTS_DIR, { recursive: true });
 
-for (const query of queries.slice(0, 1)) {
+for (const query of queries) {
   const verdicts = await harness(
     query,
     model,

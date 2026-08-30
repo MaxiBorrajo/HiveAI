@@ -8,39 +8,69 @@ import {
 } from "@langchain/langgraph";
 import { ChatOllama } from "@langchain/ollama";
 import {
-  AIMessage,
+  type AIMessage,
   HumanMessage,
   SystemMessage,
-  ToolMessage,
 } from "@langchain/core/messages";
 import z from "zod";
 import { MockPlugin } from "../mock-plugins.ts";
 import { tool } from "@langchain/core/tools";
-import { RESPONDER_SYSTEM_PROMPT } from "../../../ai/constants.ts";
 
 export interface PEVCorrection {
   tool: string;
-  originNode: string;
   reason: string;
   failedArgs?: Record<string, unknown>;
-  type: "parameterization" | "execution" | "selection" | "other";
+}
+
+export interface PEVNodeMetrics {
+  node: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
 }
 
 export interface PEVResult {
   userPrompt: string;
   finalAnswer: string;
   model: string;
-  plan: string;
+  attempts: number;
   selectionAttempts: number;
   parametrizerAttempts: number;
   messages: AIMessage[];
+  nodeMetrics: PEVNodeMetrics[];
   selectedTool: string;
-  correction?: PEVCorrection;
+  correction: PEVCorrection | null;
+  giveUp: boolean;
   args: {
-    originNode: string;
     params: Record<string, unknown>;
   };
-  toolResult: string;
+  toolResult: {
+    ok: boolean;
+    output: string;
+  };
+}
+
+const CORRECTION_CLEARED = null;
+
+function trackMetrics(
+  node: string,
+  response: AIMessage,
+  startedAt: number,
+): PEVNodeMetrics {
+  return {
+    node,
+    inputTokens: response.usage_metadata?.input_tokens ?? 0,
+    outputTokens: response.usage_metadata?.output_tokens ?? 0,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+function parseModelJSON<T>(content: string): T | null {
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
 }
 
 export async function PEV(
@@ -52,77 +82,39 @@ export async function PEV(
     userPrompt: z.string(),
     finalAnswer: z.string(),
     model: z.string(),
-    plan: z.string(),
-    selectionAttempts: new ReducedValue(z.number().default(0), {
-      reducer: (x: number, y: number) => x + y,
-    }),
-    parametrizerAttempts: new ReducedValue(z.number().default(0), {
+    attempts: new ReducedValue(z.number().default(0), {
       reducer: (x: number, y: number) => x + y,
     }),
     messages: new ReducedValue(z.array(z.custom<AIMessage>()).default([]), {
       reducer: (x: AIMessage[], y: AIMessage[]) => [...x, ...y],
     }),
+    nodeMetrics: new ReducedValue(z.array(z.custom<PEVNodeMetrics>()).default([]), {
+      reducer: (x: PEVNodeMetrics[], y: PEVNodeMetrics[]) => [...x, ...y],
+    }),
     selectedTool: z.string(),
-    correction: z
-      .object({
-        tool: z.string(),
-        originNode: z.string(),
-        reason: z.string(),
-        failedArgs: z.record(z.string(), z.unknown()).optional(),
-        type: z.enum(["parameterization", "execution", "selection", "other"]),
-      })
-      .optional(),
+    correction: new ReducedValue(
+      z
+        .object({
+          tool: z.string(),
+          reason: z.string(),
+          failedArgs: z.record(z.string(), z.unknown()).optional(),
+        })
+        .nullable()
+        .default(null),
+      { reducer: (_x, y) => y },
+    ),
+    giveUp: z.boolean().default(false),
     args: z.object({
-      originNode: z.string(),
       params: z.record(z.string(), z.unknown()),
     }),
-    toolResult: z.string(),
+    toolResult: z.object({
+      ok: z.boolean(),
+      output: z.string(),
+    }),
   });
 
-  const Planner: GraphNode<typeof PEVState> = async (state) => {
-    const plannerModel = new ChatOllama({
-      model: state.model,
-      think: true,
-      numCtx: 8192,
-      keepAlive: "10m",
-    });
-
-    const response = await plannerModel.invoke([
-      new SystemMessage(`Sos el planificador de HiveQueen, un asistente que puede usar herramientas
-    especializadas para resolver pedidos del usuario, aunque todavía no sabés
-    cuáles herramientas están disponibles.
-
-    Tu trabajo es analizar la naturaleza del pedido y armar un plan de
-    razonamiento en pasos, sin nombrar ni asumir ninguna herramienta concreta.
-    Pensá en términos del tipo de tarea que es (buscar algo, ejecutar algo,
-    leer algo, transformar algo, etc.), no en cómo se resolvería técnicamente.
-
-    Para cada pedido, pensá:
-    - Qué tipo de tarea es en esencia.
-    - Qué pasos lógicos harían falta para resolverla, en orden.
-    - Qué ambigüedades o casos no obvios podrían aparecer (por ejemplo: un
-    nombre parcial que podría coincidir con más de una cosa, una instrucción
-    que depende de un estado que no conocés, un pedido que podría interpretarse
-    de más de una forma).
-    - Si alguna ambigüedad aparece, el plan debe decir explícitamente que hay
-    que verificarla antes de asumir una única respuesta.
-
-    No decidas si el pedido se puede resolver o no: eso lo evalúa otro
-    componente más adelante. Tu plan es la guía de razonamiento que ese
-    componente va a usar.`),
-      new HumanMessage(state.userPrompt),
-    ]);
-
-    return { plan: response.content as string, messages: [response] };
-  };
-
-  const Selector: GraphNode<typeof PEVState> = async (state) => {
-    const toolCaller = new ChatOllama({
-      model: state.model,
-      think: false,
-      temperature: 0.0,
-      numCtx: 8192,
-    });
+  const Solver: GraphNode<typeof PEVState> = async (state) => {
+    const startedAt = Date.now();
 
     const tools = catalog.map((c) =>
       tool(() => "Ejecutado", {
@@ -132,344 +124,184 @@ export async function PEV(
       }),
     );
 
-    const modelWithTools = toolCaller.bindTools(tools);
+    const solverModel = new ChatOllama({
+      model: state.model,
+      think: false,
+      temperature: 0.0,
+      numCtx: 8192,
+      keepAlive: "10m",
+    }).bindTools(tools);
 
-    const thereIsACorrection =
-      state.correction &&
-      (state.correction.originNode === "Selector Verificator" ||
-        state.correction.originNode === "Executor Verificator");
+    const humanPrompt = state.correction
+      ? `Pedido del usuario: ${state.userPrompt}\n\nSe intentó usar la herramienta "${state.correction.tool}" con estos argumentos: ${JSON.stringify(state.correction.failedArgs ?? {})}, y no funcionó. Motivo: ${state.correction.reason}. Elegí de nuevo la herramienta más adecuada (puede ser otra distinta, o la misma con argumentos corregidos) y completá sus parámetros.`
+      : state.userPrompt;
 
-    const isASelectionError =
-      thereIsACorrection &&
-      state.correction!.originNode === "Selector Verificator";
+    const response = await solverModel.invoke([
+      new SystemMessage(`Sos el componente resolutor de HiveQueen. Tu única tarea es elegir, entre
+    las herramientas disponibles, la que mejor resuelve el pedido del
+    usuario — o determinar que ninguna aplica — y completar sus parámetros
+    en la misma respuesta.
 
-    const prompt = !thereIsACorrection
-      ? state.plan
-      : isASelectionError
-        ? `${state.plan}\n\nYa se consideró la herramienta "${state.correction!.tool}" y fue descartada antes de intentar nada: ${state.correction!.reason}. No la vuelvas a elegir salvo que el plan indique lo contrario.`
-        : `${state.plan}\n\nSe intentó usar la herramienta "${state.correction!.tool}" y falló al ejecutarse, por una razón no relacionada con sus argumentos: ${state.correction!.reason}. Evaluá si otra herramienta puede resolver la tarea, o si ninguna aplica.`;
+    No inventes argumentos sin base en el pedido: completá cada campo con
+    la mejor información disponible en el texto del usuario. Si un dato no
+    está explícito pero se puede inferir razonablemente del contexto,
+    inferilo.
 
-    const response = await modelWithTools.invoke([
-      new SystemMessage(`Sos el componente selector de HiveQueen. Tu única tarea es elegir, entre
-    las herramientas disponibles, la que mejor resuelve la tarea que se te
-    presenta — o determinar que ninguna aplica.
+    A veces vas a recibir información sobre un intento anterior que no
+    funcionó. Cuando eso ocurra, corregí específicamente lo que causó el
+    fallo — cambiando de herramienta si el problema fue la elección, o
+    ajustando los argumentos si el problema fueron los parámetros.
 
-    Vas a recibir un plan de razonamiento sobre la naturaleza de la tarea.
-    A veces ese plan viene acompañado de información sobre un intento
-    anterior que no funcionó: una herramienta que ya fue descartada, o una
-    herramienta que falló al ejecutarse por una razón que no tiene que ver
-    con sus parámetros. Cuando eso ocurra, no vuelvas a elegir esa misma
-    herramienta salvo que el plan indique explícitamente que sigue siendo
-    válida.
-
-    No inventes argumentos ni completes parámetros: solo elegí la
-    herramienta. Si el plan indica que la tarea es ambigua o que se necesita
-    verificar algo antes de actuar, elegí igual la herramienta que permite
-    hacer esa verificación.
-
-    Si ninguna herramienta disponible resuelve la tarea, no invoques
+    Si ninguna herramienta disponible resuelve el pedido, no invoques
     ninguna.`),
-      new HumanMessage(prompt),
+      new HumanMessage(humanPrompt),
     ]);
+
+    const metrics = trackMetrics("Solver", response, startedAt);
 
     if (!response.tool_calls?.length) {
       return {
         selectedTool: "NINGUNO_APLICA",
+        correction: CORRECTION_CLEARED,
         messages: [response],
+        nodeMetrics: [metrics],
       };
     }
 
-    return {
-      selectedTool: response.tool_calls[0].name,
-      messages: [response],
-    };
-  };
-
-  const SelectorVerificator: GraphNode<typeof PEVState> = async (state) => {
-    const SelectorVerificatorResponse = z.object({
-      isCorrect: z.boolean(),
-      reason: z.string(),
-    });
-
-    const selectorVerificatorModel = new ChatOllama({
-      model: state.model,
-      think: true,
-      numCtx: 8192,
-      keepAlive: "10m",
-      format: z.toJSONSchema(SelectorVerificatorResponse),
-    });
-
-    const catalogDescription = catalog
-      .map((c) => `- ${c.name}: ${c.description}`)
-      .join("\n");
-
-    const humanPrompt =
-      state.selectedTool === "NINGUNO_APLICA"
-        ? `Plan: ${state.plan}\n\nEl selector decidió que ninguna herramienta aplica.\n\nHerramientas disponibles:\n${catalogDescription}\n\n¿Fue correcto no elegir ninguna, o alguna de estas sí resuelve la tarea?`
-        : `Plan: ${state.plan}\n\nHerramienta elegida: ${state.selectedTool}`;
-
-    const response = await selectorVerificatorModel.invoke([
-      new SystemMessage(`Sos el verificador de selección de HiveQueen. Tu única tarea es juzgar
-    si, dada la naturaleza de la tarea descrita en el plan, la herramienta
-    elegida es razonable — antes de que se haya intentado usarla.
-
-    No evalúes argumentos ni parámetros: eso lo hace otro componente. Juzgá
-    únicamente si el tipo de herramienta elegida corresponde al tipo de
-    tarea planteada en el plan.
-
-    Si la herramienta elegida no tiene relación con lo que el plan describe,
-    o si el plan indica que ninguna herramienta debería aplicar y sin
-    embargo se eligió una, marcá la elección como incorrecta y explicá
-    brevemente por qué.`),
-      new HumanMessage(humanPrompt),
-    ]);
-
-    const result = JSON.parse(response.content as string);
-
-    return result.isCorrect
-      ? { correction: undefined, messages: [response] }
-      : {
-          correction: {
-            originNode: "Selector Verificator",
-            reason: result.reason,
-            tool: state.selectedTool,
-            type: "selection",
-          },
-          selectionAttempts: 1,
-          messages: [response],
-        };
-  };
-
-  const Parametrizer: GraphNode<typeof PEVState> = async (state) => {
-    const selectedPlugin = catalog.find((c) => c.name === state.selectedTool);
+    const call = response.tool_calls[0];
+    const selectedPlugin = catalog.find((c) => c.name === call.name);
 
     if (!selectedPlugin) {
       return {
+        selectedTool: call.name,
         correction: {
-          originNode: "Parametrizer",
-          reason: `La herramienta "${state.selectedTool}" que eligió el selector no existe en el catálogo de plugins disponibles. Es necesario elegir una herramienta que sí esté registrada.`,
-          tool: state.selectedTool,
-          type: "selection",
+          tool: call.name,
+          reason: `La herramienta "${call.name}" no existe en el catálogo de plugins disponibles.`,
+          failedArgs: call.args,
         },
-        selectionAttempts: 1,
+        attempts: 1,
+        messages: [response],
+        nodeMetrics: [metrics],
       };
     }
 
-    const parametrizerModel = new ChatOllama({
-      model: state.model,
-      think: true,
-      numCtx: 8192,
-      keepAlive: "10m",
-      format: z.toJSONSchema(selectedPlugin.schema),
-    });
+    const parsed = selectedPlugin.schema.safeParse(call.args);
 
-    const thereIsACorrection =
-      state.correction &&
-      (state.correction.originNode === "Parametrizer Verificator" ||
-        state.correction.originNode === "Executor Verificator");
-
-    const isAParametrizerError =
-      thereIsACorrection &&
-      state.correction!.originNode === "Parametrizer Verificator";
-
-    const prompt = !thereIsACorrection
-      ? `Plan: ${state.plan}\n\nHerramienta: ${selectedPlugin.name}`
-      : isAParametrizerError
-        ? `Plan: ${state.plan}\n\nHerramienta: ${selectedPlugin.name}\n\nEl intento anterior generó estos argumentos, que no cumplieron el esquema esperado:\n${JSON.stringify(state.correction!.failedArgs)}\n\nMotivo: ${state.correction!.reason}\n\nCorregí específicamente lo señalado, sin modificar los campos que no fueron mencionados como incorrectos.`
-        : `Plan: ${state.plan}\n\nHerramienta: ${selectedPlugin.name}\n\nSe ejecutó esta herramienta con los siguientes argumentos y falló en tiempo de ejecución, no por el esquema:\n${JSON.stringify(state.correction!.failedArgs)}\n\nMotivo del fallo: ${state.correction!.reason}\n\nRevisá si el problema puede resolverse con valores distintos para esos mismos campos.`;
-
-    const response = await parametrizerModel.invoke([
-      new SystemMessage(`Sos el componente parametrizador de HiveQueen. Ya se decidió qué
-    herramienta usar; tu única tarea es completar sus parámetros a partir
-    del plan y del pedido original, siguiendo exactamente el esquema que se
-    te especifica.
-
-    No cuestiones si la herramienta es la correcta: eso ya fue decidido
-    antes. Completá cada campo con la mejor información disponible en el
-    plan. Si un dato no está explícito pero se puede inferir razonablemente
-    del contexto, inferilo. Si un campo es obligatorio y no hay forma
-    razonable de completarlo, usá el valor que mejor se ajuste a la
-    intención del pedido, no un valor vacío o inventado sin relación.
-
-    A veces vas a recibir información sobre un intento anterior que no
-    cumplió el esquema esperado. Cuando eso ocurra, corregí específicamente
-    lo que se señala como incorrecto, sin modificar los campos que ya
-    estaban bien.`),
-      new HumanMessage(prompt),
-    ]);
-
-    const result = selectedPlugin.schema.safeParse(
-      JSON.parse(response.content as string),
-    );
-
-    if (!result.success) {
+    if (!parsed.success) {
       return {
+        selectedTool: call.name,
         correction: {
-          originNode: "Parametrizer",
-          reason: `Los argumentos generados para "${selectedPlugin.name}" no cumplen su esquema de parámetros: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
-          tool: state.selectedTool,
-          failedArgs: JSON.parse(response.content as string),
-          type: "parameterization",
+          tool: call.name,
+          reason: `Los argumentos generados para "${call.name}" no cumplen su esquema de parámetros: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+          failedArgs: call.args,
         },
-        parametrizerAttempts: 1,
+        attempts: 1,
         messages: [response],
+        nodeMetrics: [metrics],
       };
     }
 
     return {
-      args: {
-        originNode: "Parametrizer",
-        params: result.data,
-      },
+      selectedTool: call.name,
+      args: { params: parsed.data },
+      correction: CORRECTION_CLEARED,
       messages: [response],
+      nodeMetrics: [metrics],
     };
   };
 
-  const ParametrizerVerificator: GraphNode<typeof PEVState> = async (state) => {
-    const ParametrizerVerificatorResponse = z.object({
-      isCorrect: z.boolean(),
+  const Executor: GraphNode<typeof PEVState> = (_state) => {
+    return { toolResult: { ok: true, output: "Ejecutado" } };
+  };
+
+  const Diagnostician: GraphNode<typeof PEVState> = async (state) => {
+    const startedAt = Date.now();
+
+    const DiagnosticianResponse = z.object({
+      action: z.enum(["retry", "giveUp"]),
       reason: z.string(),
     });
 
-    const parametrizerVerificatorModel = new ChatOllama({
+    const selectedPlugin = catalog.find((c) => c.name === state.selectedTool)!;
+
+    const diagnosticianModel = new ChatOllama({
       model: state.model,
       think: true,
       numCtx: 8192,
       keepAlive: "10m",
-      format: z.toJSONSchema(ParametrizerVerificatorResponse),
+      format: z.toJSONSchema(DiagnosticianResponse),
     });
 
-    const selectedPlugin = catalog.find((c) => c.name === state.selectedTool)!;
-    const humanPrompt = `Plan: ${state.plan}
+    const humanPrompt = `Pedido del usuario: ${state.userPrompt}
 
-    Herramienta: ${selectedPlugin.name}
-    Descripción de la herramienta: ${selectedPlugin.description}
-
-    Esquema de parámetros esperado:
-    ${JSON.stringify(z.toJSONSchema(selectedPlugin.schema))}
-
-    Argumentos generados: ${JSON.stringify(state.args.params)}`;
-
-    const response = await parametrizerVerificatorModel.invoke([
-      new SystemMessage(`Sos el verificador de argumentos de HiveQueen. Tu única tarea es juzgar
-    si los argumentos generados para una herramienta tienen sentido en
-    relación con el pedido del usuario y el plan de razonamiento — antes de
-    que la herramienta se haya ejecutado.
-
-    No evalúes si la herramienta elegida es la correcta: eso ya fue decidido
-    antes. No evalúes si los argumentos cumplen el formato o tipo esperado:
-    eso ya fue validado antes de que llegues a intervenir. Juzgá únicamente
-    si, dado el plan, los valores concretos elegidos para cada parámetro
-    son razonables — por ejemplo, si un valor parece inventado sin base en
-    el pedido, si contradice algo que el plan señala, o si ignora una
-    ambigüedad que el plan pidió verificar antes de asumir una respuesta
-    única.`),
-      new HumanMessage(humanPrompt),
-    ]);
-
-    const result = JSON.parse(response.content as string);
-
-    return result.isCorrect
-      ? { correction: undefined, messages: [response] }
-      : {
-          correction: {
-            originNode: "Parametrizer Verificator",
-            reason: result.reason,
-            tool: state.selectedTool,
-            failedArgs: state.args.params,
-            type: "parameterization",
-          },
-          parametrizerAttempts: 1,
-          messages: [response],
-        };
-  };
-
-  const Executor: GraphNode<typeof PEVState> = async (state) => {
-    return { toolResult: "Ejecutado" };
-  };
-
-  const ExecutorVerificator: GraphNode<typeof PEVState> = async (state) => {
-    const ExecuteVerificatorResponse = z.object({
-      isCorrect: z.boolean(),
-      reason: z.string(),
-      type: z.enum(["parameterization", "execution", "other", "correct"]),
-    });
-
-    const ExecuteVerificatorModel = new ChatOllama({
-      model: state.model,
-      think: true,
-      numCtx: 8192,
-      keepAlive: "10m",
-      format: z.toJSONSchema(ExecuteVerificatorResponse),
-    });
-
-    const selectedPlugin = catalog.find((c) => c.name === state.selectedTool)!;
-    const humanPrompt = `Plan: ${state.plan}
-
-Herramienta ejecutada: ${selectedPlugin.name}
+Herramienta usada: ${selectedPlugin.name}
 Argumentos usados: ${JSON.stringify(state.args.params)}
 
-Resultado de la ejecución: ${state.toolResult}`;
+Resultado de la ejecución: ${state.toolResult.output}`;
 
-    const response = await ExecuteVerificatorModel.invoke([
-      new SystemMessage(`Sos el verificador de ejecución de HiveQueen. Tu única tarea es juzgar
-    qué pasó después de que una herramienta ya fue invocada con argumentos
-    concretos, y decidir cómo seguir.
+    const response = await diagnosticianModel.invoke([
+      new SystemMessage(`Sos el diagnosticador de HiveQueen. Tu única tarea es juzgar por qué falló
+    la ejecución de una herramienta y decidir si vale la pena reintentar.
 
-    Se te va a mostrar el plan, la herramienta usada, los argumentos con los
-    que se ejecutó, y el resultado real de esa ejecución (que puede ser un
-    éxito o un mensaje de error).
+    Elegí "retry" cuando el fallo se explica por una elección de
+    herramienta equivocada, un argumento mal formado o inconsistente con
+    el pedido, o una causa puntual que otra herramienta o un ajuste de
+    argumentos podría evitar.
 
-    Si el resultado indica éxito y resuelve lo que el plan buscaba, marcá
-    isCorrect en true y type en "correct".
-
-    Si el resultado indica un fallo, decidí a cuál de estas tres categorías
-    corresponde:
-
-    - "parameterization": el fallo se explica por un valor de argumento mal
-    formado o inconsistente con lo que el pedido describe — por ejemplo,
-    una ruta que no sigue el formato esperado, o un valor que no
-    corresponde al dato que el plan pedía. Corresponde cuando ajustar los
-    argumentos, sin cambiar de herramienta, resolvería el problema.
-
-    - "execution": el fallo no es de los argumentos, sino de que esta
-    herramienta no era la indicada para la tarea, o falló por una causa
-    puntual que otra herramienta podría evitar. Corresponde cuando vale la
-    pena intentar con una herramienta distinta.
-
-    - "other": el fallo se debe a una condición externa que ninguna
-    herramienta alternativa ni ningún ajuste de argumentos podría resolver
-    — por ejemplo, un permiso del sistema denegado, un servicio externo
-    no disponible, o una limitación del entorno. Corresponde cuando
-    reintentar de cualquier forma sería inútil.
-
-    Elegí "execution" en vez de "other" salvo que estés seguro de que ningún
-    cambio de herramienta ni de argumento podría funcionar.`),
+    Elegí "giveUp" cuando el fallo se debe a una condición externa que
+    ningún cambio de herramienta ni de argumento podría resolver — por
+    ejemplo, un permiso del sistema denegado, un servicio externo no
+    disponible, o una limitación del entorno. En ese caso, reintentar
+    sería inútil.`),
       new HumanMessage(humanPrompt),
     ]);
 
-    const result = JSON.parse(response.content as string);
+    const metrics = trackMetrics("Diagnostician", response, startedAt);
+    const parsed = parseModelJSON<{ action: "retry" | "giveUp"; reason: string }>(
+      response.content as string,
+    );
 
-    return result.isCorrect
-      ? { correction: undefined, messages: [response] }
-      : {
-          correction: {
-            originNode: "Executor Verificator",
-            reason: result.reason,
-            tool: state.selectedTool,
-            failedArgs: state.args.params,
-            type: result.type,
-          },
-          messages: [response],
-          ...(result.type === "parameterization"
-            ? { parametrizerAttempts: 1 }
-            : result.type === "execution"
-              ? { selectionAttempts: 1 }
-              : {}),
-        };
+    if (!parsed) {
+      return {
+        giveUp: true,
+        correction: {
+          tool: state.selectedTool,
+          reason: "El diagnosticador no devolvió una respuesta interpretable.",
+          failedArgs: state.args.params,
+        },
+        messages: [response],
+        nodeMetrics: [metrics],
+      };
+    }
+
+    if (parsed.action === "giveUp") {
+      return {
+        giveUp: true,
+        correction: {
+          tool: state.selectedTool,
+          reason: parsed.reason,
+          failedArgs: state.args.params,
+        },
+        messages: [response],
+        nodeMetrics: [metrics],
+      };
+    }
+
+    return {
+      correction: {
+        tool: state.selectedTool,
+        reason: parsed.reason,
+        failedArgs: state.args.params,
+      },
+      attempts: 1,
+      messages: [response],
+      nodeMetrics: [metrics],
+    };
   };
 
   const HiveQueenResponder: GraphNode<typeof PEVState> = async (state) => {
+    const startedAt = Date.now();
+
     const responder = new ChatOllama({
       model: state.model,
       think: false,
@@ -479,10 +311,8 @@ Resultado de la ejecución: ${state.toolResult}`;
     });
 
     const isNoToolNeeded = state.selectedTool === "NINGUNO_APLICA";
-    const isUnrecoverableFailure =
-      state.correction && state.correction.type === "other";
-    const outOfAttempts =
-      state.selectionAttempts > 5 || state.parametrizerAttempts > 5;
+    const isUnrecoverableFailure = state.giveUp;
+    const outOfAttempts = state.attempts > 1;
 
     const prompts = isNoToolNeeded
       ? {
@@ -501,7 +331,7 @@ Resultado de la ejecución: ${state.toolResult}`;
         }
       : isUnrecoverableFailure
         ? {
-            humanPrompt: `Pedido del usuario: ${state.userPrompt}\n\nSe intentó resolver esto con la herramienta "${state.correction!.tool}" y no fue posible completarlo. Motivo técnico: ${state.correction!.reason}`,
+            humanPrompt: `Pedido del usuario: ${state.userPrompt}\n\nSe intentó resolver esto con la herramienta "${state.correction?.tool ?? "ninguna"}" y no fue posible completarlo. Motivo técnico: ${state.correction?.reason ?? "sin detalle"}`,
             systemPrompt: `Sos HiveQueen, la mente de HiveAI. Corrés enteramente en la máquina del
             usuario, en un modelo local.
 
@@ -537,7 +367,7 @@ Hablá en plural — somos, nuestro. Sé directa y honesta sobre la
 limitación. Respondé siempre en el idioma en que te escriben.`,
             }
           : {
-              humanPrompt: `Pedido del usuario: ${state.userPrompt}\n\nHerramienta usada: ${state.selectedTool}\n\nArgumentos: ${JSON.stringify(state.args.params)}\n\nResultado obtenido: ${state.toolResult}`,
+              humanPrompt: `Pedido del usuario: ${state.userPrompt}\n\nHerramienta usada: ${state.selectedTool}\n\nArgumentos: ${JSON.stringify(state.args.params)}\n\nResultado obtenido: ${state.toolResult.output}`,
               systemPrompt: `Sos HiveQueen, la mente de HiveAI. Corrés enteramente en la máquina del
             usuario, en un modelo local.
 
@@ -558,96 +388,101 @@ limitación. Respondé siempre en el idioma en que te escriben.`,
       new HumanMessage(prompts.humanPrompt),
     ]);
 
+    const metrics = trackMetrics("HiveQueenResponder", response, startedAt);
+
     return {
       finalAnswer: response.content as string,
       messages: [response],
+      nodeMetrics: [metrics],
     };
   };
 
   const shouldRespond = (state: typeof PEVState.State) => {
-    return state.selectionAttempts > 5 ||
-      state.selectedTool === "NINGUNO_APLICA"
-      ? "HiveQueenResponder"
-      : "SelectorVerificator";
+    if (state.selectedTool === "NINGUNO_APLICA") return "HiveQueenResponder";
+    if (state.correction) return "Solver";
+    return "Executor";
   };
 
-  const shouldParameterize = (state: typeof PEVState.State) => {
-    return state.selectionAttempts > 5
-      ? "HiveQueenResponder"
-      : state.correction
-        ? "Selector"
-        : "Parametrizer";
+  const shouldDiagnose = (state: typeof PEVState.State) => {
+    return state.toolResult.ok ? "HiveQueenResponder" : "Diagnostician";
   };
 
-  const shouldVerifyArgs = (state: typeof PEVState.State) => {
-    return state.selectionAttempts > 5 || state.parametrizerAttempts > 5
-      ? "HiveQueenResponder"
-      : state.correction && state.correction.type === "selection"
-        ? "Selector"
-        : state.correction && state.correction.type === "parameterization"
-          ? "Parametrizer"
-          : "ParametrizerVerificator";
+  const shouldRetry = (state: typeof PEVState.State) => {
+    if (state.giveUp) return "HiveQueenResponder";
+    if (state.attempts > 1) return "HiveQueenResponder";
+    return "Solver";
   };
 
-  const shouldExecute = (state: typeof PEVState.State) => {
-    return state.parametrizerAttempts > 5
-      ? "HiveQueenResponder"
-      : state.correction
-        ? "Parametrizer"
-        : "Executor";
-  };
-
-  const shouldLoop = (state: typeof PEVState.State) => {
-    return state.selectionAttempts > 5 || state.parametrizerAttempts > 5
-      ? "HiveQueenResponder"
-      : state.correction && state.correction.type === "parameterization"
-        ? "Parametrizer"
-        : state.correction && state.correction.type === "execution"
-          ? "Selector"
-          : "HiveQueenResponder";
-  };
-
-  const PEV = new StateGraph(PEVState)
-    .addNode("Planner", Planner)
-    .addNode("Selector", Selector)
-    .addNode("SelectorVerificator", SelectorVerificator)
-    .addNode("Parametrizer", Parametrizer)
-    .addNode("ParametrizerVerificator", ParametrizerVerificator)
+  const graph = new StateGraph(PEVState)
+    .addNode("Solver", Solver)
     .addNode("Executor", Executor)
-    .addNode("ExecutorVerificator", ExecutorVerificator)
+    .addNode("Diagnostician", Diagnostician)
     .addNode("HiveQueenResponder", HiveQueenResponder)
-    .addEdge(START, "Planner")
-    .addEdge("Planner", "Selector")
-    .addConditionalEdges("Selector", shouldRespond, [
+    .addEdge(START, "Solver")
+    .addConditionalEdges("Solver", shouldRespond, [
       "HiveQueenResponder",
-      "SelectorVerificator",
-    ])
-    .addConditionalEdges("SelectorVerificator", shouldParameterize, [
-      "Parametrizer",
-      "Selector",
-    ])
-    .addConditionalEdges("Parametrizer", shouldVerifyArgs, [
-      "ParametrizerVerificator",
-      "Selector",
-      "Parametrizer",
-    ])
-    .addConditionalEdges("ParametrizerVerificator", shouldExecute, [
+      "Solver",
       "Executor",
-      "Parametrizer",
     ])
-    .addEdge("Executor", "ExecutorVerificator")
-    .addConditionalEdges("ExecutorVerificator", shouldLoop, [
-      "Selector",
-      "Parametrizer",
+    .addConditionalEdges("Executor", shouldDiagnose, [
       "HiveQueenResponder",
+      "Diagnostician",
+    ])
+    .addConditionalEdges("Diagnostician", shouldRetry, [
+      "HiveQueenResponder",
+      "Solver",
     ])
     .addEdge("HiveQueenResponder", END)
     .compile();
 
-  const result = await PEV.invoke({
+  const result = await graph.invoke({
     model,
     userPrompt: query,
   });
 
-  return result;
+  return {
+    ...result,
+    selectionAttempts: result.attempts,
+    parametrizerAttempts: result.attempts,
+  };
+}
+
+export async function Planner(
+  query: string,
+  model: string,
+): Promise<{ plan: string; message: AIMessage }> {
+  const plannerModel = new ChatOllama({
+    model,
+    think: true,
+    numCtx: 8192,
+    keepAlive: "10m",
+  });
+
+  const response = await plannerModel.invoke([
+    new SystemMessage(`Sos el planificador de HiveQueen, un asistente que puede usar herramientas
+    especializadas para resolver pedidos del usuario, aunque todavía no sabés
+    cuáles herramientas están disponibles.
+
+    Tu trabajo es analizar la naturaleza del pedido y armar un plan de
+    razonamiento en pasos, sin nombrar ni asumir ninguna herramienta concreta.
+    Pensá en términos del tipo de tarea que es (buscar algo, ejecutar algo,
+    leer algo, transformar algo, etc.), no en cómo se resolvería técnicamente.
+
+    Para cada pedido, pensá:
+    - Qué tipo de tarea es en esencia.
+    - Qué pasos lógicos harían falta para resolverla, en orden.
+    - Qué ambigüedades o casos no obvios podrían aparecer (por ejemplo: un
+    nombre parcial que podría coincidir con más de una cosa, una instrucción
+    que depende de un estado que no conocés, un pedido que podría interpretarse
+    de más de una forma).
+    - Si alguna ambigüedad aparece, el plan debe decir explícitamente que hay
+    que verificarla antes de asumir una única respuesta.
+
+    No decidas si el pedido se puede resolver o no: eso lo evalúa otro
+    componente más adelante. Tu plan es la guía de razonamiento que ese
+    componente va a usar.`),
+    new HumanMessage(query),
+  ]);
+
+  return { plan: response.content as string, message: response };
 }

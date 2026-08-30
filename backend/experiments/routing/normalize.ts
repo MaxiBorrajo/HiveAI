@@ -12,8 +12,7 @@ export interface NormalizedResult {
   invocations: number;
   format_error: boolean;
   multiple_tool_calls: boolean;
-  selection_attempts_final?: number;
-  parametrizer_attempts_final?: number;
+  attempts_final?: number;
   raw: unknown;
 }
 
@@ -71,8 +70,7 @@ export function normalize(
     result.params = raw.args?.params ?? null;
     result.format_error = false;
     result.multiple_tool_calls = false;
-    result.selection_attempts_final = raw.selectionAttempts;
-    result.parametrizer_attempts_final = raw.parametrizerAttempts;
+    result.attempts_final = raw.attempts;
     return result;
   }
 

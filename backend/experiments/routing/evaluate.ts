@@ -24,8 +24,7 @@ export interface Verdict {
   output_tokens: number;
   duration_ms: number;
   invocations: number;
-  selection_attempts_final?: number;
-  parametrizer_attempts_final?: number;
+  attempts_final?: number;
 }
 
 /**
@@ -110,8 +109,7 @@ export function evaluate(
     output_tokens: result.output_tokens,
     duration_ms: result.duration_ms,
     invocations: result.invocations,
-    selection_attempts_final: result.selection_attempts_final,
-    parametrizer_attempts_final: result.parametrizer_attempts_final,
+    attempts_final: result.attempts_final,
   };
 }
 
