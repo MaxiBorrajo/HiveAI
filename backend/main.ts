@@ -2,6 +2,7 @@ import { HiveMicrokernel } from "./microkernel/hive-microkernel.ts";
 import { HiveMind } from "./ai/hive-queen.ts";
 import {
   HumanMessage,
+  AIMessage,
   type BaseMessage,
   ToolMessage,
 } from "@langchain/core/messages";
@@ -45,6 +46,7 @@ main().then(() =>
         name: plugin.name,
         description: plugin.description,
         active: hive.isActive(plugin.name),
+        testCases: plugin.testCases || [],
       }));
       return Response.json(plugins, { headers });
     }
@@ -61,6 +63,13 @@ main().then(() =>
     if (deactivateMatch && req.method === "POST") {
       const ok = hive.deactivate(decodeURIComponent(deactivateMatch[1]));
       return Response.json({ success: ok }, { headers, status: ok ? 200 : 404 });
+    }
+
+    const testMatch = url.pathname.match(/^\/plugins\/([^/]+)\/test\/(\d+)$/);
+    if (testMatch && req.method === "POST") {
+      const pluginName = decodeURIComponent(testMatch[1]);
+      const testIndex = parseInt(testMatch[2], 10);
+      return handleTest(pluginName, testIndex, req, headers);
     }
 
     if (url.pathname === "/chat" && req.method === "POST") {
@@ -126,4 +135,75 @@ async function handleChat(
     { content: lastMessage.content, usedTools },
     { headers },
   );
+}
+
+async function handleTest(
+  pluginName: string,
+  index: number,
+  req: Request,
+  headers: Record<string, string>,
+): Promise<Response> {
+  const plugin = hive.getPlugin(pluginName);
+  if (!plugin || !plugin.testCases || !plugin.testCases[index]) {
+    return Response.json({ error: "Test not found" }, { status: 404, headers });
+  }
+  const testCase = plugin.testCases[index];
+
+  const wasActive = hive.isActive(pluginName);
+  if (!wasActive) hive.activate(pluginName);
+
+  try {
+    const result = await HiveMind.invoke(
+      {
+        messages: [new HumanMessage(testCase.query)],
+        model: MODEL,
+      },
+      { signal: req.signal },
+    );
+
+    const messages = result.messages;
+    const selectorMsg = messages[1];
+    const toolCalls = AIMessage.isInstance(selectorMsg)
+      ? selectorMsg.tool_calls || []
+      : [];
+
+    const wasInvoked = toolCalls.some((tc: any) => tc.name === pluginName);
+    const errors: string[] = [];
+
+    if (testCase.shouldInvoke && !wasInvoked) {
+      errors.push("Expected plugin to be invoked, but it was not.");
+    } else if (!testCase.shouldInvoke && wasInvoked) {
+      errors.push("Expected plugin NOT to be invoked, but it was.");
+    }
+
+    if (wasInvoked && testCase.shouldInvoke && testCase.expectedParams) {
+      const call = toolCalls.find((tc: any) => tc.name === pluginName)!;
+      for (const [key, expectedVal] of Object.entries(testCase.expectedParams)) {
+        if (call.args[key] !== expectedVal) {
+          errors.push(
+            `Parameter '${key}' mismatch. Expected '${expectedVal}', got '${call.args[key]}'`,
+          );
+        }
+      }
+    }
+
+    if (testCase.expectedOutputValues && testCase.expectedOutputValues.length > 0) {
+      const finalMsg = messages[messages.length - 1];
+      const finalContent = finalMsg?.content?.toString() || "";
+      for (const expected of testCase.expectedOutputValues) {
+        if (!finalContent.includes(expected)) {
+          errors.push(`Expected final output to contain '${expected}'.`);
+        }
+      }
+    }
+
+    return Response.json({ success: errors.length === 0, errors }, { headers });
+  } catch (err: any) {
+    if (req.signal.aborted) {
+      return Response.json({ error: "Aborted by user" }, { status: 499, headers });
+    }
+    return Response.json({ error: String(err) }, { status: 500, headers });
+  } finally {
+    if (!wasActive) hive.deactivate(pluginName);
+  }
 }

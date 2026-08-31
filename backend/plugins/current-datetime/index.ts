@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  PluginTestCase,
+} from "../../microkernel/bee-plugin.ts";
 
 export default class CurrentDatetimePlugin implements BeePlugin {
   name = "current_datetime";
@@ -20,6 +24,25 @@ export default class CurrentDatetimePlugin implements BeePlugin {
         "Zona horaria IANA opcional, por ejemplo 'America/Argentina/Buenos_Aires'. Si se omite, usa la del sistema.",
       ),
   }) as any;
+
+  testCases: PluginTestCase[] = [
+    {
+      query: "¿qué hora es en este momento?",
+      shouldInvoke: true,
+      expectedParams: { format: "time" },
+      expectedOutputValues: ["The current time is"],
+    },
+    {
+      query: "¿qué día es hoy?",
+      shouldInvoke: true,
+      expectedParams: { format: "date" },
+      expectedOutputValues: ["Today is"],
+    },
+    {
+      query: "sumá un café",
+      shouldInvoke: false,
+    },
+  ];
 
   initialize(_context: BeeContext): void {}
 

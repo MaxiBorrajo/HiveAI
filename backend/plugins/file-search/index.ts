@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  PluginTestCase,
+} from "../../microkernel/bee-plugin.ts";
 
 const DEFAULT_MAX_DEPTH = 8;
 const DEFAULT_MAX_RESULTS = 20;
@@ -49,6 +53,18 @@ export default class FileSearchPlugin implements BeePlugin {
       .describe("Maximum number of matches to return."),
   }) as any;
 
+  testCases: PluginTestCase[] = [
+    {
+      query: "buscá el archivo informe.pdf en mis documentos",
+      shouldInvoke: true,
+      expectedParams: { name: "informe.pdf" },
+    },
+    {
+      query: "¿qué hora es?",
+      shouldInvoke: false,
+    },
+  ];
+
   initialize(_context: BeeContext): void {}
 
   private getDefaultSearchDirs(): string[] {
@@ -91,7 +107,10 @@ export default class FileSearchPlugin implements BeePlugin {
 
       const fullPath = join(dir, entry.name);
 
-      if (entry.name.toLowerCase().includes(searchTerm) && !seen.has(fullPath)) {
+      if (
+        entry.name.toLowerCase().includes(searchTerm) &&
+        !seen.has(fullPath)
+      ) {
         seen.add(fullPath);
         matches.push(fullPath);
       }
@@ -120,7 +139,10 @@ export default class FileSearchPlugin implements BeePlugin {
       }
     }
 
-    const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+    const workers = Array.from(
+      { length: Math.min(limit, items.length) },
+      worker,
+    );
     await Promise.all(workers);
   }
 
@@ -148,7 +170,14 @@ export default class FileSearchPlugin implements BeePlugin {
 
     await Promise.all(
       searchDirs.map((dir) =>
-        this.searchDir(dir, DEFAULT_MAX_DEPTH, searchTerm, matches, seen, maxResults),
+        this.searchDir(
+          dir,
+          DEFAULT_MAX_DEPTH,
+          searchTerm,
+          matches,
+          seen,
+          maxResults,
+        ),
       ),
     );
 

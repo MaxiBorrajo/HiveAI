@@ -6,7 +6,13 @@ import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { tool } from "@langchain/core/tools";
 
-const REQUIRED_FIELDS = ["name", "description", "schema", "process"] as const;
+const REQUIRED_FIELDS = [
+  "name",
+  "description",
+  "schema",
+  "process",
+  "testCases",
+] as const;
 
 export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
@@ -26,8 +32,8 @@ export class HiveMicrokernel {
     this.config.set(patch);
   }
 
-  getConfig(){
-    return this.config
+  getConfig() {
+    return this.config;
   }
 
   private buildContext(pluginName: string): BeeContext {

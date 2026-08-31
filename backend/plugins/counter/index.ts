@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { join } from "node:path";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  PluginTestCase,
+} from "../../microkernel/bee-plugin.ts";
 
 export default class CounterPlugin implements BeePlugin {
   name = "counter";
@@ -25,6 +29,30 @@ export default class CounterPlugin implements BeePlugin {
         "Cuánto incrementar. Solo se usa cuando la acción es increment",
       ),
   });
+
+  testCases: PluginTestCase[] = [
+    {
+      query: "sumá un café a la cuenta",
+      shouldInvoke: true,
+      expectedParams: { name: "café", action: "increment", amount: 1 },
+      expectedOutputValues: ["was incremented by 1"],
+    },
+    {
+      query: "¿cuántos pomodoros llevo?",
+      shouldInvoke: true,
+      expectedParams: { name: "pomodoros", action: "get", amount: 1 },
+    },
+    {
+      query: "borrá la cuenta de cafés",
+      shouldInvoke: true,
+      expectedParams: { name: "cafés", action: "reset", amount: 1 },
+      expectedOutputValues: ["was reset to 0"],
+    },
+    {
+      query: "¿qué hora es en Tokio?",
+      shouldInvoke: false,
+    },
+  ];
 
   private dataPath: string = "";
 
