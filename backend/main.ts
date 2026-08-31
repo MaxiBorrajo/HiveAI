@@ -12,7 +12,7 @@ const hive = HiveMicrokernel.getInstance();
 const homeDir = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const MODEL = "qwen3:8b";
+const MODEL = "hf.co/ewinregirgojr/MiniCPM5-1B-Agentic-Tooluse-GGUF:Q8_0";
 
 async function main() {
   const pluginsDir = join(__dirname, "plugins");

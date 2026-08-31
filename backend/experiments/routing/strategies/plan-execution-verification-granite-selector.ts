@@ -14,41 +14,18 @@ import {
 } from "@langchain/core/messages";
 import z from "zod";
 import { MockPlugin } from "../mock-plugins.ts";
+import type {
+  PEVCorrection,
+  PEVNodeMetrics,
+  PEVResult,
+} from "./plan-execution-verification.ts";
 import { tool } from "@langchain/core/tools";
 
-export interface PEVCorrection {
-  tool: string;
-  reason: string;
-  failedArgs?: Record<string, unknown>;
-}
-
-export interface PEVNodeMetrics {
-  node: string;
-  inputTokens: number;
-  outputTokens: number;
-  durationMs: number;
-}
-
-export interface PEVResult {
-  userPrompt: string;
-  finalAnswer: string;
-  model: string;
-  attempts: number;
-  selectionAttempts: number;
-  parametrizerAttempts: number;
-  messages: AIMessage[];
-  nodeMetrics: PEVNodeMetrics[];
-  selectedTool: string;
-  correction: PEVCorrection | null;
-  giveUp: boolean;
-  args: {
-    params: Record<string, unknown>;
-  };
-  toolResult: {
-    ok: boolean;
-    output: string;
-  };
-}
+// Esta variante es idéntica a PEV, salvo que el Solver — el nodo que elige la
+// herramienta y completa sus parámetros — corre siempre en granite3.3:2b,
+// independientemente del modelo con el que se lance la corrida. El resto de los
+// nodos (Diagnostician, HiveQueenResponder) sigue usando el modelo de la corrida.
+const SELECTOR_MODEL = "granite3.3:2b";
 
 const CORRECTION_CLEARED = null;
 
@@ -113,7 +90,7 @@ function parseModelJSON<T>(content: string): T | null {
   }
 }
 
-export async function PEV(
+export async function PEVGraniteSelector(
   query: string,
   model: string,
   catalog: MockPlugin[],
@@ -174,7 +151,7 @@ export async function PEV(
     );
 
     const solverModel = new ChatOllama({
-      model: state.model,
+      model: SELECTOR_MODEL,
       think: false,
       temperature: 0.0,
       numCtx: 8192,
@@ -500,46 +477,4 @@ limitación. Respondé siempre en el idioma en que te escriben.`,
   });
 
   return result;
-}
-
-export async function Planner(
-  query: string,
-  model: string,
-): Promise<{ plan: string; message: AIMessage }> {
-  const plannerModel = new ChatOllama({
-    model,
-    think: true,
-    numCtx: 8192,
-    keepAlive: "10m",
-  });
-
-  const response = await invokeWithRetry("Planner", () =>
-    plannerModel.invoke([
-      new SystemMessage(`Sos el planificador de HiveQueen, un asistente que puede usar herramientas
-    especializadas para resolver pedidos del usuario, aunque todavía no sabés
-    cuáles herramientas están disponibles.
-
-    Tu trabajo es analizar la naturaleza del pedido y armar un plan de
-    razonamiento en pasos, sin nombrar ni asumir ninguna herramienta concreta.
-    Pensá en términos del tipo de tarea que es (buscar algo, ejecutar algo,
-    leer algo, transformar algo, etc.), no en cómo se resolvería técnicamente.
-
-    Para cada pedido, pensá:
-    - Qué tipo de tarea es en esencia.
-    - Qué pasos lógicos harían falta para resolverla, en orden.
-    - Qué ambigüedades o casos no obvios podrían aparecer (por ejemplo: un
-    nombre parcial que podría coincidir con más de una cosa, una instrucción
-    que depende de un estado que no conocés, un pedido que podría interpretarse
-    de más de una forma).
-    - Si alguna ambigüedad aparece, el plan debe decir explícitamente que hay
-    que verificarla antes de asumir una única respuesta.
-
-    No decidas si el pedido se puede resolver o no: eso lo evalúa otro
-    componente más adelante. Tu plan es la guía de razonamiento que ese
-    componente va a usar.`),
-      new HumanMessage(query),
-    ]),
-  );
-
-  return { plan: response.content as string, message: response };
 }
