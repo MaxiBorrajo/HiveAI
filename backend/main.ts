@@ -8,7 +8,7 @@ import {
 } from "@langchain/core/messages";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-// 1. Configuramos el Backend
+// 1. Configure the Backend
 const hive = HiveMicrokernel.getInstance();
 const homeDir = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +32,7 @@ main().then(() =>
     const url = new URL(req.url);
     const headers = {
       "content-type": "application/json",
-      "Access-Control-Allow-Origin": "*", // Para permitir peticiones de Vite en desarrollo
+      "Access-Control-Allow-Origin": "*", // To allow Vite requests in development
       "Access-Control-Allow-Headers": "content-type",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     };
@@ -54,7 +54,10 @@ main().then(() =>
     const activateMatch = url.pathname.match(/^\/plugins\/([^/]+)\/activate$/);
     if (activateMatch && req.method === "POST") {
       const ok = hive.activate(decodeURIComponent(activateMatch[1]));
-      return Response.json({ success: ok }, { headers, status: ok ? 200 : 404 });
+      return Response.json(
+        { success: ok },
+        { headers, status: ok ? 200 : 404 },
+      );
     }
 
     const deactivateMatch = url.pathname.match(
@@ -62,7 +65,10 @@ main().then(() =>
     );
     if (deactivateMatch && req.method === "POST") {
       const ok = hive.deactivate(decodeURIComponent(deactivateMatch[1]));
-      return Response.json({ success: ok }, { headers, status: ok ? 200 : 404 });
+      return Response.json(
+        { success: ok },
+        { headers, status: ok ? 200 : 404 },
+      );
     }
 
     const testMatch = url.pathname.match(/^\/plugins\/([^/]+)\/test\/(\d+)$/);
@@ -76,7 +82,7 @@ main().then(() =>
       return handleChat(req, headers);
     }
 
-    return new Response(JSON.stringify("Bienvenido a HiveAI"), { headers });
+    return new Response(JSON.stringify("Welcome to HiveAI"), { headers });
   }),
 );
 
@@ -103,7 +109,7 @@ async function handleChat(
       .join(", ")}]`,
   );
 
-  // Agregamos solo el mensaje nuevo al historial que vive en memoria
+  // Add only the new message to the history that lives in memory
   const turnStart = chatHistory.length;
   chatHistory.push(new HumanMessage(userText));
 
@@ -116,7 +122,7 @@ async function handleChat(
 
   chatHistory = result.messages;
 
-  // Herramientas usadas durante este turno (a partir del mensaje del usuario)
+  // Tools used during this turn (starting from the user's message)
   const usedTools = Array.from(
     new Set(
       chatHistory
@@ -178,7 +184,9 @@ async function handleTest(
 
     if (wasInvoked && testCase.shouldInvoke && testCase.expectedParams) {
       const call = toolCalls.find((tc: any) => tc.name === pluginName)!;
-      for (const [key, expectedVal] of Object.entries(testCase.expectedParams)) {
+      for (const [key, expectedVal] of Object.entries(
+        testCase.expectedParams,
+      )) {
         if (call.args[key] !== expectedVal) {
           errors.push(
             `Parameter '${key}' mismatch. Expected '${expectedVal}', got '${call.args[key]}'`,
@@ -187,7 +195,10 @@ async function handleTest(
       }
     }
 
-    if (testCase.expectedOutputValues && testCase.expectedOutputValues.length > 0) {
+    if (
+      testCase.expectedOutputValues &&
+      testCase.expectedOutputValues.length > 0
+    ) {
       const finalMsg = messages[messages.length - 1];
       const finalContent = finalMsg?.content?.toString() || "";
       for (const expected of testCase.expectedOutputValues) {
@@ -200,7 +211,10 @@ async function handleTest(
     return Response.json({ success: errors.length === 0, errors }, { headers });
   } catch (err: any) {
     if (req.signal.aborted) {
-      return Response.json({ error: "Aborted by user" }, { status: 499, headers });
+      return Response.json(
+        { error: "Aborted by user" },
+        { status: 499, headers },
+      );
     }
     return Response.json({ error: String(err) }, { status: 500, headers });
   } finally {

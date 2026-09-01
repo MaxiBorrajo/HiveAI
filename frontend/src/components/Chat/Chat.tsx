@@ -3,7 +3,6 @@ import { Logo } from "@/components/logo/Logo";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PluginList } from "@/components/PluginList";
 import { sendMessage } from "@/lib/send-message";
 import type { Message } from "@/types/chat";
 import { ChatInput } from "./ChatInput";
@@ -45,8 +44,8 @@ export function Chat() {
           role: "agent",
           content:
             error instanceof Error
-              ? `No se pudo obtener respuesta: ${error.message}`
-              : "No se pudo obtener respuesta del agente.",
+              ? `Could not get a response: ${error.message}`
+              : "Could not get a response from the agent.",
           isError: true,
           timestamp: Date.now(),
         },
@@ -60,7 +59,7 @@ export function Chat() {
 
   return (
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
-      <div className="flex flex-1 flex-col min-w-0 min-h-0 relative">
+      <div className="flex flex-1 flex-col min-w-0 min-h-0 relative w-full">
         {isEmpty ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6">
             <div className="flex flex-col items-center gap-6 w-full max-w-3xl">
@@ -76,9 +75,9 @@ export function Chat() {
                 isThinking={isThinking}
                 handleSend={handleSend}
               />
-              <p className="text-center text-[10px] text-muted-foreground mt-2">
-                HiveQueen puede cometer errores. Considerá verificar la
-                información importante.
+              <p className="text-center text-xs text-muted-foreground mt-2">
+                HiveQueen can make mistakes. Consider verifying important
+                information.
               </p>
             </div>
           </div>
@@ -108,17 +107,15 @@ export function Chat() {
                   isThinking={isThinking}
                   handleSend={handleSend}
                 />
-                <p className="text-center text-[10px] text-muted-foreground">
-                  HiveQueen puede cometer errores. Considerá verificar la
-                  información importante.
+                <p className="text-center text-xs text-muted-foreground">
+                  HiveQueen can make mistakes. Consider verifying important
+                  information.
                 </p>
               </div>
             </div>
           </>
         )}
       </div>
-
-      <PluginList />
     </div>
   );
 }
@@ -146,7 +143,7 @@ function ChatMessage({ message }: { message: Message }) {
             })}
           </span>
           {!!message.usedTools?.length && (
-            <span>· usó {message.usedTools.join(", ")}</span>
+            <span>· used {message.usedTools.join(", ")}</span>
           )}
         </div>
       </div>

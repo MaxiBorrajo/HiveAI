@@ -8,38 +8,38 @@ import type {
 export default class CurrentDatetimePlugin implements BeePlugin {
   name = "current_datetime";
   description =
-    "Devuelve la fecha y hora actual del sistema. Sirve para saber qué día es hoy o qué hora es. No agenda eventos ni calcula fechas futuras.";
+    "Returns the current system date and time. Useful to know what day it is today or what time it is. It does not schedule events or calculate future dates.";
 
   schema = z.object({
     format: z
       .enum(["date", "time", "full"])
       .default("full")
       .describe(
-        "Indica qué parte devolver: 'date' para solo la fecha, 'time' para solo la hora, o 'full' para ambas.",
+        "Indicates which part to return: 'date' for only the date, 'time' for only the time, or 'full' for both.",
       ),
     timezone: z
       .string()
       .optional()
       .describe(
-        "Zona horaria IANA opcional, por ejemplo 'America/Argentina/Buenos_Aires'. Si se omite, usa la del sistema.",
+        "Optional IANA timezone, for example 'America/Argentina/Buenos_Aires'. If omitted, uses the system timezone.",
       ),
   }) as any;
 
   testCases: PluginTestCase[] = [
     {
-      query: "¿qué hora es en este momento?",
+      query: "what time is it right now?",
       shouldInvoke: true,
       expectedParams: { format: "time" },
       expectedOutputValues: ["The current time is"],
     },
     {
-      query: "¿qué día es hoy?",
+      query: "what day is today?",
       shouldInvoke: true,
       expectedParams: { format: "date" },
       expectedOutputValues: ["Today is"],
     },
     {
-      query: "sumá un café",
+      query: "add a coffee",
       shouldInvoke: false,
     },
   ];

@@ -8,11 +8,10 @@ export async function sendMessage(content: string): Promise<Message> {
   });
 
   if (!response.ok) {
-    throw new Error(`El backend respondió con estado ${response.status}`);
+    throw new Error(`The backend responded with status ${response.status}`);
   }
 
-  const data: { content: string; usedTools?: string[] } =
-    await response.json();
+  const data: { content: string; usedTools?: string[] } = await response.json();
 
   return {
     id: crypto.randomUUID(),

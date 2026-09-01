@@ -9,47 +9,45 @@ import type {
 export default class CounterPlugin implements BeePlugin {
   name = "counter";
   description =
-    "Lleva contadores con nombre que persisten entre sesiones. Permite incrementar un contador, consultar su valor o reiniciarlo a cero.";
+    "Keeps track of named counters that persist across sessions. Allows incrementing a counter, checking its value, or resetting it to zero.";
 
   schema = z.object({
     name: z
       .string()
-      .describe("Nombre del contador, por ejemplo 'cafés' o 'pomodoros'"),
+      .describe("Name of the counter, for example 'coffees' or 'pomodoros'"),
     action: z
       .enum(["increment", "get", "reset"])
       .default("increment")
       .describe(
-        "Qué hacer con el contador: incrementar ('increment'), consultar ('get') o reiniciar ('reset')",
+        "What to do with the counter: increment ('increment'), consult ('get') or reset ('reset')",
       ),
     amount: z
       .number()
       .int()
       .default(1)
-      .describe(
-        "Cuánto incrementar. Solo se usa cuando la acción es increment",
-      ),
+      .describe("How much to increment. Only used when action is increment"),
   });
 
   testCases: PluginTestCase[] = [
     {
-      query: "sumá un café a la cuenta",
+      query: "add a coffee to the count",
       shouldInvoke: true,
-      expectedParams: { name: "café", action: "increment", amount: 1 },
+      expectedParams: { name: "coffee", action: "increment", amount: 1 },
       expectedOutputValues: ["was incremented by 1"],
     },
     {
-      query: "¿cuántos pomodoros llevo?",
+      query: "how many pomodoros do I have?",
       shouldInvoke: true,
       expectedParams: { name: "pomodoros", action: "get", amount: 1 },
     },
     {
-      query: "borrá la cuenta de cafés",
+      query: "clear the coffee count",
       shouldInvoke: true,
-      expectedParams: { name: "cafés", action: "reset", amount: 1 },
+      expectedParams: { name: "coffees", action: "reset", amount: 1 },
       expectedOutputValues: ["was reset to 0"],
     },
     {
-      query: "¿qué hora es en Tokio?",
+      query: "what time is it in Tokyo?",
       shouldInvoke: false,
     },
   ];

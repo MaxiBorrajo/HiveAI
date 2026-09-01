@@ -55,12 +55,12 @@ export default class FileSearchPlugin implements BeePlugin {
 
   testCases: PluginTestCase[] = [
     {
-      query: "buscá el archivo informe.pdf en mis documentos",
+      query: "search for the file report.pdf in my documents",
       shouldInvoke: true,
-      expectedParams: { name: "informe.pdf" },
+      expectedParams: { name: "report.pdf" },
     },
     {
-      query: "¿qué hora es?",
+      query: "what time is it?",
       shouldInvoke: false,
     },
   ];

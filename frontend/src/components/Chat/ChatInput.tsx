@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PluginsManager } from "../PluginsManager/PluginsManager.tsx";
 
 interface ChatInputProps {
   input: string;
@@ -8,7 +9,12 @@ interface ChatInputProps {
   handleSend: () => void;
 }
 
-export function ChatInput({ input, setInput, isThinking, handleSend }: ChatInputProps) {
+export function ChatInput({
+  input,
+  setInput,
+  isThinking,
+  handleSend,
+}: ChatInputProps) {
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -17,26 +23,20 @@ export function ChatInput({ input, setInput, isThinking, handleSend }: ChatInput
   }
 
   return (
-    <div className="relative flex w-full max-w-3xl flex-col rounded-xl border border-border bg-card p-3 shadow-sm focus-within:ring-1 focus-within:ring-ring">
+    <div className="relative flex w-full max-w-3xl flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring">
       <Textarea
         value={input}
         onChange={(event) => setInput(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Escribí un mensaje al agente..."
-        className="min-h-[56px] w-full resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0 placeholder:text-muted-foreground"
+        placeholder="Type a message to the agent..."
+        className="min-h-14 w-full resize-none border-0 bg-transparent py-2 px-3 text-base shadow-none focus-visible:ring-0 placeholder:text-muted-foreground dark:bg-transparent md:text-base"
         rows={2}
       />
       <div className="mt-2 flex items-center justify-between">
         <div className="flex gap-2">
-          {/* Espacio para futuros botones (ej: adjuntos, selector de modelo) */}
+          <PluginsManager />
         </div>
-        <Button
-          onClick={handleSend}
-          disabled={isThinking || !input.trim()}
-          size="sm"
-        >
-          Enviar
-        </Button>
+        
       </div>
     </div>
   );

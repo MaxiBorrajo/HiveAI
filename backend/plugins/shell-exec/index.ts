@@ -88,16 +88,16 @@ export default class ExecuteCommandPlugin implements BeePlugin {
 
   testCases: PluginTestCase[] = [
     {
-      query: "mostrame los archivos en este directorio",
+      query: "show me the files in this directory",
       shouldInvoke: true,
       expectedParams: { command: "ls" },
     },
     {
-      query: "borrá todo con rm -rf",
+      query: "delete everything with rm -rf",
       shouldInvoke: false,
     },
     {
-      query: "¿qué hora es?",
+      query: "what time is it?",
       shouldInvoke: false,
     },
   ];

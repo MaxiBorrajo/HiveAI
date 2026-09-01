@@ -14,7 +14,7 @@ export function StyleGuide() {
         <section className="space-y-4">
           <Logo size={48} withWordmark />
           <p className="text-muted-foreground text-sm">
-            HiveAI — Guía de estilos y componentes
+            HiveAI — Style & Component Guide
           </p>
         </section>
 
@@ -22,7 +22,7 @@ export function StyleGuide() {
 
         {/* Colores */}
         <section className="space-y-4">
-          <h2 className="text-display text-lg">Colores Semánticos</h2>
+          <h2 className="text-display text-lg">Semantic Colors</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <ColorSwatch
               name="Background"
@@ -35,7 +35,7 @@ export function StyleGuide() {
               text="text-card-foreground"
             />
             <ColorSwatch
-              name="Primary (Agente)"
+              name="Primary (Agent)"
               className="bg-primary border-none"
               text="text-primary-foreground"
             />
@@ -71,26 +71,26 @@ export function StyleGuide() {
 
         {/* Tipografía */}
         <section className="space-y-4">
-          <h2 className="text-display text-lg">Tipografía</h2>
+          <h2 className="text-display text-lg">Typography</h2>
           <div className="space-y-4 bg-card p-6 rounded-lg border border-border">
             <div>
               <p className="text-display text-lg">.text-display text-lg</p>
               <p className="text-muted-foreground text-xs font-mono">
-                Usado para wordmark y títulos de sección.
+                Used for wordmark and section titles.
               </p>
             </div>
             <Separator />
             <div>
-              <p className="text-base">text-base (Archivo)</p>
+              <p className="text-base">text-base (Inter)</p>
               <p className="text-muted-foreground text-xs font-mono">
-                Solo para el input del chat.
+                Only for the chat input.
               </p>
             </div>
             <Separator />
             <div>
-              <p className="text-sm">text-sm (Archivo)</p>
+              <p className="text-sm">text-sm (Inter)</p>
               <p className="text-muted-foreground text-xs font-mono">
-                Mensajes del chat, texto general (Cuerpo).
+                Chat messages, general text (Body).
               </p>
             </div>
             <Separator />
@@ -99,7 +99,7 @@ export function StyleGuide() {
                 text-xs font-mono
               </p>
               <p className="text-muted-foreground text-xs font-mono">
-                Labels, nombres de plugin, timestamps, comandos.
+                Labels, plugin names, timestamps, commands.
               </p>
             </div>
           </div>
@@ -109,20 +109,20 @@ export function StyleGuide() {
 
         {/* Componentes UI */}
         <section className="space-y-8">
-          <h2 className="text-display text-lg">Componentes Shadcn</h2>
+          <h2 className="text-display text-lg">Shadcn Components</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Botones */}
             <div className="space-y-4">
               <h3 className="text-sm text-muted-foreground font-mono">
-                Botones
+                Buttons
               </h3>
               <div className="flex flex-wrap gap-4">
-                <Button>Principal</Button>
-                <Button variant="secondary">Secundario</Button>
-                <Button variant="outline">Borde</Button>
-                <Button variant="ghost">Fantasma</Button>
-                <Button variant="destructive">Destructivo</Button>
+                <Button>Primary</Button>
+                <Button variant="secondary">Secondary</Button>
+                <Button variant="outline">Outline</Button>
+                <Button variant="ghost">Ghost</Button>
+                <Button variant="destructive">Destructive</Button>
               </div>
             </div>
 
@@ -146,7 +146,7 @@ export function StyleGuide() {
                 <div className="space-y-1">
                   <p className="text-sm">HiveQueen</p>
                   <p className="text-xs font-mono text-muted-foreground">
-                    Estado: Activo
+                    Status: Active
                   </p>
                 </div>
               </div>
@@ -155,10 +155,10 @@ export function StyleGuide() {
             {/* Textarea */}
             <div className="space-y-4 md:col-span-2">
               <h3 className="text-sm text-muted-foreground font-mono">
-                Entrada de texto (Input chat)
+                Text input (Chat input)
               </h3>
               <Textarea
-                placeholder="Escribe un mensaje al agente..."
+                placeholder="Type a message to the agent..."
                 className="resize-none text-base"
                 rows={3}
               />
@@ -167,7 +167,7 @@ export function StyleGuide() {
             {/* Skeleton */}
             <div className="space-y-4 md:col-span-2">
               <h3 className="text-sm text-muted-foreground font-mono">
-                Estado de carga (Skeleton)
+                Loading state (Skeleton)
               </h3>
               <div className="flex items-center space-x-4">
                 <Skeleton className="h-12 w-12 rounded-full" />
