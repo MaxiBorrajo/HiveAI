@@ -85,7 +85,7 @@ function PluginListView({
 }) {
   return (
     <>
-      <DialogHeader className="p-6 pb-2">
+      <DialogHeader className="p-6 pb-0">
         <DialogTitle>Manage Plugins</DialogTitle>
       </DialogHeader>
 
@@ -103,13 +103,13 @@ function PluginListView({
               className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4"
             >
               <div className="flex items-start gap-3">
-                <Switch
-                  checked={plugin.active}
-                  onCheckedChange={(checked) => onToggle(plugin, checked)}
-                  className="mt-0.5"
-                />
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-semibold">
+                  <p className="font-mono text-sm font-semibold items-center flex gap-2 mb-2">
+                    <Switch
+                      checked={plugin.active}
+                      onCheckedChange={(checked) => onToggle(plugin, checked)}
+                      className="mt-0.5"
+                    />{" "}
                     {plugin.name}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -122,9 +122,9 @@ function PluginListView({
                     variant="secondary"
                     size="sm"
                     onClick={() => onSelectPlugin(plugin.name)}
-                    className="shrink-0 h-8 gap-1.5 px-3"
+                    className="shrink-0 h-8 gap-1 px-3"
                   >
-                    <TestTube size={14} />
+                    <TestTube size={12} />
                     <span>Tests</span>
                   </Button>
                 )}
@@ -208,7 +208,7 @@ function PluginTestsView({
             errors: res.errors,
           },
         }));
-      } catch (err: any) {
+      } catch (err) {
         if (err.name === "AbortError") break;
         setTestResults((prev) => ({
           ...prev,
@@ -222,7 +222,7 @@ function PluginTestsView({
 
   return (
     <>
-      <DialogHeader className="p-6 pb-4 border-b border-border flex flex-row items-center gap-3 space-y-0">
+      <DialogHeader className="p-4 pb-0 flex flex-row items-center gap-3 space-y-0">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -234,12 +234,12 @@ function PluginTestsView({
         </Button>
         <div className="flex-1 min-w-0">
           <DialogTitle className="font-mono text-sm">
-            {plugin.name} Tests
+            {plugin.name}
           </DialogTitle>
         </div>
       </DialogHeader>
 
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/20">
+      <div className="flex items-center justify-between px-6 py-3 border-y border-border">
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
@@ -284,7 +284,7 @@ function PluginTestsView({
                     checked={isSelected}
                     onChange={() => toggleTest(index)}
                     disabled={isRunning}
-                    className="mt-0.5 size-4 shrink-0 accent-primary"
+                    className="size-4 shrink-0 accent-primary"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-foreground font-medium">
