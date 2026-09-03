@@ -33,9 +33,11 @@ export interface PEVResult {
   userPrompt: string;
   finalAnswer: string;
   model: string;
+  selectorModel: string;
   attempts: number;
   selectionAttempts: number;
   parametrizerAttempts: number;
+  abstentionChallenged: boolean;
   messages: AIMessage[];
   nodeMetrics: PEVNodeMetrics[];
   selectedTool: string;
@@ -117,11 +119,15 @@ export async function PEV(
   query: string,
   model: string,
   catalog: MockPlugin[],
+  selectorModel?: string,
 ): Promise<PEVResult> {
+  const resolvedSelectorModel = selectorModel ?? model;
+
   const PEVState = new StateSchema({
     userPrompt: z.string(),
     finalAnswer: z.string(),
     model: z.string(),
+    selectorModel: z.string(),
     attempts: new ReducedValue(z.number().default(0), {
       reducer: (x: number, y: number) => x + y,
     }),
@@ -131,6 +137,8 @@ export async function PEV(
     parametrizerAttempts: new ReducedValue(z.number().default(0), {
       reducer: (x: number, y: number) => x + y,
     }),
+    abstentionVerified: z.boolean().default(false),
+    abstentionChallenged: z.boolean().default(false),
     messages: new ReducedValue(z.array(z.custom<AIMessage>()).default([]), {
       reducer: (x: AIMessage[], y: AIMessage[]) => [...x, ...y],
     }),
@@ -174,7 +182,7 @@ export async function PEV(
     );
 
     const solverModel = new ChatOllama({
-      model: state.model,
+      model: state.selectorModel,
       think: false,
       temperature: 0.0,
       numCtx: 8192,
@@ -214,6 +222,7 @@ export async function PEV(
       return {
         selectedTool: "NINGUNO_APLICA",
         correction: CORRECTION_CLEARED,
+        abstentionVerified: false,
         messages: [response],
         nodeMetrics: [metrics],
       };
@@ -258,6 +267,84 @@ export async function PEV(
       selectedTool: call.name,
       args: { params: parsed.data },
       correction: CORRECTION_CLEARED,
+      messages: [response],
+      nodeMetrics: [metrics],
+    };
+  };
+
+  const AbstentionVerificator: GraphNode<typeof PEVState> = async (state) => {
+    const startedAt = Date.now();
+
+    const AbstentionVerificatorResponse = z.object({
+      action: z.enum(["confirm", "challenge"]),
+      reason: z.string(),
+      suggestedTool: z.string().optional(),
+    });
+
+    const catalogSummary = catalog
+      .map((c) => `- ${c.name}: ${c.description}`)
+      .join("\n");
+
+    const verificatorModel = new ChatOllama({
+      model: state.model,
+      think: true,
+      numCtx: 8192,
+      keepAlive: "10m",
+      format: z.toJSONSchema(AbstentionVerificatorResponse),
+    });
+
+    const response = await invokeWithRetry("AbstentionVerificator", () =>
+      verificatorModel.invoke([
+        new SystemMessage(`Sos el verificador de abstenciones de HiveQueen. El Selector decidió que
+    ninguna herramienta disponible resuelve el pedido del usuario. Tu tarea
+    es revisar esa decisión.
+
+    Vas a recibir el pedido del usuario y el catálogo de herramientas disponibles.
+    Analizá si realmente ninguna herramienta aplica, o si el Selector se equivocó
+    al abstenerse.
+
+    Elegí "confirm" cuando estés de acuerdo en que ninguna herramienta resuelve
+    el pedido — por ejemplo, si es una pregunta de conocimiento general, una
+    tarea que requiere razonamiento puro, o algo que definitivamente está fuera
+    del catálogo.
+
+    Elegí "challenge" cuando creas que hay una herramienta que sí aplica y el
+    Selector no la eligió. En ese caso, indicá en "suggestedTool" el nombre
+    exacto de la herramienta que debería haberse elegido.
+
+    Sé conservador: solo desafiá la abstención cuando tengas alta confianza en
+    que hay una herramienta que resuelve el pedido.`),
+        new HumanMessage(
+          `Pedido del usuario: ${state.userPrompt}\n\nHerramientas disponibles:\n${catalogSummary}`,
+        ),
+      ]),
+    );
+
+    const metrics = trackMetrics("AbstentionVerificator", response, startedAt);
+    const parsed = parseModelJSON<{
+      action: "confirm" | "challenge";
+      reason: string;
+      suggestedTool?: string;
+    }>(response.content as string);
+
+    if (!parsed || parsed.action === "confirm") {
+      return {
+        abstentionVerified: true,
+        abstentionChallenged: false,
+        messages: [response],
+        nodeMetrics: [metrics],
+      };
+    }
+
+    return {
+      abstentionVerified: true,
+      abstentionChallenged: true,
+      correction: {
+        tool: parsed.suggestedTool ?? "desconocida",
+        reason: parsed.reason,
+      },
+      attempts: 1,
+      selectionAttempts: 1,
       messages: [response],
       nodeMetrics: [metrics],
     };
@@ -366,7 +453,8 @@ Resultado de la ejecución: ${state.toolResult.output}`;
       numCtx: 8192,
     });
 
-    const isNoToolNeeded = state.selectedTool === "NINGUNO_APLICA";
+    const isNoToolNeeded =
+      state.selectedTool === "NINGUNO_APLICA" && state.abstentionVerified;
     const isUnrecoverableFailure = state.giveUp;
     const outOfAttempts = state.attempts > 1;
 
@@ -456,10 +544,18 @@ limitación. Respondé siempre en el idioma en que te escriben.`,
   };
 
   const shouldRespond = (state: typeof PEVState.State) => {
-    if (state.selectedTool === "NINGUNO_APLICA") return "HiveQueenResponder";
+    if (state.selectedTool === "NINGUNO_APLICA") {
+      if (state.abstentionVerified) return "HiveQueenResponder";
+      return "AbstentionVerificator";
+    }
     if (state.attempts > 1) return "HiveQueenResponder";
     if (state.correction) return "Solver";
     return "Executor";
+  };
+
+  const shouldConfirmAbstention = (state: typeof PEVState.State) => {
+    if (state.abstentionChallenged && state.attempts <= 1) return "Solver";
+    return "HiveQueenResponder";
   };
 
   const shouldDiagnose = (state: typeof PEVState.State) => {
@@ -474,14 +570,20 @@ limitación. Respondé siempre en el idioma en que te escriben.`,
 
   const graph = new StateGraph(PEVState)
     .addNode("Solver", Solver)
+    .addNode("AbstentionVerificator", AbstentionVerificator)
     .addNode("Executor", Executor)
     .addNode("Diagnostician", Diagnostician)
     .addNode("HiveQueenResponder", HiveQueenResponder)
     .addEdge(START, "Solver")
     .addConditionalEdges("Solver", shouldRespond, [
       "HiveQueenResponder",
+      "AbstentionVerificator",
       "Solver",
       "Executor",
+    ])
+    .addConditionalEdges("AbstentionVerificator", shouldConfirmAbstention, [
+      "Solver",
+      "HiveQueenResponder",
     ])
     .addConditionalEdges("Executor", shouldDiagnose, [
       "HiveQueenResponder",
@@ -496,6 +598,7 @@ limitación. Respondé siempre en el idioma en que te escriben.`,
 
   const result = await graph.invoke({
     model,
+    selectorModel: resolvedSelectorModel,
     userPrompt: query,
   });
 

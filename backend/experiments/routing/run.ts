@@ -1,11 +1,10 @@
-
 import { harness } from "./harness.ts";
 import { queries } from "./queries.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import { join } from "@std/path";
 
-const { strategy, catalog, runs, model } = parseArgs(Deno.args, {
-  string: ["strategy", "catalog", "runs", "model"],
+const { strategy, catalog, runs, model, selectorModel } = parseArgs(Deno.args, {
+  string: ["strategy", "catalog", "runs", "model", "selectorModel"],
 });
 
 if (!strategy || !catalog || !runs || !model) {
@@ -14,7 +13,8 @@ if (!strategy || !catalog || !runs || !model) {
 }
 
 const RESULTS_DIR = join(import.meta.dirname!, "results");
-const runId = `${new Date().toISOString().slice(0, 10)}-${model.replace(":", "-")}`;
+const runId = `${new Date().toISOString().slice(0, 10)}-${model.replaceAll(/[:\/]/g, "-")}${selectorModel ? "-" + selectorModel.replaceAll(/[:\/]/g, "-") : ""}`;
+
 const outputPath = join(RESULTS_DIR, `${runId}.jsonl`);
 
 await Deno.mkdir(RESULTS_DIR, { recursive: true });
@@ -36,7 +36,8 @@ try {
       verdict.strategy !== strategy ||
       verdict.model !== model ||
       verdict.catalog_size !== Number(catalog)
-    ) continue;
+    )
+      continue;
 
     runsPerQuery.set(
       verdict.query_id,
@@ -70,6 +71,7 @@ for (const query of queries) {
       | "plan-execution-verification"
       | "plan-execution-verification-granite-selector",
     Number(runs),
+    selectorModel,
   );
 
   if (!verdicts || verdicts.length === 0) continue;

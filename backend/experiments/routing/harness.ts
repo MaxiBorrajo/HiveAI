@@ -3,7 +3,6 @@ import type { RoutingQuery } from "./queries.ts";
 import { pipelineCalling } from "./strategies/pipeline.ts";
 import { toolCalling } from "./strategies/tool-calling.ts";
 import { PEV } from "./strategies/plan-execution-verification.ts";
-import { PEVGraniteSelector } from "./strategies/plan-execution-verification-granite-selector.ts";
 import { evaluate } from "./evaluate.ts";
 import { normalize } from "./normalize.ts";
 
@@ -17,6 +16,7 @@ export async function harness(
     | "plan-execution-verification"
     | "plan-execution-verification-granite-selector",
   repetitionsPerQuery: number,
+  selectorModel?: string,
 ) {
   if (pluginsSize <= 0) {
     console.error(
@@ -45,13 +45,12 @@ export async function harness(
           ? await toolCalling(query.query, model, minimalCatalogOfPlugins)
           : strategy === "pipeline"
             ? await pipelineCalling(query.query, model, minimalCatalogOfPlugins)
-            : strategy === "plan-execution-verification"
-              ? await PEV(query.query, model, minimalCatalogOfPlugins)
-              : await PEVGraniteSelector(
-                  query.query,
-                  model,
-                  minimalCatalogOfPlugins,
-                );
+            : await PEV(
+                query.query,
+                model,
+                minimalCatalogOfPlugins,
+                selectorModel,
+              );
 
       validationResults.push(
         evaluate(
@@ -62,6 +61,8 @@ export async function harness(
           strategy,
           pluginsSize,
           index + 1,
+          false,
+          selectorModel
         ),
       );
     } catch (error) {

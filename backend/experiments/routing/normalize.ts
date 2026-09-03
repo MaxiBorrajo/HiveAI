@@ -63,7 +63,7 @@ export function normalize(
 
   if (isPEVResult(raw)) {
     accumulate(raw.messages, result);
-    result.invocations = raw.messages.length;
+    result.invocations = raw.nodeMetrics.length;
     result.selected_plugin =
       raw.selectedTool === "NINGUNO_APLICA" ? null : raw.selectedTool;
     result.abstained = raw.selectedTool === "NINGUNO_APLICA";

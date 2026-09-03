@@ -20,23 +20,6 @@
     "zod": "npm:zod@^4.4.3",
     "zod-to-json-schema": "npm:zod-to-json-schema@^3.25.2"
   },
-  "nodeModulesDir": "auto",
-  "desktop": {
-    "app": {
-      "name": "HiveAI",
-      "identifier": "com.hiveai.desktop",
-      "icons": {
-        "macos": "./icons/app.icns",
-        "windows": "./icons/app.ico",
-        "linux": "./icons/app.png"
-      },
-      "deepLinks": ["hiveai"]
-    },
-    "backend": "webview",
-    "output": {
-      "macos": "./dist/HiveAI.app",
-      "windows": "./dist/HiveAI",
-      "linux": "./dist/hive-ai"
-    }
-  }
+  "nodeModulesDir": "auto"
+  
 }

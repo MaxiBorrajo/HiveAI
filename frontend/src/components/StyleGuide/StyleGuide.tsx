@@ -1,4 +1,3 @@
-import { Logo } from "@/components/logo/Logo";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +11,15 @@ export function StyleGuide() {
       <div className="max-w-4xl mx-auto space-y-12">
         {/* Cabecera / Logo */}
         <section className="space-y-4">
-          <Logo size={48} withWordmark />
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="HiveAI" width={48} height={48} />
+            <span
+              className="text-display text-lg"
+              style={{ fontStretch: "118%" }}
+            >
+              Hive<span className="text-primary">AI</span>
+            </span>
+          </div>
           <p className="text-muted-foreground text-sm">
             HiveAI — Guía de estilos y componentes
           </p>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Logo } from "@/components/logo/Logo";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -68,7 +68,15 @@ export function Chat() {
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
       <div className="flex flex-1 flex-col min-w-0 min-h-0">
         <header className="flex h-16 items-center gap-3 border-b border-border px-6">
-          <Logo size={28} withWordmark />
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="HiveAI" width={28} height={28} />
+            <span
+              className="text-display text-lg"
+              style={{ fontStretch: "118%" }}
+            >
+              Hive<span className="text-primary">AI</span>
+            </span>
+          </div>
         </header>
 
         <ScrollArea className="flex-1 min-h-0 **:data-[slot=scroll-area-thumb]:bg-muted-foreground/30 **:data-[slot=scroll-area-thumb]:hover:bg-muted-foreground/50 **:data-[slot=scroll-area-thumb]:transition-colors">
@@ -108,10 +116,7 @@ export function Chat() {
               className="resize-none text-base"
               rows={2}
             />
-            <Button
-              onClick={handleSend}
-              disabled={isThinking || !input.trim()}
-            >
+            <Button onClick={handleSend} disabled={isThinking || !input.trim()}>
               Enviar
             </Button>
           </div>
