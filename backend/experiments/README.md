@@ -18,7 +18,7 @@ Se comparan dos arquitecturas:
   por el mecanismo nativo de tool-calling del modelo, que elige herramienta y
   completa parámetros en un solo paso.
 - **Pipeline de decisión:** dos invocaciones encadenadas. Un *selector* recibe el
-  catálogo y devuelve un nombre de herramienta o `NINGUNO_APLICA`, restringido
+  catálogo y devuelve un nombre de herramienta o `NONE`, restringido
   por un enum. Un *parametrizador* recibe únicamente el esquema de la herramienta
   ya elegida y completa sus parámetros. Si el selector se abstiene, la segunda
   invocación no ocurre.

@@ -1,5 +1,4 @@
 import { HiveMicrokernel } from "./microkernel/hive-microkernel.ts";
-import { HiveMind } from "./ai/hive-queen.ts";
 import {
   HumanMessage,
   type BaseMessage,
@@ -7,12 +6,14 @@ import {
 } from "@langchain/core/messages";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HiveMind } from "./ai/strategy/SADER/graph.ts";
 // 1. Configuramos el Backend
 const hive = HiveMicrokernel.getInstance();
 const homeDir = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const MODEL = "hf.co/ewinregirgojr/MiniCPM5-1B-Agentic-Tooluse-GGUF:Q8_0";
+const MODEL = "qwen3:8b";
+const SELECTOR_MODEL = "lfm2.5";
 
 async function main() {
   const pluginsDir = join(__dirname, "plugins");
@@ -52,7 +53,10 @@ main().then(() =>
     const activateMatch = url.pathname.match(/^\/plugins\/([^/]+)\/activate$/);
     if (activateMatch && req.method === "POST") {
       const ok = hive.activate(decodeURIComponent(activateMatch[1]));
-      return Response.json({ success: ok }, { headers, status: ok ? 200 : 404 });
+      return Response.json(
+        { success: ok },
+        { headers, status: ok ? 200 : 404 },
+      );
     }
 
     const deactivateMatch = url.pathname.match(
@@ -60,7 +64,10 @@ main().then(() =>
     );
     if (deactivateMatch && req.method === "POST") {
       const ok = hive.deactivate(decodeURIComponent(deactivateMatch[1]));
-      return Response.json({ success: ok }, { headers, status: ok ? 200 : 404 });
+      return Response.json(
+        { success: ok },
+        { headers, status: ok ? 200 : 404 },
+      );
     }
 
     if (url.pathname === "/chat" && req.method === "POST") {
@@ -101,6 +108,8 @@ async function handleChat(
   const result = await HiveMind.invoke({
     messages: chatHistory,
     model: MODEL,
+    selectorModel: SELECTOR_MODEL,
+    currentPrompt: userText,
   });
 
   console.log(result.messages.slice(-1, -4));

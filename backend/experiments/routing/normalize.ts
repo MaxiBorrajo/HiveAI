@@ -30,7 +30,9 @@ function accumulate(
     if (!msg) continue;
     result.input_tokens += msg.usage_metadata?.input_tokens ?? 0;
     result.output_tokens += msg.usage_metadata?.output_tokens ?? 0;
-    const duration = msg.response_metadata?.total_duration as number | undefined;
+    const duration = msg.response_metadata?.total_duration as
+      | number
+      | undefined;
     result.duration_ms += (duration ?? 0) / 1_000_000;
   }
 }
@@ -65,8 +67,8 @@ export function normalize(
     accumulate(raw.messages, result);
     result.invocations = raw.nodeMetrics.length;
     result.selected_plugin =
-      raw.selectedTool === "NINGUNO_APLICA" ? null : raw.selectedTool;
-    result.abstained = raw.selectedTool === "NINGUNO_APLICA";
+      raw.selectedTool === "NONE" ? null : raw.selectedTool;
+    result.abstained = raw.selectedTool === "NONE";
     result.params = raw.args?.params ?? null;
     result.format_error = false;
     result.multiple_tool_calls = false;

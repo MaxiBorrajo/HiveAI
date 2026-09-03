@@ -60,7 +60,7 @@ export function evaluate(
 
   const hallucinated_plugin =
     result.selected_plugin !== null &&
-    result.selected_plugin !== "NINGUNO_APLICA" &&
+    result.selected_plugin !== "NONE" &&
     !catalog.some((p) => p.name === result.selected_plugin);
 
   let params_valid: boolean | null = null;

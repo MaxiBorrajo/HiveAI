@@ -220,7 +220,7 @@ export async function PEV(
 
     if (!response.tool_calls?.length) {
       return {
-        selectedTool: "NINGUNO_APLICA",
+        selectedTool: "NONE",
         correction: CORRECTION_CLEARED,
         abstentionVerified: false,
         messages: [response],
@@ -454,7 +454,7 @@ Resultado de la ejecución: ${state.toolResult.output}`;
     });
 
     const isNoToolNeeded =
-      state.selectedTool === "NINGUNO_APLICA" && state.abstentionVerified;
+      state.selectedTool === "NONE" && state.abstentionVerified;
     const isUnrecoverableFailure = state.giveUp;
     const outOfAttempts = state.attempts > 1;
 
@@ -544,7 +544,7 @@ limitación. Respondé siempre en el idioma en que te escriben.`,
   };
 
   const shouldRespond = (state: typeof PEVState.State) => {
-    if (state.selectedTool === "NINGUNO_APLICA") {
+    if (state.selectedTool === "NONE") {
       if (state.abstentionVerified) return "HiveQueenResponder";
       return "AbstentionVerificator";
     }

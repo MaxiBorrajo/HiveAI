@@ -171,7 +171,7 @@ abstención se detecta por ausencia de `tool_calls`, independientemente del
 texto de la respuesta.
 
 **`pipeline`** — dos invocaciones encadenadas. La primera (selector) recibe el
-catálogo serializado y devuelve un nombre o `NINGUNO_APLICA`, restringido por
+catálogo serializado y devuelve un nombre o `NONE`, restringido por
 un `z.enum`. La segunda (parametrizador) recibe **únicamente** el schema de la
 herramienta ya elegida y completa sus parámetros. Si el selector se abstiene,
 la segunda invocación no ocurre.
