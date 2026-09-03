@@ -1,7 +1,7 @@
 import type { Message } from "@/types/chat";
 
 export async function sendMessage(content: string): Promise<Message> {
-  const response = await fetch("http://localhost:8000/chat", {
+  const response = await fetch("http://localhost:8000/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message: content }),

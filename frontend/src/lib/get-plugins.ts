@@ -8,7 +8,7 @@ interface BackendPlugin {
 }
 
 export async function getPlugins(): Promise<Plugin[]> {
-  const response = await fetch("http://localhost:8000/plugins");
+  const response = await fetch("http://localhost:8000/api/plugins");
   const plugins: BackendPlugin[] = await response.json();
 
   return plugins.map((plugin) => ({
@@ -25,7 +25,7 @@ export async function setPluginActive(
   active: boolean,
 ): Promise<void> {
   await fetch(
-    `http://localhost:8000/plugins/${encodeURIComponent(name)}/${active ? "activate" : "deactivate"}`,
+    `http://localhost:8000/api/plugins/${encodeURIComponent(name)}/${active ? "activate" : "deactivate"}`,
     { method: "POST" },
   );
 }
@@ -36,7 +36,7 @@ export async function runPluginTest(
   signal: AbortSignal,
 ) {
   const response = await fetch(
-    `http://localhost:8000/plugins/${encodeURIComponent(name)}/test/${index}`,
+    `http://localhost:8000/api/plugins/${encodeURIComponent(name)}/test/${index}`,
     {
       method: "POST",
       signal,
