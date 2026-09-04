@@ -170,6 +170,10 @@ export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
     },
   ];
 
+  get testCases() {
+    return this.selectionTests;
+  }
+
   initialize(_context: BeeContext): void {}
 
   async process(input: z.infer<WebReadSchema>): Promise<string> {

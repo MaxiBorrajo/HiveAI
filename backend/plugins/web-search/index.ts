@@ -169,6 +169,10 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
 
   private context!: BeeContext;
 
+  get testCases() {
+    return this.selectionTests;
+  }
+
   initialize(context: BeeContext): void {
     this.context = context;
   }

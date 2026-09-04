@@ -175,6 +175,10 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
 
   private context!: BeeContext;
 
+  get testCases() {
+    return this.selectionTests;
+  }
+
   initialize(context: BeeContext): void {
     this.context = context;
   }

@@ -145,6 +145,10 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
     },
   ];
 
+  get testCases() {
+    return this.selectionTests;
+  }
+
   initialize(_context: BeeContext): void {}
 
   async process(input: z.infer<FileReadSchema>): Promise<string> {

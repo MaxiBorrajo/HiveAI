@@ -181,6 +181,10 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
     },
   ];
 
+  get testCases() {
+    return this.selectionTests;
+  }
+
   initialize(_context: BeeContext): void {}
 
   private async ensureParentDir(path: string): Promise<void> {
