@@ -1,29 +1,157 @@
 import { z } from "zod";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeePlugin,
+  BeeContext,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
 
-export default class CurrentDatetimePlugin implements BeePlugin {
+const schema = z.object({
+  format: z
+    .enum(["date", "time", "full"])
+    .default("full")
+    .describe(
+      "Indicates which part to return: 'date' for only the date, 'time' for only the time, or 'full' for both.",
+    ),
+  timezone: z
+    .string()
+    .optional()
+    .describe(
+      "Optional IANA timezone, for example 'America/Argentina/Buenos_Aires'. If omitted, uses the system timezone.",
+    ),
+});
+
+type CurrentDatetimeSchema = typeof schema;
+
+export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeSchema> {
   name = "current_datetime";
   description =
-    "Devuelve la fecha y hora actual del sistema. Sirve para saber qué día es hoy o qué hora es. No agenda eventos ni calcula fechas futuras.";
+    "Returns the current system date and time. Useful to know what day it is today or what time it is. It does not schedule events or calculate future dates.";
 
-  schema = z.object({
-    format: z
-      .enum(["date", "time", "full"])
-      .default("full")
-      .describe(
-        "Indica qué parte devolver: 'date' para solo la fecha, 'time' para solo la hora, o 'full' para ambas.",
-      ),
-    timezone: z
-      .string()
-      .optional()
-      .describe(
-        "Zona horaria IANA opcional, por ejemplo 'America/Argentina/Buenos_Aires'. Si se omite, usa la del sistema.",
-      ),
-  }) as any;
+  schema = schema;
+
+  selectionTests: SelectionTestCase<CurrentDatetimeSchema>[] = [
+    // 3 Positive
+    {
+      query: "what time is it right now?",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "what day is today?",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "tell me the current date and time in Tokyo",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    // 3 Negative
+    {
+      query: "add a coffee to the counter",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "list all files in my home folder",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "schedule a meeting with John for tomorrow at 3pm",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 3 Ambiguous
+    {
+      query: "how many days until New Year's Eve?",
+      kind: "ambiguous",
+    },
+    {
+      query: "when was the French Revolution?",
+      kind: "ambiguous",
+    },
+    {
+      query: "calculate the duration between 9am and 5pm",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<CurrentDatetimeSchema>[] = [
+    // 3 Happy
+    {
+      description: "Get current date only",
+      kind: "happy",
+      params: { format: "date" },
+      expect: (output: string) => output.includes("Today is"),
+    },
+    {
+      description: "Get current time only",
+      kind: "happy",
+      params: { format: "time" },
+      expect: (output: string) => output.includes("The current time is"),
+    },
+    {
+      description: "Get full date and time",
+      kind: "happy",
+      params: { format: "full" },
+      expect: (output: string) =>
+        output.includes("Today is") && output.includes("current time is"),
+    },
+    // 3 Edge
+    {
+      description: "Get time with UTC timezone",
+      kind: "edge",
+      params: { format: "time", timezone: "UTC" },
+      expect: (output: string) => output.includes("The current time is"),
+    },
+    {
+      description: "Get date with America/Argentina/Buenos_Aires timezone",
+      kind: "edge",
+      params: {
+        format: "date",
+        timezone: "America/Argentina/Buenos_Aires",
+      },
+      expect: (output: string) => output.includes("Today is"),
+    },
+    {
+      description: "Get full datetime with Asia/Tokyo timezone",
+      kind: "edge",
+      params: { format: "full", timezone: "Asia/Tokyo" },
+      expect: (output: string) =>
+        output.includes("Today is") && output.includes("current time is"),
+    },
+    // 3 Error
+    {
+      description: "Invalid IANA timezone name",
+      kind: "error",
+      params: { format: "full", timezone: "Invalid/Fake_Timezone" },
+      expect: (output: string) =>
+        output.includes("invalid or not recognized by the system"),
+    },
+    {
+      description: "Invalid format enum parameter",
+      kind: "error",
+      params: { format: "year_only" as any },
+      expect: (output: string) => output.toLowerCase().includes("invalid"),
+    },
+    {
+      description: "Numeric timezone string",
+      kind: "error",
+      params: { format: "time", timezone: "12345678" },
+      expect: (output: string) =>
+        output.includes("invalid or not recognized by the system"),
+    },
+  ];
+
+  get testCases() {
+    return this.selectionTests;
+  }
 
   initialize(_context: BeeContext): void {}
 
-  process(input: unknown): string {
+  process(input: z.infer<CurrentDatetimeSchema>): string {
     const parsed = this.schema.safeParse(input);
 
     if (!parsed.success) {

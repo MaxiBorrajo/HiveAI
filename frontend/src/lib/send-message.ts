@@ -1,3 +1,4 @@
+import { API_URL } from "./config";
 import type { ChatStep } from "@/types/chat";
 
 interface StreamHandlers {
@@ -16,14 +17,14 @@ export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
 ): Promise<void> {
-  const response = await fetch("http://localhost:8000/chat", {
+  const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message: content }),
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`El backend respondió con estado ${response.status}`);
+    throw new Error(`The backend responded with status ${response.status}`);
   }
 
   const reader = response.body.getReader();

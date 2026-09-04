@@ -1,5 +1,6 @@
 import type { AIMessage } from "@langchain/core/messages";
 import type { PipelineResult } from "./strategies/pipeline.ts";
+import type { PEVResult } from "./strategies/plan-execution-verification.ts";
 
 export interface NormalizedResult {
   selected_plugin: string | null;
@@ -11,11 +12,15 @@ export interface NormalizedResult {
   invocations: number;
   format_error: boolean;
   multiple_tool_calls: boolean;
+  attempts_final?: number;
   raw: unknown;
 }
 
 const isPipelineResult = (r: unknown): r is PipelineResult =>
   typeof r === "object" && r !== null && "selectorRaw" in r;
+
+const isPEVResult = (r: unknown): r is PEVResult =>
+  typeof r === "object" && r !== null && "selectedTool" in r;
 
 function accumulate(
   messages: (AIMessage | null)[],
@@ -25,12 +30,16 @@ function accumulate(
     if (!msg) continue;
     result.input_tokens += msg.usage_metadata?.input_tokens ?? 0;
     result.output_tokens += msg.usage_metadata?.output_tokens ?? 0;
-    const duration = msg.response_metadata?.total_duration as number | undefined;
+    const duration = msg.response_metadata?.total_duration as
+      | number
+      | undefined;
     result.duration_ms += (duration ?? 0) / 1_000_000;
   }
 }
 
-export function normalize(raw: AIMessage | PipelineResult): NormalizedResult {
+export function normalize(
+  raw: AIMessage | PipelineResult | PEVResult,
+): NormalizedResult {
   const result: NormalizedResult = {
     selected_plugin: null,
     params: null,
@@ -51,6 +60,19 @@ export function normalize(raw: AIMessage | PipelineResult): NormalizedResult {
     result.params = raw.params;
     result.abstained = raw.abstained;
     result.format_error = raw.formatError;
+    return result;
+  }
+
+  if (isPEVResult(raw)) {
+    accumulate(raw.messages, result);
+    result.invocations = raw.nodeMetrics.length;
+    result.selected_plugin =
+      raw.selectedTool === "NONE" ? null : raw.selectedTool;
+    result.abstained = raw.selectedTool === "NONE";
+    result.params = raw.args?.params ?? null;
+    result.format_error = false;
+    result.multiple_tool_calls = false;
+    result.attempts_final = raw.attempts;
     return result;
   }
 

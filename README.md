@@ -46,6 +46,7 @@ En otra terminal, entra a la carpeta del frontend y levanta Vite:
 ```bash
 cd frontend
 deno desktop --hmr .
+
 ```
 *(Esto levanta el entorno de interfaz en `http://localhost:5173` con Hot Module Replacement (HMR) ultrarrápido).*
 
