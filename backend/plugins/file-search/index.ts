@@ -58,7 +58,7 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
 
   schema = schema;
 
-  selectionTests: SelectionTestCase[] = [
+  selectionTests: SelectionTestCase<FileSearchSchema>[] = [
     // 3 Positive
     {
       query: "search for the file report.pdf in my documents",

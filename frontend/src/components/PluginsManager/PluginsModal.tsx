@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { Plugin } from "@/types/plugin";
 import { PluginListView } from "./PluginListView";
 import { PluginTestsView } from "./PluginTestsView";
@@ -35,7 +32,7 @@ export function PluginsModal({
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="sm:max-w-xl p-0 overflow-hidden flex flex-col h-[80vh] max-h-150"
+        className="w-[90vw] max-w-3xl sm:max-w-[90vw] md:max-w-[90vw] lg:max-w-3xl h-[80vh] p-0 flex flex-col overflow-scroll"
         showCloseButton
       >
         {selectedPlugin ? (

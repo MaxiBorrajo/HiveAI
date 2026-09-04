@@ -30,7 +30,7 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
 
   schema = schema;
 
-  selectionTests: SelectionTestCase[] = [
+  selectionTests: SelectionTestCase<CurrentDatetimeSchema>[] = [
     // 3 Positive
     {
       query: "what time is it right now?",

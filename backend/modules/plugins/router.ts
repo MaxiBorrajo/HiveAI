@@ -6,7 +6,7 @@ import { handleTest } from "./useCases/testPlugin/index.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 
 export const pluginsRouter = new Hono<{
-  Variables: { hive: HiveMicrokernel; model: string };
+  Variables: { hive: HiveMicrokernel; model: string; selectorModel: string };
 }>();
 
 pluginsRouter.get("/", (c) => {
@@ -36,6 +36,7 @@ pluginsRouter.post("/:name/test/:type/:index", async (c) => {
   return handleTest(
     c.get("hive"),
     c.get("model"),
+    c.get("selectorModel"),
     name,
     index,
     type,

@@ -91,7 +91,7 @@ export default class ExecuteCommandPlugin implements BeePlugin<ShellExecSchema> 
 
   schema = schema;
 
-  selectionTests: SelectionTestCase[] = [
+  selectionTests: SelectionTestCase<ShellExecSchema>[] = [
     // 3 Positive
     {
       query: "show me the files in this directory using ls",

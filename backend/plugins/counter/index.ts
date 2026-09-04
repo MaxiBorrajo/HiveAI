@@ -33,7 +33,7 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
 
   schema = schema;
 
-  selectionTests: SelectionTestCase[] = [
+  selectionTests: SelectionTestCase<CounterSchema>[] = [
     // 3 Positive
     {
       query: "add a coffee to the count",

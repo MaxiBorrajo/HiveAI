@@ -7,16 +7,16 @@ import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { pluginsRouter } from "./modules/plugins/router.ts";
 import { chatsRouter } from "./modules/chats/router.ts";
 
+export const homeDir: string | undefined =
+  Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const hive = HiveMicrokernel.getInstance();
-const homeDir = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const MODEL = "qwen3:8b";
-const SELECTOR_MODEL = "qwen3:8b";
+const SELECTOR_MODEL = "lfm2.5";
 
 hive.configure({
   dataDir: join(homeDir, ".hiveai", "storage"),
-  testDir: join(homeDir, ".hiveai", "tests"),
   model: MODEL,
 });
 
@@ -79,12 +79,17 @@ app.route("/api/chat", chatsRouter);
 app.route("/plugins", pluginsRouter);
 app.route("/chat", chatsRouter);
 
-
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 
 app.get("/", (c) => c.json("Welcome to HiveAI"));
 
-export default {
-  port: 8000,
-  fetch: app.fetch,
-};
+const server = Deno.serve({ port: 0 }, app.fetch);
+const port = (server.addr as Deno.NetAddr).port;
+Deno.writeTextFileSync(
+  join(__dirname, "../frontend/.env.local"),
+  `VITE_API_URL=http://localhost:${port}`,
+);
+console.log(`\n🚀 Backend is running on http://localhost:${port}`);
+console.log(
+  `📝 Updated frontend/.env.local with VITE_API_URL=http://localhost:${port}`,
+);

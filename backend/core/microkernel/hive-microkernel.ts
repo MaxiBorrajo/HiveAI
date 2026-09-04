@@ -46,7 +46,7 @@ export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
   private activePlugins: Set<string> = new Set();
-  private config = new HiveConfig({ dataDir: "", model: "", testDir: "" });
+  private config = new HiveConfig({ dataDir: "", model: "" });
 
   public static getInstance(): HiveMicrokernel {
     if (!this.instance) {
@@ -66,7 +66,6 @@ export class HiveMicrokernel {
 
   private buildContext(pluginName: string): BeeContext {
     return {
-      getTestDir: () => join(this.config.get("testDir"), "plugins", pluginName),
       getDataDir: () => join(this.config.get("dataDir"), "plugins", pluginName),
       getModel: () => this.config.get("model"),
     };
@@ -85,7 +84,6 @@ export class HiveMicrokernel {
 
     const context = this.buildContext(beePlugin.name);
     await mkdir(context.getDataDir(), { recursive: true });
-    await mkdir(context.getTestDir(), { recursive: true });
     const report = this.validatePlugin(beePlugin);
     if (!report.valid) {
       throw new Error(
@@ -126,7 +124,7 @@ export class HiveMicrokernel {
       await Deno.stat(entryPoint);
     } catch (e) {
       throw new Error(
-        `Plugin is missing required files (index.ts and bee-plugin.ts). Details: ${e}`,
+        `Plugin at '${beePluginPath}' is missing required files (index.ts and bee-plugin.ts). Details: ${e}`,
       );
     }
 
@@ -135,7 +133,7 @@ export class HiveMicrokernel {
     );
     if (pluginBeeContent.trim() !== coreBeeContent.trim()) {
       throw new Error(
-        `Plugin is outdated: its bee-plugin.ts does not match the microkernel's version.`,
+        `Plugin at '${beePluginPath}' is outdated: its bee-plugin.ts does not match the microkernel's version.`,
       );
     }
   }
@@ -154,7 +152,10 @@ export class HiveMicrokernel {
     for (const t of tests) {
       counts[t.kind]++;
       const parsed = schema.safeParse(t.params);
-      if (!parsed.success) {
+
+      // We expect 'error' tests to potentially fail schema validation.
+      // For 'happy' and 'edge', they must pass the schema.
+      if (!parsed.success && t.kind !== "error") {
         issues.push(
           `case "${t.description}" has params that do not pass its own schema`,
         );

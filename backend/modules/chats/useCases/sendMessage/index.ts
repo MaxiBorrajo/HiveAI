@@ -5,7 +5,7 @@ import {
 } from "@langchain/core/messages";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
-import { HiveMind } from "../../../../ai/strategy/SADER/graph.ts";
+import { HiveMind } from "../../../../core/ai/strategy/SADER/graph.ts";
 
 let chatHistory: BaseMessage[] = [];
 

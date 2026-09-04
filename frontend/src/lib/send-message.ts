@@ -1,7 +1,8 @@
+import { API_URL } from "./config";
 import type { Message } from "@/types/chat";
 
 export async function sendMessage(content: string): Promise<Message> {
-  const response = await fetch("http://localhost:8000/api/chat", {
+  const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message: content }),

@@ -1,6 +1,5 @@
 export interface HiveSettings {
   dataDir: string;
-  testDir: string;
   model: string;
 }
 
