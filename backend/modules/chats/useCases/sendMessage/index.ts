@@ -5,13 +5,14 @@ import {
 } from "@langchain/core/messages";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
-import { HiveMind } from "../../../../core/ai/hive-queen.ts";
+import { HiveMind } from "../../../../ai/strategy/SADER/graph.ts";
 
 let chatHistory: BaseMessage[] = [];
 
 export async function handleChat(
   hive: HiveMicrokernel,
   model: string,
+  selectorModel: string,
   req: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
@@ -33,6 +34,8 @@ export async function handleChat(
   const result = await HiveMind.invoke({
     messages: chatHistory,
     model,
+    selectorModel,
+    currentPrompt: userText
   });
 
   console.log(result.messages.slice(-1, -4));

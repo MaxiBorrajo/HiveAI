@@ -88,11 +88,9 @@ export class HiveMicrokernel {
     await mkdir(context.getTestDir(), { recursive: true });
     const report = this.validatePlugin(beePlugin);
     if (!report.valid) {
-      console.error(
-        `ERROR: Bee '${beePlugin.name}' failed test suite quality validation:`,
-        report,
+      throw new Error(
+        `ERROR: Bee '${beePlugin.name}' failed test suite quality validation:\n${JSON.stringify(report, null, 2)}`,
       );
-      return;
     }
 
     await beePlugin.initialize(context);
@@ -116,6 +114,30 @@ export class HiveMicrokernel {
       counts: { ...selectionResults.counts, ...executionResults.counts },
       issues: [...selectionResults.issues, ...executionResults.issues],
     };
+  }
+
+  async validatePluginStructure(beePluginPath: string): Promise<void> {
+    const entryPoint = resolve(Deno.cwd(), beePluginPath, "index.ts");
+    const beePluginFile = resolve(Deno.cwd(), beePluginPath, "bee-plugin.ts");
+
+    let pluginBeeContent: string;
+    try {
+      pluginBeeContent = await Deno.readTextFile(beePluginFile);
+      await Deno.stat(entryPoint);
+    } catch (e) {
+      throw new Error(
+        `Plugin is missing required files (index.ts and bee-plugin.ts). Details: ${e}`,
+      );
+    }
+
+    const coreBeeContent = await Deno.readTextFile(
+      new URL("./bee-plugin.ts", import.meta.url),
+    );
+    if (pluginBeeContent.trim() !== coreBeeContent.trim()) {
+      throw new Error(
+        `Plugin is outdated: its bee-plugin.ts does not match the microkernel's version.`,
+      );
+    }
   }
 
   validateExecutionTests<S extends z.ZodObject<any, any>>(
@@ -291,35 +313,28 @@ export class HiveMicrokernel {
   }
 
   async loadAndRegister(beePluginPath: string): Promise<boolean> {
-    try {
-      const entryPoint = resolve(Deno.cwd(), beePluginPath, "index.ts");
-      const module = await import(pathToFileURL(entryPoint).href);
+    await this.validatePluginStructure(beePluginPath);
+    const entryPoint = resolve(Deno.cwd(), beePluginPath, "index.ts");
+    const module = await import(pathToFileURL(entryPoint).href);
 
-      if (typeof module.default !== "function") {
+    if (typeof module.default !== "function") {
+      throw new TypeError(
+        "The module does not export a default class. Expected 'export default class ... implements BeePlugin'.",
+      );
+    }
+
+    const pluginInstance: BeePlugin = new module.default();
+
+    for (const field of REQUIRED_FIELDS) {
+      if (!(field in pluginInstance)) {
         throw new TypeError(
-          "The module does not export a default class. Expected 'export default class ... implements BeePlugin'.",
+          `The plugin does not fulfill the BeePlugin contract: missing '${field}'.`,
         );
       }
-
-      const pluginInstance: BeePlugin = new module.default();
-
-      for (const field of REQUIRED_FIELDS) {
-        if (!(field in pluginInstance)) {
-          throw new TypeError(
-            `The plugin does not fulfill the BeePlugin contract: missing '${field}'.`,
-          );
-        }
-      }
-
-      await this.register(pluginInstance);
-      return true;
-    } catch (error) {
-      console.error(
-        `ERROR: The intended bee to add could not fly in from ${beePluginPath} to join the hive.`,
-        error,
-      );
-      return false;
     }
+
+    await this.register(pluginInstance);
+    return true;
   }
 
   async execute(

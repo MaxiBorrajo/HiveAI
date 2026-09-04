@@ -31,7 +31,6 @@ export interface BeePlugin<
   schema: S;
   selectionTests?: SelectionTestCase[];
   executionTests?: ExecutionTestCase<S>[];
-  testCases?: Array<unknown>;
   initialize(context: BeeContext): void | Promise<void>;
   process(input: z.infer<S>): string | Promise<string>;
   dispose?(): void | Promise<void>;

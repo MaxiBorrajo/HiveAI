@@ -7,7 +7,8 @@ export function getPlugins(hive: HiveMicrokernel): GetPluginsResponse {
     name: plugin.name,
     description: plugin.description,
     active: hive.isActive(plugin.name),
-    testCases: plugin.testCases || [],
+    selectionTests: plugin.selectionTests || [],
+    executionTests: plugin.executionTests || [],
   }));
 }
 
@@ -18,4 +19,3 @@ export function handleGetPlugins(
   const plugins = getPlugins(hive);
   return Response.json(plugins, { headers });
 }
-

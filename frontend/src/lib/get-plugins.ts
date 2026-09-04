@@ -1,10 +1,15 @@
-import type { Plugin, PluginTestCase } from "@/types/plugin";
+import type {
+  Plugin,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "@/types/plugin";
 
 interface BackendPlugin {
   name: string;
   description: string;
   active: boolean;
-  testCases: PluginTestCase[];
+  selectionTests?: SelectionTestCase[];
+  executionTests?: ExecutionTestCase[];
 }
 
 export async function getPlugins(): Promise<Plugin[]> {
@@ -16,7 +21,8 @@ export async function getPlugins(): Promise<Plugin[]> {
     name: plugin.name,
     description: plugin.description,
     active: plugin.active,
-    testCases: plugin.testCases,
+    selectionTests: plugin.selectionTests || [],
+    executionTests: plugin.executionTests || [],
   }));
 }
 
@@ -32,11 +38,12 @@ export async function setPluginActive(
 
 export async function runPluginTest(
   name: string,
+  type: "selection" | "execution",
   index: number,
   signal: AbortSignal,
 ) {
   const response = await fetch(
-    `http://localhost:8000/api/plugins/${encodeURIComponent(name)}/test/${index}`,
+    `http://localhost:8000/api/plugins/${encodeURIComponent(name)}/test/${type}/${index}`,
     {
       method: "POST",
       signal,

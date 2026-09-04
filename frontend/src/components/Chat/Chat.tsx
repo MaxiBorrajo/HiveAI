@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-
-
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
-import { sendMessage } from "@/lib/send-message";
-import type { Message } from "@/types/chat";
-import { ChatInput } from "./ChatInput";
+import { ScrollArea } from "../ui/scroll-area.tsx";
+import { Skeleton } from "../ui/skeleton.tsx";
+import { sendMessage } from "../../lib/send-message.ts";
+import type { Message } from "../../types/chat.ts";
+import { ChatInput } from "./ChatInput.tsx";
+import { Logo } from "../Logo.tsx";
 
 export function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);

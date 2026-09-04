@@ -1,8 +1,17 @@
-export interface PluginTestCase {
+export type SelectionCaseKind = "positive" | "negative" | "ambiguous";
+
+export interface SelectionTestCase {
   query: string;
-  shouldInvoke: boolean;
-  expectedParams?: Record<string, unknown>;
-  expectedOutputValues?: string[];
+  kind: SelectionCaseKind;
+  shouldInvoke?: boolean;
+}
+
+export type ExecutionTestKind = "happy" | "edge" | "error";
+
+export interface ExecutionTestCase {
+  description: string;
+  kind: ExecutionTestKind;
+  params: Record<string, unknown>;
 }
 
 export interface Plugin {
@@ -10,5 +19,6 @@ export interface Plugin {
   name: string;
   description: string;
   active: boolean;
-  testCases: PluginTestCase[];
+  selectionTests?: SelectionTestCase[];
+  executionTests?: ExecutionTestCase[];
 }
