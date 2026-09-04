@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Logo } from "@/components/logo/Logo";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { PluginList } from "@/components/PluginList";
+import { InteractionDialog } from "@/components/Chat/InteractionDialog";
 import { sendMessage } from "@/lib/send-message";
 import type { Message } from "@/types/chat";
 
@@ -13,11 +14,12 @@ export function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [thinkingText, setThinkingText] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isThinking]);
+  }, [messages, isThinking, thinkingText]);
 
   async function handleSend() {
     const content = input.trim();
@@ -30,30 +32,78 @@ export function Chat() {
       timestamp: Date.now(),
     };
 
-    const nextHistory = [...messages, userMessage];
-    setMessages(nextHistory);
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsThinking(true);
+    setThinkingText("");
+
+    const agentMessageId = crypto.randomUUID();
+    let streamStarted = false;
 
     try {
-      const reply = await sendMessage(content);
-      setMessages((prev) => [...prev, reply]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "agent",
-          content:
-            error instanceof Error
-              ? `No se pudo obtener respuesta: ${error.message}`
-              : "No se pudo obtener respuesta del agente.",
-          isError: true,
-          timestamp: Date.now(),
+      await sendMessage(content, {
+        onThinking: () => {},
+        onThinkingDelta: (delta) => {
+          setThinkingText((prev) => prev + delta);
         },
-      ]);
+        onToken: (token) => {
+          if (!streamStarted) {
+            streamStarted = true;
+            setIsThinking(false);
+            setThinkingText("");
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: agentMessageId,
+                role: "agent",
+                content: token,
+                timestamp: Date.now(),
+              },
+            ]);
+            return;
+          }
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === agentMessageId
+                ? { ...message, content: message.content + token }
+                : message,
+            ),
+          );
+        },
+        onDone: (finalContent, usedTools, steps) => {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === agentMessageId
+                ? { ...message, content: finalContent, usedTools, steps }
+                : message,
+            ),
+          );
+        },
+        onError: (errorMessage) => {
+          throw new Error(errorMessage);
+        },
+      });
+    } catch (error) {
+      setMessages((prev) => {
+        const withoutPartial = prev.filter((m) => m.id !== agentMessageId);
+        return [
+          ...withoutPartial,
+          {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content:
+              error instanceof Error
+                ? `No se pudo obtener respuesta: ${error.message}`
+                : "No se pudo obtener respuesta del agente.",
+            isError: true,
+            timestamp: Date.now(),
+          },
+        ];
+      });
     } finally {
       setIsThinking(false);
+      setThinkingText("");
     }
   }
 
@@ -84,13 +134,20 @@ export function Chat() {
             ))}
 
             {isThinking && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <Avatar>
                   <AvatarFallback className="bg-primary/20 text-primary">
                     HQ
                   </AvatarFallback>
                 </Avatar>
-                <Skeleton className="h-4 w-48" />
+                <div className="max-w-[75%] rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground">
+                  <span className="animate-pulse">Pensando...</span>
+                  {thinkingText && (
+                    <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap text-xs italic opacity-70">
+                      {thinkingText}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -119,6 +176,7 @@ export function Chat() {
       </div>
 
       <PluginList />
+      <InteractionDialog />
     </div>
   );
 }
@@ -136,7 +194,11 @@ function ChatMessage({ message }: { message: Message }) {
             : "bg-primary/10 text-foreground"
       }`}
     >
-      {message.content}
+      {isAgent && !message.isError ? (
+        <MessageMarkdown content={message.content} />
+      ) : (
+        message.content
+      )}
       <div
         className={`mt-1 flex items-center gap-1.5 text-[10px] opacity-60 ${isAgent ? "justify-start" : "justify-end"}`}
       >
@@ -151,6 +213,7 @@ function ChatMessage({ message }: { message: Message }) {
           <span>· usó {message.usedTools.join(", ")}</span>
         )}
       </div>
+      {!!message.steps?.length && <StepsDisclosure steps={message.steps} />}
     </div>
   );
 
@@ -175,5 +238,73 @@ function ChatMessage({ message }: { message: Message }) {
       {avatar}
       {bubble}
     </div>
+  );
+}
+
+function MessageMarkdown({ content }: { content: string }) {
+  return (
+    <div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <ReactMarkdown
+        components={{
+          p: ({ children }) => <p className="my-1.5 leading-relaxed">{children}</p>,
+          ul: ({ children }) => (
+            <ul className="my-1.5 list-disc space-y-0.5 pl-5">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-1.5 list-decimal space-y-0.5 pl-5">{children}</ol>
+          ),
+          li: ({ children }) => <li>{children}</li>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          code: ({ children, className }) =>
+            className ? (
+              <code className="font-mono text-xs">{children}</code>
+            ) : (
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                {children}
+              </code>
+            ),
+          pre: ({ children }) => (
+            <pre className="my-1.5 overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs">
+              {children}
+            </pre>
+          ),
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:opacity-80"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function StepsDisclosure({ steps }: { steps: NonNullable<Message["steps"]> }) {
+  const totalMs = steps.reduce((sum, step) => sum + step.durationMs, 0);
+
+  return (
+    <details className="mt-1.5 text-[10px] opacity-60">
+      <summary className="cursor-pointer select-none hover:opacity-100">
+        Ver pasos ({totalMs < 1000 ? `${totalMs.toFixed(0)}ms` : `${(totalMs / 1000).toFixed(1)}s`})
+      </summary>
+      <ul className="mt-1.5 space-y-1 border-l border-border pl-2">
+        {steps.map((step, index) => (
+          <li key={index}>
+            <span className="font-medium">{step.node}</span>
+            {step.label !== step.node && <span> · {step.label}</span>}
+            <span> · {step.durationMs.toFixed(0)}ms</span>
+            <div className="opacity-80">{step.summary}</div>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

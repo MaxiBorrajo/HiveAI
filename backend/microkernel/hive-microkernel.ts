@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
+import { humanInteractionQueue } from "./human-interaction.ts";
+import { reportPluginStep } from "./step-capture.ts";
 import { tool } from "@langchain/core/tools";
 
 const REQUIRED_FIELDS = ["name", "description", "schema", "process"] as const;
@@ -34,6 +36,16 @@ export class HiveMicrokernel {
     return {
       getDataDir: () => join(this.config.get("dataDir"), "plugins", pluginName),
       getModel: () => this.config.get("model"),
+      requestApproval: (title, description, details) => {
+        const { wait } = humanInteractionQueue.requestApproval(pluginName, {
+          kind: "approval",
+          title,
+          description,
+          details,
+        });
+        return wait;
+      },
+      reportStep: (label) => reportPluginStep(label),
     };
   }
 
