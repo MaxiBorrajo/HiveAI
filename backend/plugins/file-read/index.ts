@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
 
 const MAX_CONTENT_CHARS = 20_000;
 
@@ -10,25 +15,139 @@ const MAX_CONTENT_CHARS = 20_000;
 
 type Operation = "list" | "read";
 
-export default class FileReadPlugin implements BeePlugin {
+const schema = z.object({
+  operation: z
+    .enum(["list", "read"])
+    .describe("'list' to see a folder's contents, 'read' to get a file's text content."),
+  path: z
+    .string()
+    .describe(
+      "Absolute path of the folder to list, or the file to read.",
+    ),
+});
+
+type FileReadSchema = typeof schema;
+
+export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
   name = "file_read";
   description =
     "Reads the filesystem: 'list' shows the files and folders inside a directory, 'read' returns the text content of a file. Does not modify anything — use file_ops to create/write/copy/move.";
 
-  schema = z.object({
-    operation: z
-      .enum(["list", "read"])
-      .describe("'list' to see a folder's contents, 'read' to get a file's text content."),
-    path: z
-      .string()
-      .describe(
-        "Absolute path of the folder to list, or the file to read.",
-      ),
-  }) as any;
+  schema = schema;
+
+  selectionTests: SelectionTestCase<FileReadSchema>[] = [
+    // 3 Positive
+    {
+      query: "show me what's inside my Documents folder",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "read the contents of README.md",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "list the files in C:\\Users\\me\\Desktop",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    // 3 Negative
+    {
+      query: "create a new file called notes.txt",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "what's the weather today?",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "search the web for TypeScript news",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 3 Ambiguous
+    {
+      query: "find a file called invoice.pdf",
+      kind: "ambiguous",
+    },
+    {
+      query: "check if config.json exists",
+      kind: "ambiguous",
+    },
+    {
+      query: "tell me about the project structure",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<FileReadSchema>[] = [
+    // 3 Happy
+    {
+      description: "List the current working directory",
+      kind: "happy",
+      params: { operation: "list", path: Deno.cwd() },
+      expect: (output: string) => output.includes("Contents of"),
+    },
+    {
+      description: "Read an existing text file",
+      kind: "happy",
+      params: { operation: "read", path: `${Deno.cwd()}/deno.json` },
+      expect: (output: string) => output.length > 0,
+    },
+    {
+      description: "List a directory known to have subfolders",
+      kind: "happy",
+      params: { operation: "list", path: `${Deno.cwd()}/plugins` },
+      expect: (output: string) => output.includes("Folders:"),
+    },
+    // 3 Edge
+    {
+      description: "Reading a directory with 'read' fails clearly",
+      kind: "edge",
+      params: { operation: "read", path: Deno.cwd() },
+      expect: (output: string) => output.includes("is a directory"),
+    },
+    {
+      description: "Listing a file with 'list' fails clearly",
+      kind: "edge",
+      params: { operation: "list", path: `${Deno.cwd()}/deno.json` },
+      expect: (output: string) => output.includes("is a file"),
+    },
+    {
+      description: "Reading a file over the truncation limit gets truncated",
+      kind: "edge",
+      params: { operation: "read", path: `${Deno.cwd()}/deno.lock` },
+      expect: (output: string) => output.length > 0,
+    },
+    // 3 Error
+    {
+      description: "Reading a non-existent file fails clearly",
+      kind: "error",
+      params: { operation: "read", path: "/non/existent/path/xyz123.txt" },
+      expect: (output: string) => output.includes("does not exist"),
+    },
+    {
+      description: "Listing a non-existent folder fails clearly",
+      kind: "error",
+      params: { operation: "list", path: "/non/existent/folder/xyz123" },
+      expect: (output: string) => output.includes("does not exist"),
+    },
+    {
+      description: "Missing required operation property",
+      kind: "error",
+      params: { operation: undefined as unknown as Operation, path: Deno.cwd() },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+  ];
 
   initialize(_context: BeeContext): void {}
 
-  async process(input: unknown): Promise<string> {
+  async process(input: z.infer<FileReadSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;

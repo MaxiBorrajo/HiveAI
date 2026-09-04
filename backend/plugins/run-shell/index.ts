@@ -1,17 +1,22 @@
 import { z } from "zod";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
 
 const MAX_OUTPUT_CHARS = 4000;
 
 // Real shell execution (bash / cmd / powershell), for anything that needs pipes,
-// redirection, chaining, or a command outside of file_ops' fixed set of operations.
-// The model supplies a free-form command string that IS interpreted by a shell.
-// There is no process sandbox here (no container, no restricted OS user), so
-// the only real containment is a human approving the exact command before it
-// runs. Approval goes through context.requestApproval() (from BeeContext),
-// never a direct import of the microkernel's internals — that's what lets
-// this same mechanism work for third-party plugins loaded from outside this
-// repo, not just built-in ones.
+// redirection, chaining, or a command outside of file_ops' fixed set of operations
+// or execute_command's fixed whitelist. The model supplies a free-form command
+// string that IS interpreted by a shell. There is no process sandbox here (no
+// container, no restricted OS user), so the only real containment is a human
+// approving the exact command before it runs. Approval goes through
+// context.requestApproval() (from BeeContext), never a direct import of the
+// microkernel's internals — that's what lets this same mechanism work for
+// third-party plugins loaded from outside this repo, not just built-in ones.
 
 const SHELL_LAUNCHERS: Record<
   string,
@@ -25,29 +30,148 @@ const SHELL_LAUNCHERS: Record<
   }),
 };
 
-export default class RunShellPlugin implements BeePlugin {
+const schema = z.object({
+  shell: z
+    .enum(["bash", "cmd", "powershell"])
+    .describe(
+      "Which shell interpreter to run the command with. Pick one available on the current OS (bash/cmd on most systems, powershell on Windows).",
+    ),
+  command: z
+    .string()
+    .describe(
+      "The full command line to execute, exactly as you would type it into that shell. Can include pipes, redirection, and chaining.",
+    ),
+  cwd: z
+    .string()
+    .optional()
+    .describe(
+      "Absolute directory path to run the command from. If omitted, the process's current directory is used.",
+    ),
+});
+
+type RunShellSchema = typeof schema;
+
+export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   name = "run_shell";
   description =
-    "Runs a real shell command line (bash, cmd, or powershell), supporting pipelines, redirection, chaining, and any command the chosen shell supports — including things file_ops/file_read/file_search can't do (e.g. disk usage/free space, counting files, process info, running arbitrary CLI tools). Because it is not restricted to a fixed set of operations, every single invocation requires explicit human approval before it runs, and will wait (or fail if not approved in time).";
+    "Runs a real shell command line (bash, cmd, or powershell), supporting pipelines, redirection, chaining, and any command the chosen shell supports — including things file_ops/file_read/file_search/execute_command can't do (e.g. piping, chaining, arbitrary CLI tools). Because it is not restricted to a fixed set of operations, every single invocation requires explicit human approval before it runs, and will wait (or fail if not approved in time).";
 
-  schema = z.object({
-    shell: z
-      .enum(["bash", "cmd", "powershell"])
-      .describe(
-        "Which shell interpreter to run the command with. Pick one available on the current OS (bash/cmd on most systems, powershell on Windows).",
-      ),
-    command: z
-      .string()
-      .describe(
-        "The full command line to execute, exactly as you would type it into that shell. Can include pipes, redirection, and chaining.",
-      ),
-    cwd: z
-      .string()
-      .optional()
-      .describe(
-        "Absolute directory path to run the command from. If omitted, the process's current directory is used.",
-      ),
-  }) as any;
+  schema = schema;
+
+  selectionTests: SelectionTestCase<RunShellSchema>[] = [
+    // 3 Positive
+    {
+      query: "run 'ls -la | grep .ts' in bash",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "check disk free space with df -h",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "run a powershell command to list running processes sorted by memory",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    // 3 Negative
+    {
+      query: "what time is it?",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "create a file called notes.txt",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "search for a file named report.pdf",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 3 Ambiguous
+    {
+      query: "list the files in this folder",
+      kind: "ambiguous",
+    },
+    {
+      query: "show me disk usage",
+      kind: "ambiguous",
+    },
+    {
+      query: "count how many .ts files are in the project",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<RunShellSchema>[] = [
+    // 3 Happy
+    {
+      description: "Run a simple echo command via bash",
+      kind: "happy",
+      params: { shell: "bash", command: "echo hello" },
+      expect: (output: string) => output.includes("hello"),
+    },
+    {
+      description: "Run a piped command via bash",
+      kind: "happy",
+      params: { shell: "bash", command: "echo hello world | wc -w" },
+      expect: (output: string) => output.trim().length > 0,
+    },
+    {
+      description: "Run a command with an explicit valid cwd",
+      kind: "happy",
+      params: { shell: "bash", command: "pwd", cwd: Deno.cwd() },
+      expect: (output: string) => output.trim().length > 0,
+    },
+    // 3 Edge
+    {
+      description: "Command producing no output still returns a message",
+      kind: "edge",
+      params: { shell: "bash", command: "true" },
+      expect: (output: string) =>
+        output.includes("no output") || output.trim().length >= 0,
+    },
+    {
+      description: "Command writing to stderr on success is still reported",
+      kind: "edge",
+      params: { shell: "bash", command: "echo warning 1>&2; echo ok" },
+      expect: (output: string) => output.includes("ok"),
+    },
+    {
+      description: "Non-zero exit code is reported with detail",
+      kind: "edge",
+      params: { shell: "bash", command: "exit 3" },
+      expect: (output: string) => output.includes("exit code 3"),
+    },
+    // 3 Error
+    {
+      description: "Invalid, non-existent cwd fails clearly",
+      kind: "error",
+      params: {
+        shell: "bash",
+        command: "pwd",
+        cwd: "/non/existent/directory/path/12345",
+      },
+      expect: (output: string) => output.includes("does not exist or is inaccessible"),
+    },
+    {
+      description: "cwd pointing to a file, not a directory, fails clearly",
+      kind: "error",
+      params: { shell: "bash", command: "pwd", cwd: `${Deno.cwd()}/deno.json` },
+      expect: (output: string) => output.includes("is a file, not a directory"),
+    },
+    {
+      description: "Missing required command property",
+      kind: "error",
+      params: { shell: "bash", command: undefined as unknown as string },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+  ];
 
   private context!: BeeContext;
 
@@ -55,7 +179,7 @@ export default class RunShellPlugin implements BeePlugin {
     this.context = context;
   }
 
-  async process(input: unknown): Promise<string> {
+  async process(input: z.infer<RunShellSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;

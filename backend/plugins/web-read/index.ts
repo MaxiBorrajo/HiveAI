@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
 
 const MAX_CONTENT_CHARS = 20_000;
 const FETCH_TIMEOUT_MS = 15_000;
@@ -41,18 +46,133 @@ function extractText(html: string): string {
     .join("\n");
 }
 
-export default class WebReadPlugin implements BeePlugin {
+const schema = z.object({
+  url: z.string().describe("The absolute URL of the page to fetch and read."),
+});
+
+type WebReadSchema = typeof schema;
+
+export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
   name = "web_read";
   description =
     "Fetches a URL and returns the readable text content of that page. Use it to read a page found via web_search. Does not execute JavaScript, so content that only appears after client-side rendering may not be included.";
 
-  schema = z.object({
-    url: z.string().describe("The absolute URL of the page to fetch and read."),
-  }) as any;
+  schema = schema;
+
+  selectionTests: SelectionTestCase<WebReadSchema>[] = [
+    // 3 Positive
+    {
+      query: "read the content at https://example.com",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "open this article and summarize it: https://blog.example.com/post",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "fetch the text of https://docs.example.com/guide",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    // 3 Negative
+    {
+      query: "what time is it?",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "search the web for TypeScript tutorials",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "create a file called notes.txt",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 3 Ambiguous
+    {
+      query: "what does example.com say about pricing?",
+      kind: "ambiguous",
+    },
+    {
+      query: "check if this site is online",
+      kind: "ambiguous",
+    },
+    {
+      query: "download this page",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<WebReadSchema>[] = [
+    // 3 Happy
+    {
+      description: "Fetch a well-known, always-available page",
+      kind: "happy",
+      params: { url: "https://example.com" },
+      expect: (output: string) => output.length > 0,
+    },
+    {
+      description: "Fetch returns readable text, not raw HTML tags",
+      kind: "happy",
+      params: { url: "https://example.com" },
+      expect: (output: string) => !output.includes("<html"),
+    },
+    {
+      description: "Fetch a second well-known page",
+      kind: "happy",
+      params: { url: "https://www.iana.org/help/example-domains" },
+      expect: (output: string) => output.length > 0,
+    },
+    // 3 Edge
+    {
+      description: "http (non-https) URL is accepted",
+      kind: "edge",
+      params: { url: "http://example.com" },
+      expect: (output: string) => output.length > 0,
+    },
+    {
+      description: "URL with query params is accepted",
+      kind: "edge",
+      params: { url: "https://example.com/?ref=test" },
+      expect: (output: string) => output.length > 0,
+    },
+    {
+      description: "Non-html content-type is rejected clearly",
+      kind: "edge",
+      params: { url: "https://www.iana.org/favicon.ico" },
+      expect: (output: string) =>
+        output.includes("does not appear to be a text/HTML page"),
+    },
+    // 3 Error
+    {
+      description: "Malformed URL fails clearly",
+      kind: "error",
+      params: { url: "not-a-valid-url" },
+      expect: (output: string) => output.includes("not a valid absolute URL"),
+    },
+    {
+      description: "Non-http(s) protocol is rejected",
+      kind: "error",
+      params: { url: "ftp://example.com/file" },
+      expect: (output: string) => output.includes("only http/https URLs are supported"),
+    },
+    {
+      description: "Missing required url property",
+      kind: "error",
+      params: { url: undefined as unknown as string },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+  ];
 
   initialize(_context: BeeContext): void {}
 
-  async process(input: unknown): Promise<string> {
+  async process(input: z.infer<WebReadSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;

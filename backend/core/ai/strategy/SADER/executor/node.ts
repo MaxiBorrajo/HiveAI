@@ -2,7 +2,15 @@ import { AIMessage } from "@langchain/core/messages";
 import { ToolMessage } from "@langchain/core/messages/tool";
 import type { GraphNode } from "@langchain/langgraph/web";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
-import type { HiveAIState } from "../graph.ts";
+import { captureSteps } from "../../../../microkernel/step-capture.ts";
+import type { HiveAIState, ChatStep } from "../graph.ts";
+
+// Truncates a plugin-reported step label to a single log-friendly line — a
+// misbehaving plugin could otherwise report unbounded text into the step log.
+function summarize(text: string, maxChars = 200): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > maxChars ? `${oneLine.slice(0, maxChars)}...` : oneLine;
+}
 
 export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
   const lastMessage = [...state.messages]
@@ -50,21 +58,50 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
         ok: false,
         output: `There is no tool named '${state.selectedTool}' in the hive.`,
       },
+      steps: [
+        {
+          node: "Executor" as const,
+          label: state.selectedTool,
+          durationMs: 0,
+          summary: "No existe esa herramienta en la colmena",
+        },
+      ],
     };
   }
 
   console.log(JSON.stringify(toolCall));
 
+  const start = performance.now();
+
   try {
-    const toolResult = await tool.invoke(toolCall);
+    const { result: toolResult, steps: pluginSteps } = await captureSteps(() =>
+      tool.invoke(toolCall),
+    );
+    const durationMs = performance.now() - start;
+
+    const steps: ChatStep[] = pluginSteps.map((pluginStep) => ({
+      node: "Plugin",
+      label: toolCall.name,
+      durationMs: 0,
+      summary: summarize(pluginStep.label),
+    }));
+    steps.push({
+      node: "Executor",
+      label: toolCall.name,
+      durationMs,
+      summary: summarize(String(toolResult.content)),
+    });
+
     return {
       messages: [toolResult],
       toolResult: {
         ok: true,
         output: toolResult.content as string,
       },
+      steps,
     };
   } catch (error) {
+    const durationMs = performance.now() - start;
     const detail = error instanceof Error ? error.message : String(error);
     return {
       messages: [
@@ -79,6 +116,14 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
         ok: false,
         output: `Tool '${toolCall.name}' failed: ${detail}`,
       },
+      steps: [
+        {
+          node: "Executor" as const,
+          label: toolCall.name,
+          durationMs,
+          summary: `Error: ${detail}`,
+        },
+      ],
     };
   }
 };

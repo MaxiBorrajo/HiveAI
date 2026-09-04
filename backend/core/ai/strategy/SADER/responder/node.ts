@@ -15,6 +15,7 @@ import {
 export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   state,
 ) => {
+  const start = performance.now();
   const responder = new ChatOllama({
     model: state.model,
     think: false,
@@ -59,14 +60,22 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
             systemPrompt: RESPONDER_SUCCESS_SYSTEM_PROMPT,
           };
 
-          console.log(prompts)
-
   const response = await responder.invoke([
     new SystemMessage(prompts.systemPrompt),
     new HumanMessage(prompts.humanPrompt),
   ]);
 
+  const durationMs = performance.now() - start;
+
   return {
     messages: [response],
+    steps: [
+      {
+        node: "HiveQueenResponder" as const,
+        label: "Redactando respuesta",
+        durationMs,
+        summary: String(response.content).replace(/\s+/g, " ").trim().slice(0, 200),
+      },
+    ],
   };
 };

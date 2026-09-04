@@ -2,10 +2,11 @@ import { SystemMessage } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
 import { ChatOllama } from "@langchain/ollama";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
-import { HiveAIState } from "../graph.ts";
+import { HiveAIState, type ChatStep } from "../graph.ts";
 import { SOLVER_SYSTEM_PROMPT } from "./prompt.ts";
 
 export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
+  const start = performance.now();
   const microkernel = HiveMicrokernel.getInstance();
 
   const selectorModel = new ChatOllama({
@@ -18,9 +19,10 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
     .bindTools(microkernel.getTools())
     .invoke([new SystemMessage(SOLVER_SYSTEM_PROMPT), ...state.messages]);
 
-  console.log(
-    `Selector decided: [${(response.tool_calls ?? []).map((tc) => tc.name).join(", ") || "none"}]`,
-  );
+  const toolNames = (response.tool_calls ?? []).map((tc) => tc.name).join(", ") || "none";
+  console.log(`Selector decided: [${toolNames}]`);
+
+  const durationMs = performance.now() - start;
 
   if (!response.tool_calls?.length) {
     return {
@@ -28,6 +30,14 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
       correction: null,
       abstentionVerified: false,
       messages: [response],
+      steps: [
+        {
+          node: "Solver",
+          label: "Eligiendo herramienta",
+          durationMs,
+          summary: "Decidió no invocar ninguna herramienta",
+        },
+      ],
     };
   }
 
@@ -45,6 +55,14 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
       attempts: 1,
       selectionAttempts: 1,
       messages: [response],
+      steps: [
+        {
+          node: "Solver",
+          label: "Eligiendo herramienta",
+          durationMs,
+          summary: `Decidió: ${call.name} (no existe en el catálogo)`,
+        },
+      ],
     };
   }
 
@@ -61,6 +79,14 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
       attempts: 1,
       parametrizerAttempts: 1,
       messages: [response],
+      steps: [
+        {
+          node: "Solver",
+          label: "Eligiendo herramienta",
+          durationMs,
+          summary: `Decidió: ${call.name} (parámetros inválidos)`,
+        },
+      ],
     };
   }
 
@@ -69,6 +95,14 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
     args: { params: parsed.data },
     correction: null,
     messages: [response],
+    steps: [
+      {
+        node: "Solver" as const,
+        label: "Eligiendo herramienta",
+        durationMs,
+        summary: `Decidió: ${call.name}`,
+      } satisfies ChatStep,
+    ],
   };
 };
 

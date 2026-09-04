@@ -1,14 +1,4 @@
 import { serveStatic } from "hono/deno";
-import "dotenv/config";
-import { HiveMicrokernel } from "./microkernel/hive-microkernel.ts";
-import { humanInteractionQueue } from "./microkernel/human-interaction.ts";
-import { HiveMind, type HiveAIState, type ChatStep } from "./ai/hive-queen.ts";
-import {
-  AIMessage,
-  HumanMessage,
-  type BaseMessage,
-  ToolMessage,
-} from "@langchain/core/messages";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
@@ -16,6 +6,7 @@ import { cors } from "hono/cors";
 import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { pluginsRouter } from "./modules/plugins/router.ts";
 import { chatsRouter } from "./modules/chats/router.ts";
+import { interactionsRouter } from "./modules/interactions/router.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -83,11 +74,22 @@ app.use(
   }),
 );
 
+app.use(
+  "/interactions/*",
+  cors({
+    origin: "*",
+    allowHeaders: ["content-type"],
+    allowMethods: ["GET", "POST", "OPTIONS"],
+  }),
+);
+
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/chat", chatsRouter);
+app.route("/api/interactions", interactionsRouter);
 
 app.route("/plugins", pluginsRouter);
 app.route("/chat", chatsRouter);
+app.route("/interactions", interactionsRouter);
 
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 

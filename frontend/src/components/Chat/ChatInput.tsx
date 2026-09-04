@@ -36,7 +36,9 @@ export function ChatInput({
         <div className="flex gap-2">
           <PluginsManager />
         </div>
-        
+        <Button onClick={handleSend} disabled={isThinking || !input.trim()}>
+          Send
+        </Button>
       </div>
     </div>
   );

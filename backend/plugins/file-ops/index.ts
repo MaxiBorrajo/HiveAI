@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { dirname, join } from "node:path";
-import type { BeeContext, BeePlugin } from "../../microkernel/bee-plugin.ts";
+import type {
+  BeeContext,
+  BeePlugin,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
 
 const MAX_CONTENT_CHARS = 50_000;
 
@@ -13,33 +18,168 @@ const MAX_CONTENT_CHARS = 50_000;
 
 type Operation = "create" | "write" | "touch" | "mkdir" | "copy" | "move";
 
-export default class FileOpsPlugin implements BeePlugin {
+const schema = z.object({
+  operation: z
+    .enum(["create", "write", "touch", "mkdir", "copy", "move"])
+    .describe(
+      "The operation to perform: 'create' (new file, fails if exists), 'write' (create or overwrite), 'touch' (empty file or timestamp update), 'mkdir', 'copy', or 'move'.",
+    ),
+  path: z
+    .string()
+    .describe(
+      "Absolute path of the target file or folder. For 'copy'/'move', this is the source path.",
+    ),
+  destination: z
+    .string()
+    .optional()
+    .describe("Absolute destination path. Required for 'copy' and 'move'."),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      "Text content to write. Used by 'create' and 'write'. If omitted, an empty file is created.",
+    ),
+});
+
+type FileOpsSchema = typeof schema;
+
+export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
   name = "file_ops";
   description =
     "Creates, writes, touches, copies, or moves files and folders on disk. Use 'create' or 'write' to make a file with content (write overwrites existing content, create fails if the file already exists), 'touch' to create an empty file or update an existing file's timestamp, 'mkdir' to create a folder, 'copy'/'move' to duplicate or relocate a file or folder. Deletion is not supported by this tool.";
 
-  schema = z.object({
-    operation: z
-      .enum(["create", "write", "touch", "mkdir", "copy", "move"])
-      .describe(
-        "The operation to perform: 'create' (new file, fails if exists), 'write' (create or overwrite), 'touch' (empty file or timestamp update), 'mkdir', 'copy', or 'move'.",
-      ),
-    path: z
-      .string()
-      .describe(
-        "Absolute path of the target file or folder. For 'copy'/'move', this is the source path.",
-      ),
-    destination: z
-      .string()
-      .optional()
-      .describe("Absolute destination path. Required for 'copy' and 'move'."),
-    content: z
-      .string()
-      .optional()
-      .describe(
-        "Text content to write. Used by 'create' and 'write'. If omitted, an empty file is created.",
-      ),
-  }) as any;
+  schema = schema;
+
+  selectionTests: SelectionTestCase<FileOpsSchema>[] = [
+    // 3 Positive
+    {
+      query: "create a file called notes.txt with the text 'hello world'",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "make a new folder called reports in my documents",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "move report.pdf from Downloads to Documents",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    // 3 Negative
+    {
+      query: "what time is it?",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "search for a file called invoice.pdf",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "read the contents of README.md",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 3 Ambiguous
+    {
+      query: "delete the old logs folder",
+      kind: "ambiguous",
+    },
+    {
+      query: "duplicate my project folder",
+      kind: "ambiguous",
+    },
+    {
+      query: "update the timestamp on config.json",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<FileOpsSchema>[] = [
+    // 3 Happy
+    {
+      description: "Create a new file with content",
+      kind: "happy",
+      params: {
+        operation: "create",
+        path: join(Deno.cwd(), ".test-file-ops-happy1.txt"),
+        content: "hello",
+      },
+      expect: (output: string) => output.includes("Created file"),
+    },
+    {
+      description: "Write content to an existing file",
+      kind: "happy",
+      params: {
+        operation: "write",
+        path: join(Deno.cwd(), ".test-file-ops-happy2.txt"),
+        content: "overwritten",
+      },
+      expect: (output: string) => output.includes("Wrote"),
+    },
+    {
+      description: "Create a folder",
+      kind: "happy",
+      params: {
+        operation: "mkdir",
+        path: join(Deno.cwd(), ".test-file-ops-happy-dir"),
+      },
+      expect: (output: string) => output.includes("Created folder"),
+    },
+    // 3 Edge
+    {
+      description: "Touch a non-existent file creates it",
+      kind: "edge",
+      params: {
+        operation: "touch",
+        path: join(Deno.cwd(), ".test-file-ops-edge-touch.txt"),
+      },
+      expect: (output: string) =>
+        output.includes("Created file") || output.includes("Updated timestamp"),
+    },
+    {
+      description: "Write with no content produces an empty file",
+      kind: "edge",
+      params: {
+        operation: "write",
+        path: join(Deno.cwd(), ".test-file-ops-edge-empty.txt"),
+      },
+      expect: (output: string) => output.includes("Wrote 0 chars"),
+    },
+    {
+      description: "Mkdir on an already-existing folder succeeds (recursive)",
+      kind: "edge",
+      params: { operation: "mkdir", path: Deno.cwd() },
+      expect: (output: string) => output.includes("Created folder"),
+    },
+    // 3 Error
+    {
+      description: "Copy without a destination fails clearly",
+      kind: "error",
+      params: {
+        operation: "copy",
+        path: join(Deno.cwd(), "deno.json"),
+      },
+      expect: (output: string) => output.includes("'destination' is required"),
+    },
+    {
+      description: "Create on an already-existing file fails clearly",
+      kind: "error",
+      params: { operation: "create", path: join(Deno.cwd(), "deno.json") },
+      expect: (output: string) => output.includes("already exists"),
+    },
+    {
+      description: "Missing required operation property",
+      kind: "error",
+      params: { operation: undefined as unknown as Operation, path: Deno.cwd() },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+  ];
 
   initialize(_context: BeeContext): void {}
 
@@ -60,7 +200,7 @@ export default class FileOpsPlugin implements BeePlugin {
     }
   }
 
-  async process(input: unknown): Promise<string> {
+  async process(input: z.infer<FileOpsSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;

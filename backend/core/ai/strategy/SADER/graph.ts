@@ -16,11 +16,31 @@ import { Executor, shouldDiagnose } from "./executor/node.ts";
 import { HiveQueenResponder } from "./responder/node.ts";
 import { shouldRespond, Solver } from "./solver/node.ts";
 
+const ChatStepSchema = z.object({
+  node: z.enum([
+    "Solver",
+    "AbstentionVerificator",
+    "Executor",
+    "Diagnostician",
+    "HiveQueenResponder",
+    "Plugin",
+  ]),
+  label: z.string(),
+  durationMs: z.number(),
+  summary: z.string(),
+});
+export type ChatStep = z.infer<typeof ChatStepSchema>;
+
+const StepsValue = new ReducedValue(z.array(ChatStepSchema).default([]), {
+  reducer: (current, next) => [...current, ...next],
+});
+
 export const HiveAIState = new StateSchema({
   messages: MessagesValue,
   currentPrompt: z.string(),
   selectorModel: z.string(),
   model: z.string(),
+  steps: StepsValue,
   attempts: new ReducedValue(z.number().default(0), {
     reducer: (x: number, y: number) => x + y,
   }),

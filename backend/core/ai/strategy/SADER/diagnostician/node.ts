@@ -11,6 +11,7 @@ import {
 } from "./prompt.ts";
 
 export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
+  const start = performance.now();
   const microkernel = HiveMicrokernel.getInstance();
   const DiagnosticianResponse = z.object({
     action: z.enum(["retry", "giveUp"]),
@@ -24,6 +25,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
       giveUp: true,
       correction: { tool: state.selectedTool, reason: "Plugin no encontrado." },
       messages: [],
+      steps: [
+        {
+          node: "Diagnostician" as const,
+          label: "Diagnosticando fallo",
+          durationMs: performance.now() - start,
+          summary: "Plugin no encontrado",
+        },
+      ],
     };
   }
 
@@ -50,6 +59,8 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     reason: string;
   }>(response.content as string);
 
+  const durationMs = performance.now() - start;
+
   if (!parsed) {
     return {
       giveUp: true,
@@ -59,6 +70,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
         failedArgs: state.args.params,
       },
       messages: [],
+      steps: [
+        {
+          node: "Diagnostician" as const,
+          label: "Diagnosticando fallo",
+          durationMs,
+          summary: "Respuesta no interpretable, se abandona el intento",
+        },
+      ],
     };
   }
 
@@ -71,6 +90,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
         failedArgs: state.args.params,
       },
       messages: [response],
+      steps: [
+        {
+          node: "Diagnostician" as const,
+          label: "Diagnosticando fallo",
+          durationMs,
+          summary: `Abandona: ${parsed.reason}`,
+        },
+      ],
     };
   }
 
@@ -82,6 +109,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     },
     attempts: 1,
     messages: [],
+    steps: [
+      {
+        node: "Diagnostician" as const,
+        label: "Diagnosticando fallo",
+        durationMs,
+        summary: `Reintenta: ${parsed.reason}`,
+      },
+    ],
   };
 };
 

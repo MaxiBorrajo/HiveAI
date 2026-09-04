@@ -1,3 +1,5 @@
+import { API_URL } from "./config";
+
 export interface ApprovalPayload {
   kind: "approval";
   title: string;
@@ -15,7 +17,7 @@ export interface PendingInteraction {
 }
 
 export async function listPendingInteractions(): Promise<PendingInteraction[]> {
-  const response = await fetch("http://localhost:8000/interactions");
+  const response = await fetch(`${API_URL}/api/interactions`);
   return response.json();
 }
 
@@ -24,7 +26,7 @@ export async function resolveInteraction(
   decision: "approve" | "reject",
 ): Promise<void> {
   await fetch(
-    `http://localhost:8000/interactions/${encodeURIComponent(id)}/${decision}`,
+    `${API_URL}/api/interactions/${encodeURIComponent(id)}/${decision}`,
     { method: "POST" },
   );
 }

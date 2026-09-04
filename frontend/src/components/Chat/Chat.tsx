@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
 import { sendMessage } from "../../lib/send-message.ts";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
+import { InteractionDialog } from "./InteractionDialog.tsx";
 
 export function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -31,24 +33,72 @@ export function Chat() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsThinking(true);
+    setThinkingText("");
+
+    const agentMessageId = crypto.randomUUID();
+    let streamStarted = false;
 
     try {
-      const reply = await sendMessage(content);
-      setMessages((prev) => [...prev, reply]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "agent",
-          content:
-            error instanceof Error
-              ? `Could not get a response: ${error.message}`
-              : "Could not get a response from the agent.",
-          isError: true,
-          timestamp: Date.now(),
+      await sendMessage(content, {
+        onThinking: () => {},
+        onThinkingDelta: (delta) => {
+          setThinkingText((prev) => prev + delta);
         },
-      ]);
+        onToken: (token) => {
+          if (!streamStarted) {
+            streamStarted = true;
+            setIsThinking(false);
+            setThinkingText("");
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: agentMessageId,
+                role: "agent",
+                content: token,
+                timestamp: Date.now(),
+              },
+            ]);
+            return;
+          }
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === agentMessageId
+                ? { ...message, content: message.content + token }
+                : message,
+            ),
+          );
+        },
+        onDone: (finalContent, usedTools, steps) => {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === agentMessageId
+                ? { ...message, content: finalContent, usedTools, steps }
+                : message,
+            ),
+          );
+        },
+        onError: (errorMessage) => {
+          throw new Error(errorMessage);
+        },
+      });
+    } catch (error) {
+      setMessages((prev) => {
+        const withoutPartial = prev.filter((m) => m.id !== agentMessageId);
+        return [
+          ...withoutPartial,
+          {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content:
+              error instanceof Error
+                ? `Could not get a response: ${error.message}`
+                : "Could not get a response from the agent.",
+            isError: true,
+            timestamp: Date.now(),
+          },
+        ];
+      });
     } finally {
       setIsThinking(false);
       setThinkingText("");
@@ -90,8 +140,13 @@ export function Chat() {
                 ))}
 
                 {isThinking && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-1.5">
                     <Skeleton className="h-4 w-48" />
+                    {thinkingText && (
+                      <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-xs italic opacity-60">
+                        {thinkingText}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -116,6 +171,7 @@ export function Chat() {
           </>
         )}
       </div>
+      <InteractionDialog />
     </div>
   );
 }
@@ -133,7 +189,11 @@ function ChatMessage({ message }: { message: Message }) {
               : "text-foreground leading-relaxed"
           }`}
         >
-          {message.content}
+          {message.isError ? (
+            message.content
+          ) : (
+            <MessageMarkdown content={message.content} />
+          )}
         </div>
         <div className="mt-1 flex items-center gap-1.5 text-[10px] opacity-50 justify-start">
           <span>

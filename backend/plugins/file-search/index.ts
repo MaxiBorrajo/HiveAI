@@ -267,53 +267,7 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       }
     };
 
-<<<<<<< HEAD
     const workers = Array.from({ length: MAX_CONCURRENCY }, worker);
-=======
-    const subDirs: string[] = [];
-
-    for (const entry of entries) {
-      if (matches.length >= maxResults) return;
-
-      const fullPath = join(dir, entry.name);
-
-      if (
-        entry.name.toLowerCase().includes(searchTerm) &&
-        !seen.has(fullPath)
-      ) {
-        seen.add(fullPath);
-        matches.push(fullPath);
-      }
-
-      if (entry.isDirectory && !EXCLUDED_DIR_NAMES.has(entry.name)) {
-        subDirs.push(fullPath);
-      }
-    }
-
-    await this.runWithConcurrency(subDirs, MAX_CONCURRENCY, (subDir) =>
-      this.searchDir(subDir, depth - 1, searchTerm, matches, seen, maxResults),
-    );
-  }
-
-  private async runWithConcurrency<T>(
-    items: T[],
-    limit: number,
-    task: (item: T) => Promise<void>,
-  ): Promise<void> {
-    let index = 0;
-
-    async function worker() {
-      while (index < items.length) {
-        const current = items[index++];
-        await task(current);
-      }
-    }
-
-    const workers = Array.from(
-      { length: Math.min(limit, items.length) },
-      worker,
-    );
->>>>>>> 8000f851ab2355e3c7187b0787f89964db82db5e
     await Promise.all(workers);
 
     return matches;
@@ -338,28 +292,11 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       }
     }
 
-<<<<<<< HEAD
     const matches = await this.searchDirs(
       roots,
       DEFAULT_MAX_DEPTH,
       searchTerm,
       maxResults,
-=======
-    const matches: string[] = [];
-    const seen = new Set<string>();
-
-    await Promise.all(
-      searchDirs.map((dir) =>
-        this.searchDir(
-          dir,
-          DEFAULT_MAX_DEPTH,
-          searchTerm,
-          matches,
-          seen,
-          maxResults,
-        ),
-      ),
->>>>>>> 8000f851ab2355e3c7187b0787f89964db82db5e
     );
 
     if (matches.length === 0) {

@@ -13,6 +13,7 @@ import {
 export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
   state,
 ) => {
+  const start = performance.now();
   const microkernel = HiveMicrokernel.getInstance();
 
   const AbstentionVerificatorResponse = z.object({
@@ -45,10 +46,20 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     suggestedTool?: string;
   }>(response.content as string);
 
+  const durationMs = performance.now() - start;
+
   if (!parsed || parsed.action === "confirm") {
     return {
       abstentionVerified: true,
       abstentionChallenged: false,
+      steps: [
+        {
+          node: "AbstentionVerificator" as const,
+          label: "Confirmando abstención",
+          durationMs,
+          summary: "Confirmó que no hace falta ninguna herramienta",
+        },
+      ],
     };
   }
 
@@ -61,6 +72,14 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     },
     attempts: 1,
     selectionAttempts: 1,
+    steps: [
+      {
+        node: "AbstentionVerificator" as const,
+        label: "Confirmando abstención",
+        durationMs,
+        summary: `Desafió la abstención: ${parsed.reason}`,
+      },
+    ],
   };
 };
 
