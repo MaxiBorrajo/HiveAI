@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Logo } from "@/components/logo/Logo";
+
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";

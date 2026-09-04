@@ -54,7 +54,7 @@ type FileSearchSchema = typeof schema;
 export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
   name = "file_search";
   description =
-    "Searches for a file or folder in the system by its name (or part of it) and returns the full path where it is located, if it exists. By default, it searches in the user's common folders (Desktop, Documents, Downloads, home folder); optionally, a specific folder can be provided to search in.";
+    "Searches for a file or folder in the system by its name (or part of it) and returns the full path where it is located, if it exists. By default, it searches in the user's common folders (Desktop, Documents, Downloads, home folder); optionally, a specific folder can be provided to search in. Substring to search for in file or folder names, for example 'report' or '.ts'. The search is case-insensitive and performs a partial match. Do NOT use glob patterns like '*.ts' — pass just 'ts' instead.";
 
   schema = schema;
 

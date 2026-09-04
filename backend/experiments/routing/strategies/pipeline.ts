@@ -2,7 +2,7 @@ import { ChatOllama } from "@langchain/ollama";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { AIMessage } from "@langchain/core/messages";
 import z from "zod";
-import {  PARAMETRIZADOR_PROMPT, SELECTOR_PROMPT } from "../constants.ts";
+import { PARAMETRIZADOR_PROMPT, SELECTOR_PROMPT } from "../constants.ts";
 import type { MockPlugin } from "../mock-plugins.ts";
 
 export interface PipelineResult {
@@ -17,7 +17,7 @@ export interface PipelineResult {
 const serializeCatalog = (catalog: MockPlugin[]) =>
   catalog
     .map(({ schema, ...rest }) =>
-      JSON.stringify({ ...rest, parameters: schema.toJSONSchema() })
+      JSON.stringify({ ...rest, parameters: schema.toJSONSchema() }),
     )
     .join("\n");
 
@@ -26,7 +26,7 @@ export async function pipelineCalling(
   model: string,
   catalog: MockPlugin[],
 ): Promise<PipelineResult> {
-  const possiblePlugins = [...catalog.map((c) => c.name), "NINGUNO_APLICA"];
+  const possiblePlugins = [...catalog.map((c) => c.name), "NONE"];
   const SelectorResponse = z.enum(possiblePlugins);
 
   const selectorModel = new ChatOllama({
@@ -40,9 +40,9 @@ export async function pipelineCalling(
   const selectorRaw = await selectorModel.invoke([
     new SystemMessage(SELECTOR_PROMPT),
     new HumanMessage(
-      `HERRAMIENTAS DISPONIBLES\n\n${
-        serializeCatalog(catalog)
-      }\n\nPEDIDO DEL USUARIO\n\n${query}`,
+      `HERRAMIENTAS DISPONIBLES\n\n${serializeCatalog(
+        catalog,
+      )}\n\nPEDIDO DEL USUARIO\n\n${query}`,
     ),
   ]);
 
@@ -61,7 +61,7 @@ export async function pipelineCalling(
     };
   }
 
-  if (selectedName === "NINGUNO_APLICA") {
+  if (selectedName === "NONE") {
     return {
       selectedName: null,
       params: null,
@@ -96,9 +96,9 @@ export async function pipelineCalling(
   const parametrizadorRaw = await parametrizadorModel.invoke([
     new SystemMessage(PARAMETRIZADOR_PROMPT),
     new HumanMessage(
-      `HERRAMIENTA SELECCIONADA\n\n${selectedPlugin.name}\n${selectedPlugin.description}\nParámetros:\n${
-        JSON.stringify(selectedPlugin.schema.toJSONSchema())
-      }\n\nPEDIDO DEL USUARIO\n\n${query}`,
+      `HERRAMIENTA SELECCIONADA\n\n${selectedPlugin.name}\n${selectedPlugin.description}\nParámetros:\n${JSON.stringify(
+        selectedPlugin.schema.toJSONSchema(),
+      )}\n\nPEDIDO DEL USUARIO\n\n${query}`,
     ),
   ]);
 

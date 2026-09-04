@@ -1,5 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HiveMind } from "./ai/strategy/SADER/graph.ts";
+// 1. Configuramos el Backend
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";

@@ -24,6 +24,8 @@ export interface Verdict {
   output_tokens: number;
   duration_ms: number;
   invocations: number;
+  attempts_final?: number;
+  selectorModel?: string | null;
 }
 
 /**
@@ -38,12 +40,13 @@ export interface Verdict {
 export function evaluate(
   result: NormalizedResult,
   query: RoutingQuery,
-  model:string,
+  model: string,
   catalog: MockPlugin[],
   strategy: string,
   catalog_size: number,
   run: number,
   strictDefaults: boolean = true,
+  selectorModel?: string,
 ): Verdict {
   let selection_correct = false;
 
@@ -57,7 +60,7 @@ export function evaluate(
 
   const hallucinated_plugin =
     result.selected_plugin !== null &&
-    result.selected_plugin !== "NINGUNO_APLICA" &&
+    result.selected_plugin !== "NONE" &&
     !catalog.some((p) => p.name === result.selected_plugin);
 
   let params_valid: boolean | null = null;
@@ -108,6 +111,8 @@ export function evaluate(
     output_tokens: result.output_tokens,
     duration_ms: result.duration_ms,
     invocations: result.invocations,
+    attempts_final: result.attempts_final,
+    selectorModel: selectorModel ?? null,
   };
 }
 

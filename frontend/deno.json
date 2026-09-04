@@ -1,3 +1,23 @@
 {
-  "nodeModulesDir": "auto"
+  "name": "HiveAI",
+  "nodeModulesDir": "auto",
+  "identifier": "com.hiveai.desktop",
+  "desktop": {
+    "app": {
+      "name": "HiveAI",
+
+      "icons": {
+        "macos": "./public/icons/app.icns",
+        "windows": "./public/icons/app.ico",
+        "linux": "./public/icons/app.png"
+      },
+      "deepLinks": ["hiveai"]
+    },
+    "backend": "webview",
+    "output": {
+      "macos": "./dist/HiveAI.app",
+      "windows": "./dist/HiveAI",
+      "linux": "./dist/HiveAI.deb"
+    }
+  }
 }
