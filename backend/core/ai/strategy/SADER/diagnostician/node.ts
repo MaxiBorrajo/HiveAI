@@ -9,8 +9,10 @@ import {
   DIAGNOSTICIAN_SYSTEM_PROMPT,
   diagnosticianHumanPrompt,
 } from "./prompt.ts";
+import { MAX_ATTEMPTS } from "../constants.ts";
 
 export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
+  const start = performance.now();
   const microkernel = HiveMicrokernel.getInstance();
   const DiagnosticianResponse = z.object({
     action: z.enum(["retry", "giveUp"]),
@@ -22,8 +24,16 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
   if (!selectedPlugin) {
     return {
       giveUp: true,
-      correction: { tool: state.selectedTool, reason: "Plugin no encontrado." },
+      correction: { tool: state.selectedTool, reason: "Plugin not found." },
       messages: [],
+      steps: [
+        {
+          node: "Diagnostician" as const,
+          label: "Diagnosing failure",
+          durationMs: performance.now() - start,
+          summary: "Plugin not found",
+        },
+      ],
     };
   }
 
@@ -50,15 +60,25 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     reason: string;
   }>(response.content as string);
 
+  const durationMs = performance.now() - start;
+
   if (!parsed) {
     return {
       giveUp: true,
       correction: {
         tool: state.selectedTool,
-        reason: "El diagnosticador no devolvió una respuesta interpretable.",
+        reason: "The diagnostician did not return an interpretable response.",
         failedArgs: state.args.params,
       },
       messages: [],
+      steps: [
+        {
+          node: "Diagnostician" as const,
+          label: "Diagnosing failure",
+          durationMs,
+          summary: "Uninterpretable response, abandoning attempt",
+        },
+      ],
     };
   }
 
@@ -71,6 +91,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
         failedArgs: state.args.params,
       },
       messages: [response],
+      steps: [
+        {
+          node: "Diagnostician" as const,
+          label: "Diagnosing failure",
+          durationMs,
+          summary: `Giving up: ${parsed.reason}`,
+        },
+      ],
     };
   }
 
@@ -82,11 +110,19 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     },
     attempts: 1,
     messages: [],
+    steps: [
+      {
+        node: "Diagnostician" as const,
+        label: "Diagnosing failure",
+        durationMs,
+        summary: `Retrying: ${parsed.reason}`,
+      },
+    ],
   };
 };
 
 export const shouldRetry = (state: typeof HiveAIState.State) => {
   if (state.giveUp) return "HiveQueenResponder";
-  if (state.attempts > 1) return "HiveQueenResponder";
+  if (state.attempts > MAX_ATTEMPTS) return "HiveQueenResponder";
   return "Solver";
 };

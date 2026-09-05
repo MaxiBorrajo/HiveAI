@@ -29,7 +29,7 @@ type CounterSchema = typeof schema;
 export default class CounterPlugin implements BeePlugin<CounterSchema> {
   name = "counter";
   description =
-    "Keeps track of named counters that persist across sessions. Allows incrementing a counter, checking its value, or resetting it to zero.";
+    "Manages persistent named counters across sessions (increment, read, or reset). USE CASES: Use this when the user asks you to keep track of a tally, count occurrences of an event, remember how many times something happened over time, or check the current count of a previously tracked metric. Do NOT use this for simple math calculations, only for stateful counting.";
 
   schema = schema;
 

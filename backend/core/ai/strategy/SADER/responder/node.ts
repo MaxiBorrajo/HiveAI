@@ -15,10 +15,16 @@ import {
 export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   state,
 ) => {
+  const start = performance.now();
   const responder = new ChatOllama({
     model: state.model,
     think: false,
     temperature: 0.0,
+    // Caps generation length as a hard safety net: a local/quantized model
+    // can occasionally fall into a repetition loop and never emit a natural
+    // stop token, which would otherwise stream forever with nothing to cut
+    // it off.
+    numPredict: 1024,
   });
 
   const isNoToolNeeded =
@@ -59,14 +65,22 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
             systemPrompt: RESPONDER_SUCCESS_SYSTEM_PROMPT,
           };
 
-          console.log(prompts)
-
   const response = await responder.invoke([
     new SystemMessage(prompts.systemPrompt),
     new HumanMessage(prompts.humanPrompt),
   ]);
 
+  const durationMs = performance.now() - start;
+
   return {
     messages: [response],
+    steps: [
+      {
+        node: "HiveQueenResponder" as const,
+        label: "Drafting response",
+        durationMs,
+        summary: String(response.content).replace(/\s+/g, " ").trim().slice(0, 200),
+      },
+    ],
   };
 };

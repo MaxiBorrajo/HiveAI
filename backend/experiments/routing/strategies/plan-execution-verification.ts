@@ -98,7 +98,7 @@ async function invokeWithRetry<T>(
 
       const backoffMs = 2000 * attempt;
       console.warn(
-        `[${node}] intento ${attempt}/${maxAttempts} falló: ${error instanceof Error ? error.message : String(error)}. Reintentando en ${backoffMs}ms`,
+        `[${node}] attempt ${attempt}/${maxAttempts} failed: ${error instanceof Error ? error.message : String(error)}. Retrying in ${backoffMs}ms`,
       );
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
     }
@@ -236,7 +236,7 @@ export async function PEV(
         selectedTool: call.name,
         correction: {
           tool: call.name,
-          reason: `La herramienta "${call.name}" no existe en el catálogo de plugins disponibles.`,
+          reason: `The tool "${call.name}" does not exist in the available plugins catalog.`,
           failedArgs: call.args,
         },
         attempts: 1,

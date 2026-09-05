@@ -6,6 +6,7 @@ import { cors } from "hono/cors";
 import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { pluginsRouter } from "./modules/plugins/router.ts";
 import { chatsRouter } from "./modules/chats/router.ts";
+import { interactionsRouter } from "./modules/interactions/router.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -13,7 +14,7 @@ const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const MODEL = "qwen3:8b";
-const SELECTOR_MODEL = "lfm2.5";
+const SELECTOR_MODEL = "qwen3:8b";
 
 hive.configure({
   dataDir: join(homeDir, ".hiveai", "storage"),
@@ -55,34 +56,19 @@ app.use(
   }),
 );
 
-app.use(
-  "/plugins/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["content-type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
-  }),
-);
-
-app.use(
-  "/chat/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["content-type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
-  }),
-);
-
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/chat", chatsRouter);
+app.route("/api/interactions", interactionsRouter);
 
-app.route("/plugins", pluginsRouter);
-app.route("/chat", chatsRouter);
-
+// Serves the built frontend directly (packaged desktop app / production).
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 
 app.get("/", (c) => c.json("Welcome to HiveAI"));
 
+// A random free port avoids clashing with anything already running (or a
+// previous instance that didn't shut down cleanly). Written to
+// frontend/.env.local so the separate Vite dev server (used in local
+// development, alongside this same backend) knows which port to call.
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
 Deno.writeTextFileSync(

@@ -10,7 +10,7 @@ import type {
 
 const DEFAULT_MAX_DEPTH = 8;
 const DEFAULT_MAX_RESULTS = 20;
-const MAX_CONCURRENCY = 8;
+const MAX_CONCURRENCY = 32;
 
 const EXCLUDED_DIR_NAMES = new Set([
   "node_modules",
@@ -54,7 +54,7 @@ type FileSearchSchema = typeof schema;
 export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
   name = "file_search";
   description =
-    "Searches for a file or folder in the system by its name (or part of it) and returns the full path where it is located, if it exists. By default, it searches in the user's common folders (Desktop, Documents, Downloads, home folder); optionally, a specific folder can be provided to search in. Substring to search for in file or folder names, for example 'report' or '.ts'. The search is case-insensitive and performs a partial match. Do NOT use glob patterns like '*.ts' — pass just 'ts' instead.";
+    "Locates files and folders anywhere in the filesystem by matching partial names. USE CASES: Use this when the user asks to find a lost file, locate where a specific configuration or document is stored, or when you need the exact absolute path of a file before you can read it. It is optimized for substring matching (e.g., use 'config' instead of '*.config'). Do NOT use this tool if you already know the absolute path of the file.";
 
   schema = schema;
 
@@ -191,81 +191,90 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
 
   private getDefaultSearchDirs(): string[] {
     const home = homedir();
-    return [
-      join(home, "Desktop"),
-      join(home, "Documents"),
-      join(home, "Downloads"),
-      home,
-    ];
+    const dirs = [home];
+
+    const oneDrive =
+      Deno.env.get("OneDrive") ?? Deno.env.get("OneDriveConsumer");
+    if (oneDrive && oneDrive !== home) {
+      dirs.push(oneDrive);
+    }
+
+    return dirs;
   }
 
-  // Traverses `dir` in parallel (with bounded concurrency) looking for matches.
-  // `matches`/`seen` are shared among all branches to be able to cut off
-  // as soon as `maxResults` is reached, without each branch waiting for the others.
-  private async searchDir(
-    dir: string,
-    depth: number,
+  // Breadth-first search across all `roots` at once, using a single shared queue
+  // and a fixed pool of MAX_CONCURRENCY workers that live for the whole search.
+  // Unlike a per-directory recursive fan-out, this caps the number of directories
+  // being read at any given moment to a constant, regardless of how wide the tree
+  // is at any level — a directory with hundreds of subfolders can't spawn hundreds
+  // of concurrent Deno.readDir calls.
+  private async searchDirs(
+    roots: string[],
+    maxDepth: number,
     searchTerm: string,
-    matches: string[],
-    seen: Set<string>,
     maxResults: number,
-  ): Promise<void> {
-    if (depth < 0 || matches.length >= maxResults) return;
+  ): Promise<string[]> {
+    const matches: string[] = [];
+    const seen = new Set<string>();
 
-    let entries: Deno.DirEntry[];
-    try {
-      entries = [];
-      for await (const entry of Deno.readDir(dir)) {
-        entries.push(entry);
+    type QueueItem = { dir: string; depth: number };
+    const queue: QueueItem[] = roots.map((dir) => ({ dir, depth: maxDepth }));
+    let cursor = 0;
+    // Tracks workers currently mid-readDir: if it hits 0 while the queue is
+    // drained, the search is genuinely done (nothing left to ever enqueue).
+    // Without this, a worker that finds the queue temporarily empty would
+    // exit for good even though a sibling worker is about to enqueue more
+    // subdirectories for it to pick up.
+    let workersInFlight = 0;
+
+    const worker = async () => {
+      while (matches.length < maxResults) {
+        if (cursor >= queue.length) {
+          if (workersInFlight === 0) return;
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          continue;
+        }
+
+        const { dir, depth } = queue[cursor++];
+        if (depth < 0) continue;
+
+        workersInFlight++;
+        let entries: Deno.DirEntry[];
+        try {
+          entries = [];
+          for await (const entry of Deno.readDir(dir)) {
+            entries.push(entry);
+          }
+        } catch {
+          workersInFlight--;
+          continue;
+        }
+        workersInFlight--;
+
+        for (const entry of entries) {
+          if (matches.length >= maxResults) return;
+
+          const fullPath = join(dir, entry.name);
+
+          if (
+            entry.name.toLowerCase().includes(searchTerm) &&
+            !seen.has(fullPath)
+          ) {
+            seen.add(fullPath);
+            matches.push(fullPath);
+          }
+
+          if (entry.isDirectory && !EXCLUDED_DIR_NAMES.has(entry.name)) {
+            queue.push({ dir: fullPath, depth: depth - 1 });
+          }
+        }
       }
-    } catch {
-      return;
-    }
+    };
 
-    const subDirs: string[] = [];
-
-    for (const entry of entries) {
-      if (matches.length >= maxResults) return;
-
-      const fullPath = join(dir, entry.name);
-
-      if (
-        entry.name.toLowerCase().includes(searchTerm) &&
-        !seen.has(fullPath)
-      ) {
-        seen.add(fullPath);
-        matches.push(fullPath);
-      }
-
-      if (entry.isDirectory && !EXCLUDED_DIR_NAMES.has(entry.name)) {
-        subDirs.push(fullPath);
-      }
-    }
-
-    await this.runWithConcurrency(subDirs, MAX_CONCURRENCY, (subDir) =>
-      this.searchDir(subDir, depth - 1, searchTerm, matches, seen, maxResults),
-    );
-  }
-
-  private async runWithConcurrency<T>(
-    items: T[],
-    limit: number,
-    task: (item: T) => Promise<void>,
-  ): Promise<void> {
-    let index = 0;
-
-    async function worker() {
-      while (index < items.length) {
-        const current = items[index++];
-        await task(current);
-      }
-    }
-
-    const workers = Array.from(
-      { length: Math.min(limit, items.length) },
-      worker,
-    );
+    const workers = Array.from({ length: MAX_CONCURRENCY }, worker);
     await Promise.all(workers);
+
+    return matches;
   }
 
   async process(input: z.infer<FileSearchSchema>): Promise<string> {
@@ -277,7 +286,7 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
     const { name, folder, maxResults } = parsed.data;
     const searchTerm = name.toLowerCase();
 
-    const searchDirs = folder ? [folder] : this.getDefaultSearchDirs();
+    const roots = folder ? [folder] : this.getDefaultSearchDirs();
 
     if (folder) {
       try {
@@ -287,26 +296,17 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       }
     }
 
-    const matches: string[] = [];
-    const seen = new Set<string>();
-
-    await Promise.all(
-      searchDirs.map((dir) =>
-        this.searchDir(
-          dir,
-          DEFAULT_MAX_DEPTH,
-          searchTerm,
-          matches,
-          seen,
-          maxResults,
-        ),
-      ),
+    const matches = await this.searchDirs(
+      roots,
+      DEFAULT_MAX_DEPTH,
+      searchTerm,
+      maxResults,
     );
 
     if (matches.length === 0) {
       const where = folder
         ? `in the folder '${folder}'`
-        : "in the user's common folders (Desktop, Documents, Downloads, home)";
+        : "in the user's home folder (including Desktop, Documents, Downloads, etc.)";
       return `No file or folder matching '${name}' was found ${where}.`;
     }
 

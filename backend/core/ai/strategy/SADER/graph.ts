@@ -7,6 +7,7 @@ import {
   ReducedValue,
 } from "@langchain/langgraph";
 import z from "zod";
+import { HiveMicrokernel } from "../../../microkernel/hive-microkernel.ts";
 import {
   AbstentionVerificator,
   shouldConfirmAbstention,
@@ -16,11 +17,31 @@ import { Executor, shouldDiagnose } from "./executor/node.ts";
 import { HiveQueenResponder } from "./responder/node.ts";
 import { shouldRespond, Solver } from "./solver/node.ts";
 
+const ChatStepSchema = z.object({
+  node: z.enum([
+    "Solver",
+    "AbstentionVerificator",
+    "Executor",
+    "Diagnostician",
+    "HiveQueenResponder",
+    "Plugin",
+  ]),
+  label: z.string(),
+  durationMs: z.number(),
+  summary: z.string(),
+});
+export type ChatStep = z.infer<typeof ChatStepSchema>;
+
+const StepsValue = new ReducedValue(z.array(ChatStepSchema).default([]), {
+  reducer: (current, next) => [...current, ...next],
+});
+
 export const HiveAIState = new StateSchema({
   messages: MessagesValue,
   currentPrompt: z.string(),
   selectorModel: z.string(),
   model: z.string(),
+  steps: StepsValue,
   attempts: new ReducedValue(z.number().default(0), {
     reducer: (x: number, y: number) => x + y,
   }),
@@ -54,13 +75,32 @@ export const HiveAIState = new StateSchema({
   giveUp: z.boolean().default(false),
 });
 
+// Marks the turn as "no tool needed" without ever invoking the Solver —
+// used when there are no active plugins, so HiveQueenResponder takes the
+// same "answer from general knowledge" path it would take if the Solver
+// itself had decided no tool applies.
+const NoToolNeeded = () => ({
+  selectedTool: "NONE",
+  abstentionVerified: true,
+});
+
+// Skips the Solver entirely when there are no active plugins to choose
+// from — there's nothing for it to decide, so invoking it would just be an
+// LLM call that always comes back empty.
+const hasActivePlugins = () =>
+  HiveMicrokernel.getInstance().getTools().length > 0
+    ? "Solver"
+    : "NoToolNeeded";
+
 export const HiveMind = new StateGraph(HiveAIState)
   .addNode("Solver", Solver)
+  .addNode("NoToolNeeded", NoToolNeeded)
   .addNode("AbstentionVerificator", AbstentionVerificator)
   .addNode("Executor", Executor)
   .addNode("Diagnostician", Diagnostician)
   .addNode("HiveQueenResponder", HiveQueenResponder)
-  .addEdge(START, "Solver")
+  .addConditionalEdges(START, hasActivePlugins, ["Solver", "NoToolNeeded"])
+  .addEdge("NoToolNeeded", "HiveQueenResponder")
   .addConditionalEdges("Solver", shouldRespond, [
     "HiveQueenResponder",
     "AbstentionVerificator",

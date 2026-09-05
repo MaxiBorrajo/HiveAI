@@ -1,0 +1,323 @@
+import { z } from "zod";
+import { dirname, join } from "node:path";
+import type {
+  BeeContext,
+  BeePlugin,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
+
+const MAX_CONTENT_CHARS = 50_000;
+
+// Native filesystem operations (create/write/copy/move/mkdir), implemented directly
+// with Deno's fs APIs instead of spawning external processes. This avoids the
+// portability problems of commands like `touch` (no reliable equivalent on stock
+// Windows) and needs no human approval like run_shell does: no shell interpreter
+// is ever involved, so there is no injection surface to defend against.
+// Deletion is intentionally not supported by this plugin.
+
+type Operation = "create" | "write" | "touch" | "mkdir" | "copy" | "move";
+
+const schema = z.object({
+  operation: z
+    .enum(["create", "write", "touch", "mkdir", "copy", "move"])
+    .describe(
+      "The operation to perform: 'create' (new file, fails if exists), 'write' (create or overwrite), 'touch' (empty file or timestamp update), 'mkdir', 'copy', or 'move'.",
+    ),
+  path: z
+    .string()
+    .describe(
+      "Absolute path of the target file or folder. For 'copy'/'move', this is the source path.",
+    ),
+  destination: z
+    .string()
+    .optional()
+    .describe("Absolute destination path. Required for 'copy' and 'move'."),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      "Text content to write. Used by 'create' and 'write'. If omitted, an empty file is created.",
+    ),
+});
+
+type FileOpsSchema = typeof schema;
+
+export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
+  name = "file_ops";
+  description =
+    "Performs destructive and constructive filesystem operations (create, write, touch, mkdir, copy, move). USE CASES: Use this when the user explicitly requests to create new files, write code or text to disk, duplicate folders, or reorganize the directory structure. Always prefer this tool over shell commands for simple file manipulation to ensure cross-platform safety. Note: This tool does not support file deletion.";
+
+  schema = schema;
+
+  selectionTests: SelectionTestCase<FileOpsSchema>[] = [
+    // 3 Positive
+    {
+      query: "create a file called notes.txt with the text 'hello world'",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "make a new folder called reports in my documents",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "move report.pdf from Downloads to Documents",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    // 3 Negative
+    {
+      query: "what time is it?",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "search for a file called invoice.pdf",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "read the contents of README.md",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 3 Ambiguous
+    {
+      query: "delete the old logs folder",
+      kind: "ambiguous",
+    },
+    {
+      query: "duplicate my project folder",
+      kind: "ambiguous",
+    },
+    {
+      query: "update the timestamp on config.json",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<FileOpsSchema>[] = [
+    // 3 Happy
+    {
+      description: "Create a new file with content",
+      kind: "happy",
+      params: {
+        operation: "create",
+        path: join(Deno.cwd(), ".test-file-ops-happy1.txt"),
+        content: "hello",
+      },
+      expect: (output: string) => output.includes("Created file"),
+    },
+    {
+      description: "Write content to an existing file",
+      kind: "happy",
+      params: {
+        operation: "write",
+        path: join(Deno.cwd(), ".test-file-ops-happy2.txt"),
+        content: "overwritten",
+      },
+      expect: (output: string) => output.includes("Wrote"),
+    },
+    {
+      description: "Create a folder",
+      kind: "happy",
+      params: {
+        operation: "mkdir",
+        path: join(Deno.cwd(), ".test-file-ops-happy-dir"),
+      },
+      expect: (output: string) => output.includes("Created folder"),
+    },
+    // 3 Edge
+    {
+      description: "Touch a non-existent file creates it",
+      kind: "edge",
+      params: {
+        operation: "touch",
+        path: join(Deno.cwd(), ".test-file-ops-edge-touch.txt"),
+      },
+      expect: (output: string) =>
+        output.includes("Created file") || output.includes("Updated timestamp"),
+    },
+    {
+      description: "Write with no content produces an empty file",
+      kind: "edge",
+      params: {
+        operation: "write",
+        path: join(Deno.cwd(), ".test-file-ops-edge-empty.txt"),
+      },
+      expect: (output: string) => output.includes("Wrote 0 chars"),
+    },
+    {
+      description: "Mkdir on an already-existing folder succeeds (recursive)",
+      kind: "edge",
+      params: { operation: "mkdir", path: Deno.cwd() },
+      expect: (output: string) => output.includes("Created folder"),
+    },
+    // 3 Error
+    {
+      description: "Copy without a destination fails clearly",
+      kind: "error",
+      params: {
+        operation: "copy",
+        path: join(Deno.cwd(), "deno.json"),
+      },
+      expect: (output: string) => output.includes("'destination' is required"),
+    },
+    {
+      description: "Create on an already-existing file fails clearly",
+      kind: "error",
+      params: { operation: "create", path: join(Deno.cwd(), "deno.json") },
+      expect: (output: string) => output.includes("already exists"),
+    },
+    {
+      description: "Missing required operation property",
+      kind: "error",
+      params: {
+        operation: undefined as unknown as Operation,
+        path: Deno.cwd(),
+      },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+  ];
+
+  get testCases() {
+    return this.selectionTests;
+  }
+
+  initialize(_context: BeeContext): void {}
+
+  private async ensureParentDir(path: string): Promise<void> {
+    await Deno.mkdir(dirname(path), { recursive: true });
+  }
+
+  private async copyRecursive(
+    source: string,
+    destination: string,
+  ): Promise<void> {
+    await Deno.mkdir(destination, { recursive: true });
+    for await (const entry of Deno.readDir(source)) {
+      const srcPath = join(source, entry.name);
+      const destPath = join(destination, entry.name);
+      if (entry.isDirectory) {
+        await this.copyRecursive(srcPath, destPath);
+      } else {
+        await Deno.copyFile(srcPath, destPath);
+      }
+    }
+  }
+
+  async process(input: z.infer<FileOpsSchema>): Promise<string> {
+    const parsed = this.schema.safeParse(input);
+    if (!parsed.success) {
+      return `The provided parameters are invalid. Error: ${parsed.error.message}`;
+    }
+
+    const { operation, path, destination, content } = parsed.data as {
+      operation: Operation;
+      path: string;
+      destination?: string;
+      content?: string;
+    };
+
+    if (content != null && content.length > MAX_CONTENT_CHARS) {
+      return `The provided content is too large (${content.length} chars). Maximum allowed is ${MAX_CONTENT_CHARS}.`;
+    }
+
+    console.log(
+      `[file-ops] 🐝 Requested '${operation}' on '${path}'${destination ? ` -> '${destination}'` : ""}`,
+    );
+
+    try {
+      switch (operation) {
+        case "create": {
+          await this.ensureParentDir(path);
+          const file = await Deno.open(path, { write: true, createNew: true });
+          file.close();
+          if (content) {
+            await Deno.writeTextFile(path, content);
+          }
+          return `Created file: ${path}`;
+        }
+
+        case "write": {
+          await this.ensureParentDir(path);
+          await Deno.writeTextFile(path, content ?? "");
+          return `Wrote ${(content ?? "").length} chars to: ${path}`;
+        }
+
+        case "touch": {
+          await this.ensureParentDir(path);
+          try {
+            const stat = await Deno.stat(path);
+            if (stat.isDirectory) {
+              return `Error: '${path}' is a directory, not a file.`;
+            }
+            const now = new Date();
+            await Deno.utime(path, now, now);
+            return `Updated timestamp: ${path}`;
+          } catch {
+            const file = await Deno.open(path, {
+              write: true,
+              createNew: true,
+            });
+            file.close();
+            return `Created file: ${path}`;
+          }
+        }
+
+        case "mkdir": {
+          await Deno.mkdir(path, { recursive: true });
+          return `Created folder: ${path}`;
+        }
+
+        case "copy": {
+          if (!destination) {
+            return "Error: 'destination' is required for the 'copy' operation.";
+          }
+          const stat = await Deno.stat(path);
+          if (stat.isDirectory) {
+            await this.copyRecursive(path, destination);
+            return `Copied folder '${path}' to '${destination}'`;
+          }
+          await this.ensureParentDir(destination);
+          await Deno.copyFile(path, destination);
+          return `Copied '${path}' to '${destination}'`;
+        }
+
+        case "move": {
+          if (!destination) {
+            return "Error: 'destination' is required for the 'move' operation.";
+          }
+          await this.ensureParentDir(destination);
+          try {
+            await Deno.rename(path, destination);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            if (
+              error instanceof Deno.errors.NotSupported ||
+              /EXDEV/i.test(message)
+            ) {
+              return `Error: Cannot move '${path}' to '${destination}' because they are on different drives/filesystems. Use run_shell to copy and then delete the source instead.`;
+            }
+            throw error;
+          }
+          return `Moved '${path}' to '${destination}'`;
+        }
+      }
+    } catch (error) {
+      if (error instanceof Deno.errors.AlreadyExists) {
+        return `Error: '${path}' already exists. Use 'write' to overwrite it.`;
+      }
+      if (error instanceof Deno.errors.NotFound) {
+        return `Error: '${path}' does not exist or is not accessible.`;
+      }
+      const detail = error instanceof Error ? error.message : String(error);
+      return `An error occurred during '${operation}': ${detail}`;
+    }
+  }
+}

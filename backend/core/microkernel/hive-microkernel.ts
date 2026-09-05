@@ -11,6 +11,8 @@ import type {
   SelectionTestCase,
 } from "./bee-plugin.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
+import { humanInteractionQueue } from "./human-interaction.ts";
+import { reportPluginStep } from "./step-capture.ts";
 import { tool } from "@langchain/core/tools";
 
 const REQUIRED_FIELDS = [
@@ -18,7 +20,8 @@ const REQUIRED_FIELDS = [
   "description",
   "schema",
   "process",
-  "testCases",
+  "selectionTests",
+  "executionTests"
 ] as const;
 
 export interface TestSuiteQualityReport {
@@ -68,6 +71,16 @@ export class HiveMicrokernel {
     return {
       getDataDir: () => join(this.config.get("dataDir"), "plugins", pluginName),
       getModel: () => this.config.get("model"),
+      requestApproval: (title, description, details) => {
+        const { wait } = humanInteractionQueue.requestApproval(pluginName, {
+          kind: "approval",
+          title,
+          description,
+          details,
+        });
+        return wait;
+      },
+      reportStep: (label) => reportPluginStep(label),
     };
   }
 
@@ -97,7 +110,7 @@ export class HiveMicrokernel {
     this.plugins.set(beePlugin.name, beePlugin);
   }
 
-  validatePlugin(beePlugin: BeePlugin<z.ZodObject<any, any>>) {
+  validatePlugin(beePlugin: BeePlugin<z.ZodType>) {
     const selectionResults = this.validateSelectionTests(
       beePlugin.selectionTests,
     );
@@ -138,7 +151,7 @@ export class HiveMicrokernel {
     }
   }
 
-  validateExecutionTests<S extends z.ZodObject<any, any>>(
+  validateExecutionTests<S extends z.ZodType = z.ZodType>(
     schema: S,
     tests: ExecutionTestCase<S>[] = [],
   ): TestSuiteQualityReport {
@@ -293,7 +306,7 @@ export class HiveMicrokernel {
   private transformToTool(
     plugin: BeePlugin,
   ): import("@langchain/core/tools").DynamicStructuredTool<
-    z.ZodObject<z.core.$ZodLooseShape, z.core.$strip>,
+    z.ZodType,
     Record<string, unknown>,
     Record<string, unknown>,
     string,
