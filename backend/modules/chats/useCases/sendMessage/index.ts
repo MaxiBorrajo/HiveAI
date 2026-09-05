@@ -1,9 +1,4 @@
-import {
-  AIMessage,
-  HumanMessage,
-  type BaseMessage,
-  ToolMessage,
-} from "@langchain/core/messages";
+import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 import {
@@ -16,9 +11,12 @@ let chatHistory: BaseMessage[] = [];
 
 // Streams the final answer token-by-token via Server-Sent Events, instead of
 // waiting for the whole graph run to finish. LangGraph's "messages" stream
-// mode emits every token from every LLM-backed node (Solver/AbstentionVerificator/
-// Diagnostician included), so we filter to only forward tokens coming from the
-// HiveQueenResponder node — the only one that produces user-facing text.
+// mode emits every token from every LLM-backed node. Only HiveQueenResponder
+// produces user-facing text, so "token" is filtered to that node — but
+// reasoning ("thinking_delta") is forwarded from ANY node, since
+// HiveQueenResponder itself runs with think: false (it never reasons) while
+// AbstentionVerificator/Diagnostician do think — that's the actual "thinking"
+// the user sees a delay for, and it would otherwise be silently dropped.
 export function handleChat(
   hive: HiveMicrokernel,
   model: string,
@@ -54,7 +52,6 @@ export function handleChat(
             .join(", ")}]`,
         );
 
-        const turnStart = chatHistory.length;
         chatHistory.push(new HumanMessage(userText));
 
         // Solver/Executor/Diagnostician can take a while before
@@ -89,12 +86,13 @@ export function handleChat(
 
           if (mode === "messages") {
             const [message, metadata] = payload;
-            if (metadata.langgraph_node !== "HiveQueenResponder") continue;
 
             const reasoningChunk = message.additional_kwargs?.reasoning_content;
             if (reasoningChunk) {
               send("thinking_delta", { content: reasoningChunk });
             }
+
+            if (metadata.langgraph_node !== "HiveQueenResponder") continue;
 
             const chunkText = String(message.content ?? "");
             if (!chunkText) continue;
@@ -111,16 +109,15 @@ export function handleChat(
 
         chatHistory.push(new AIMessage(fullContent));
 
-        // Tools used during this turn (starting from the user's message)
+        // Tools used during this turn. The Executor's ToolMessage lives in
+        // the graph's own internal state (state.messages), never copied into
+        // chatHistory — the accumulated step log is what actually reflects
+        // which tools ran, via each "Executor" step's label (the tool name).
         const usedTools = Array.from(
           new Set(
-            chatHistory
-              .slice(turnStart)
-              .filter((message): message is ToolMessage =>
-                ToolMessage.isInstance(message),
-              )
-              .map((message) => message.name)
-              .filter((name): name is string => Boolean(name)),
+            steps
+              .filter((step) => step.node === "Executor")
+              .map((step) => step.label),
           ),
         );
 

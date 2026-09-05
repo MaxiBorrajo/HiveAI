@@ -4,7 +4,11 @@ import type { Plugin } from "@/types/plugin";
 import { PluginsMenu } from "./PluginsMenu";
 import { PluginsModal } from "./PluginsModal";
 
-export function PluginsManager() {
+interface PluginsManagerProps {
+  forceOpenDownward?: boolean;
+}
+
+export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -34,6 +38,7 @@ export function PluginsManager() {
         plugins={plugins}
         onToggle={togglePlugin}
         onOpenManage={() => setIsModalOpen(true)}
+        forceOpenDownward={forceOpenDownward}
       />
       <PluginsModal
         isOpen={isModalOpen}

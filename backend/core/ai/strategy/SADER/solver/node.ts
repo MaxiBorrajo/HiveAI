@@ -11,7 +11,7 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
 
   const selectorModel = new ChatOllama({
     model: state.selectorModel,
-    think: false,
+    think: true,
     temperature: 0,
   });
 

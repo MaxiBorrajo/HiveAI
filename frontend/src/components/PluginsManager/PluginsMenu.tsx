@@ -15,12 +15,19 @@ interface PluginsMenuProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onOpenManage: () => void;
+  // The trigger sits mid-screen in the empty-chat welcome layout, where
+  // Base UI's automatic flip miscalculates and opens the menu upward even
+  // though there's real space below. Force it downward only in that layout;
+  // once there are messages the trigger sits at the bottom of the screen and
+  // needs the normal automatic flip (to open upward) to stay on-screen.
+  forceOpenDownward?: boolean;
 }
 
 export function PluginsMenu({
   plugins,
   onToggle,
   onOpenManage,
+  forceOpenDownward = false,
 }: PluginsMenuProps) {
   return (
     <DropdownMenu>
@@ -30,7 +37,13 @@ export function PluginsMenu({
       >
         <Blocks className="size-5" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        collisionAvoidance={forceOpenDownward ? { side: "none" } : undefined}
+        className="w-56"
+      >
         <DropdownMenuGroup>
           <DropdownMenuLabel>Quick Plugins</DropdownMenuLabel>
 
@@ -40,18 +53,20 @@ export function PluginsMenu({
             </div>
           ) : (
             plugins.map((plugin) => (
-              <DropdownMenuItem
-                key={plugin.id}
-                onClick={(e) => e.preventDefault()}
-              >
+              <DropdownMenuItem key={plugin.id} closeOnClick={false}>
                 <div className="flex flex-1 items-center justify-between gap-2">
                   <span className="text-sm font-mono truncate">
                     {plugin.name}
                   </span>
-                  <Switch
-                    checked={plugin.active}
-                    onCheckedChange={(checked) => onToggle(plugin, checked)}
-                  />
+                  <div
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Switch
+                      checked={plugin.active}
+                      onCheckedChange={(checked) => onToggle(plugin, checked)}
+                    />
+                  </div>
                 </div>
               </DropdownMenuItem>
             ))

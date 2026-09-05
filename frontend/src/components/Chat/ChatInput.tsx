@@ -7,6 +7,7 @@ interface ChatInputProps {
   setInput: (val: string) => void;
   isThinking: boolean;
   handleSend: () => void;
+  isEmpty?: boolean;
 }
 
 export function ChatInput({
@@ -14,6 +15,7 @@ export function ChatInput({
   setInput,
   isThinking,
   handleSend,
+  isEmpty,
 }: ChatInputProps) {
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -34,7 +36,7 @@ export function ChatInput({
       />
       <div className="mt-2 flex items-center justify-between">
         <div className="flex gap-2">
-          <PluginsManager />
+          <PluginsManager forceOpenDownward={isEmpty} />
         </div>
         <Button onClick={handleSend} disabled={isThinking || !input.trim()}>
           Send
