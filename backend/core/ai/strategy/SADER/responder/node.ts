@@ -11,6 +11,7 @@ import {
   responderOutOfAttemptsHumanPrompt,
   responderSuccessHumanPrompt,
 } from "./prompt.ts";
+import { MAX_ATTEMPTS } from "../constants.ts";
 
 export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   state,
@@ -30,7 +31,7 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   const isNoToolNeeded =
     state.selectedTool === "NONE" && state.abstentionVerified;
   const isUnrecoverableFailure = state.giveUp;
-  const outOfAttempts = state.attempts > 1;
+  const outOfAttempts = state.attempts > MAX_ATTEMPTS;
 
   const prompts = isNoToolNeeded
     ? {
