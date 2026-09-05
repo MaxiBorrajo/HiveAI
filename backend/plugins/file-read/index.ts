@@ -31,7 +31,7 @@ type FileReadSchema = typeof schema;
 export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
   name = "file_read";
   description =
-    "Reads the filesystem: 'list' shows the files and folders inside a directory, 'read' returns the text content of a file. Does not modify anything — use file_ops to create/write/copy/move.";
+    "Reads the filesystem: 'list' shows what's inside a folder (its files and subfolders), 'read' returns the text content of a file. Use this whenever the user wants to see, show, browse, or check what's inside/in a directory or folder, or read/open/view a file's contents. Does not modify anything — use file_ops to create/write/copy/move.";
 
   schema = schema;
 

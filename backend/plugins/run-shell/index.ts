@@ -9,9 +9,9 @@ import type {
 const MAX_OUTPUT_CHARS = 4000;
 
 // Real shell execution (bash / cmd / powershell), for anything that needs pipes,
-// redirection, chaining, or a command outside of file_ops' fixed set of operations
-// or execute_command's fixed whitelist. The model supplies a free-form command
-// string that IS interpreted by a shell. There is no process sandbox here (no
+// redirection, chaining, or a command outside of file_ops' fixed set of operations.
+// The model supplies a free-form command string that IS interpreted by a shell.
+// There is no process sandbox here (no
 // container, no restricted OS user), so the only real containment is a human
 // approving the exact command before it runs. Approval goes through
 // context.requestApproval() (from BeeContext), never a direct import of the
@@ -54,7 +54,7 @@ type RunShellSchema = typeof schema;
 export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   name = "run_shell";
   description =
-    "Runs a real shell command line (bash, cmd, or powershell), supporting pipelines, redirection, chaining, and any command the chosen shell supports — including things file_ops/file_read/file_search/execute_command can't do (e.g. piping, chaining, arbitrary CLI tools). Because it is not restricted to a fixed set of operations, every single invocation requires explicit human approval before it runs, and will wait (or fail if not approved in time).";
+    "Runs a real shell command line in bash, cmd, or powershell: system and CLI tasks like listing/sorting running processes, checking disk or memory usage, piping and chaining commands together, or any other command-line operation. Supports pipelines, redirection, and chaining. A human must approve the exact command before it runs (a brief wait), since it is not restricted to a fixed set of operations.";
 
   schema = schema;
 

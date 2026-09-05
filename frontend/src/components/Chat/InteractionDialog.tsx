@@ -74,11 +74,11 @@ export function InteractionDialog() {
         </DialogHeader>
 
         {payload?.details && (
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             {Object.entries(payload.details).map(([key, value]) => (
-              <div key={key}>
+              <div key={key} className="min-w-0">
                 {key === "command" ? (
-                  <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
+                  <pre className="max-h-40 min-w-0 overflow-y-auto whitespace-pre-wrap wrap-break-word rounded-md bg-muted p-3 font-mono text-xs">
                     {value}
                   </pre>
                 ) : (
