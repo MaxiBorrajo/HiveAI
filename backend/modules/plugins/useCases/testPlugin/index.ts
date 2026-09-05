@@ -1,6 +1,6 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { ZodObject } from "zod";
-import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
+import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type {
   BeePlugin,
   ExecutionTestCase,
@@ -12,7 +12,6 @@ import { homeDir } from "hive-ai";
 import { join } from "node:path";
 
 export async function handleTest(
-  hive: HiveMicrokernel,
   model: string,
   selectorModel: string,
   pluginName: string,
@@ -21,6 +20,8 @@ export async function handleTest(
   req: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
+  const hive = new HiveMicrokernel();
+  
   hive.configure({
     dataDir: join(homeDir!, ".hiveai", "tests"),
   });

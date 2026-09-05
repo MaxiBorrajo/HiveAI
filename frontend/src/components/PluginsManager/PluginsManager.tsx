@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getPlugins, setPluginActive } from "@/lib/get-plugins";
+import { getPlugins } from "../../lib/api/plugins/get-plugins.ts";
+import { setPluginActive } from "../../lib/api/plugins/set-plugin-active.ts";
 import type { Plugin } from "@/types/plugin";
 import { PluginsMenu } from "./PluginsMenu";
 import { PluginsModal } from "./PluginsModal";

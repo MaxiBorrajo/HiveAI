@@ -33,8 +33,7 @@ pluginsRouter.post("/:name/test/:type/:index", async (c) => {
   const name = c.req.param("name");
   const type = c.req.param("type") as "selection" | "execution";
   const index = parseInt(c.req.param("index"), 10);
-  return handleTest(
-    c.get("hive"),
+  return await handleTest(
     c.get("model"),
     c.get("selectorModel"),
     name,

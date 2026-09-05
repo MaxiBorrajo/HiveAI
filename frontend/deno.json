@@ -5,7 +5,6 @@
   "desktop": {
     "app": {
       "name": "HiveAI",
-
       "icons": {
         "macos": "./public/icons/app.icns",
         "windows": "./public/icons/app.ico",

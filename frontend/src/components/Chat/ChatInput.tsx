@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PluginsManager } from "../PluginsManager/PluginsManager.tsx";
+import { SendHorizontal } from "lucide-react";
+import { ModelsManager } from "../ModelsManager/ModelsManager.tsx";
 
 interface ChatInputProps {
   input: string;
@@ -35,9 +37,14 @@ export function ChatInput({
       <div className="mt-2 flex items-center justify-between">
         <div className="flex gap-2">
           <PluginsManager />
+          <ModelsManager />
         </div>
-        <Button onClick={handleSend} disabled={isThinking || !input.trim()}>
-          Send
+        <Button
+          onClick={handleSend}
+          disabled={isThinking || !input.trim()}
+          size="icon"
+        >
+          <SendHorizontal className="size-5" />
         </Button>
       </div>
     </div>

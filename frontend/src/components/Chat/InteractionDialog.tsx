@@ -8,11 +8,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  listPendingInteractions,
-  resolveInteraction,
-  type PendingInteraction,
-} from "@/lib/interactions";
+import { listPendingInteractions } from "../../lib/api/interactions/list-pending-interactions.ts";
+import { resolveInteraction } from "../../lib/api/interactions/resolve-interaction.ts";
+import type { PendingInteraction } from "@/types/interaction";
 
 const POLL_INTERVAL_MS = 1500;
 
@@ -99,7 +97,10 @@ export function InteractionDialog() {
           >
             Rechazar
           </Button>
-          <Button disabled={isResolving} onClick={() => handleDecision("approve")}>
+          <Button
+            disabled={isResolving}
+            onClick={() => handleDecision("approve")}
+          >
             Aprobar
           </Button>
         </DialogFooter>

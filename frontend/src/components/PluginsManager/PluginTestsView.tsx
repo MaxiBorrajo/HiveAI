@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, Square, Box, Clock, Coins } from "lucide-react";
 import type { Plugin } from "@/types/plugin";
-import { runPluginTest } from "@/lib/get-plugins";
+import { runPluginTest } from "../../lib/api/plugins/run-plugin-test.ts";
 import { TestCardItem } from "./TestCardItem";
 
 type TestStatus = "idle" | "running" | "success" | "error";

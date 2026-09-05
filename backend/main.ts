@@ -7,6 +7,7 @@ import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { pluginsRouter } from "./modules/plugins/router.ts";
 import { chatsRouter } from "./modules/chats/router.ts";
 import { interactionsRouter } from "./modules/interactions/router.ts";
+import { aiRouter } from "./modules/ai/router.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -83,9 +84,19 @@ app.use(
   }),
 );
 
+app.use(
+  "/ai/*",
+  cors({
+    origin: "*",
+    allowHeaders: ["content-type"],
+    allowMethods: ["GET", "PUT", "OPTIONS"],
+  }),
+);
+
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/chat", chatsRouter);
 app.route("/api/interactions", interactionsRouter);
+app.route("/api/ai", aiRouter);
 
 app.route("/plugins", pluginsRouter);
 app.route("/chat", chatsRouter);

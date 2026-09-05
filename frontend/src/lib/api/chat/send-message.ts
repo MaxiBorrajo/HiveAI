@@ -1,4 +1,8 @@
-import { API_URL } from "./config";
+/**
+ * Endpoint: POST /api/chat
+ * Descripción: Envía un mensaje al backend y procesa la respuesta en streaming (SSE), gestionando tokens de texto y estado de pensamiento del bot.
+ */
+import { API_URL } from "@/lib/config";
 import type { ChatStep } from "@/types/chat";
 
 interface StreamHandlers {
@@ -9,10 +13,6 @@ interface StreamHandlers {
   onError: (message: string) => void;
 }
 
-// Parses the backend's SSE stream (event: <name>\ndata: <json>\n\n blocks) as
-// it arrives, instead of waiting for response.json(). fetch's ReadableStream
-// gives us raw bytes in arbitrary chunk boundaries, so events are buffered
-// until a full "\n\n"-terminated block is available.
 export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
@@ -56,7 +56,11 @@ export async function sendMessage(
       } else if (eventName === "token") {
         handlers.onToken(payload.content);
       } else if (eventName === "done") {
-        handlers.onDone(payload.content, payload.usedTools ?? [], payload.steps ?? []);
+        handlers.onDone(
+          payload.content,
+          payload.usedTools ?? [],
+          payload.steps ?? [],
+        );
       } else if (eventName === "error") {
         handlers.onError(payload.message);
       }

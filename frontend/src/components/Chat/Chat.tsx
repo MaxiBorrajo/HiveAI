@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
-import { sendMessage } from "../../lib/send-message.ts";
+import { sendMessage } from "../../lib/api/chat/send-message.ts";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
@@ -233,7 +233,9 @@ function MessageMarkdown({ content }: { content: string }) {
     <div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
       <ReactMarkdown
         components={{
-          p: ({ children }) => <p className="my-1.5 leading-relaxed">{children}</p>,
+          p: ({ children }) => (
+            <p className="my-1.5 leading-relaxed">{children}</p>
+          ),
           ul: ({ children }) => (
             <ul className="my-1.5 list-disc space-y-0.5 pl-5">{children}</ul>
           ),
@@ -241,7 +243,9 @@ function MessageMarkdown({ content }: { content: string }) {
             <ol className="my-1.5 list-decimal space-y-0.5 pl-5">{children}</ol>
           ),
           li: ({ children }) => <li>{children}</li>,
-          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          strong: ({ children }) => (
+            <strong className="font-semibold">{children}</strong>
+          ),
           em: ({ children }) => <em className="italic">{children}</em>,
           code: ({ children, className }) =>
             className ? (
