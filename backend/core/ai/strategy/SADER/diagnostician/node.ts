@@ -23,14 +23,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
   if (!selectedPlugin) {
     return {
       giveUp: true,
-      correction: { tool: state.selectedTool, reason: "Plugin no encontrado." },
+      correction: { tool: state.selectedTool, reason: "Plugin not found." },
       messages: [],
       steps: [
         {
           node: "Diagnostician" as const,
-          label: "Diagnosticando fallo",
+          label: "Diagnosing failure",
           durationMs: performance.now() - start,
-          summary: "Plugin no encontrado",
+          summary: "Plugin not found",
         },
       ],
     };
@@ -66,16 +66,16 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
       giveUp: true,
       correction: {
         tool: state.selectedTool,
-        reason: "El diagnosticador no devolvió una respuesta interpretable.",
+        reason: "The diagnostician did not return an interpretable response.",
         failedArgs: state.args.params,
       },
       messages: [],
       steps: [
         {
           node: "Diagnostician" as const,
-          label: "Diagnosticando fallo",
+          label: "Diagnosing failure",
           durationMs,
-          summary: "Respuesta no interpretable, se abandona el intento",
+          summary: "Uninterpretable response, abandoning attempt",
         },
       ],
     };
@@ -93,9 +93,9 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
       steps: [
         {
           node: "Diagnostician" as const,
-          label: "Diagnosticando fallo",
+          label: "Diagnosing failure",
           durationMs,
-          summary: `Abandona: ${parsed.reason}`,
+          summary: `Giving up: ${parsed.reason}`,
         },
       ],
     };
@@ -112,9 +112,9 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     steps: [
       {
         node: "Diagnostician" as const,
-        label: "Diagnosticando fallo",
+        label: "Diagnosing failure",
         durationMs,
-        summary: `Reintenta: ${parsed.reason}`,
+        summary: `Retrying: ${parsed.reason}`,
       },
     ],
   };

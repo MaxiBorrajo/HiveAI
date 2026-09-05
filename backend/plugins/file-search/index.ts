@@ -54,7 +54,7 @@ type FileSearchSchema = typeof schema;
 export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
   name = "file_search";
   description =
-    "Searches for a file or folder in the system by its name (or part of it) and returns the full path where it is located, if it exists. By default, it searches in the user's common folders (Desktop, Documents, Downloads, home folder); optionally, a specific folder can be provided to search in. Substring to search for in file or folder names, for example 'report' or '.ts'. The search is case-insensitive and performs a partial match. Do NOT use glob patterns like '*.ts' — pass just 'ts' instead.";
+    "Locates files and folders anywhere in the filesystem by matching partial names. USE CASES: Use this when the user asks to find a lost file, locate where a specific configuration or document is stored, or when you need the exact absolute path of a file before you can read it. It is optimized for substring matching (e.g., use 'config' instead of '*.config'). Do NOT use this tool if you already know the absolute path of the file.";
 
   schema = schema;
 
@@ -193,7 +193,8 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
     const home = homedir();
     const dirs = [home];
 
-    const oneDrive = Deno.env.get("OneDrive") ?? Deno.env.get("OneDriveConsumer");
+    const oneDrive =
+      Deno.env.get("OneDrive") ?? Deno.env.get("OneDriveConsumer");
     if (oneDrive && oneDrive !== home) {
       dirs.push(oneDrive);
     }
@@ -255,7 +256,10 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
 
           const fullPath = join(dir, entry.name);
 
-          if (entry.name.toLowerCase().includes(searchTerm) && !seen.has(fullPath)) {
+          if (
+            entry.name.toLowerCase().includes(searchTerm) &&
+            !seen.has(fullPath)
+          ) {
             seen.add(fullPath);
             matches.push(fullPath);
           }

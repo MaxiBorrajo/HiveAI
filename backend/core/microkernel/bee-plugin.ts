@@ -21,9 +21,7 @@ export interface BeeContext {
 
 export type SelectionCaseKind = "positive" | "negative" | "ambiguous";
 
-export interface SelectionTestCase<
-  S extends z.ZodObject<any, any> = z.ZodObject<any, any>,
-> {
+export interface SelectionTestCase<S extends z.ZodType = z.ZodType> {
   query: string;
   kind: SelectionCaseKind;
   shouldInvoke?: boolean;
@@ -32,16 +30,14 @@ export interface SelectionTestCase<
 
 export type ExecutionTestKind = "happy" | "edge" | "error";
 
-export interface ExecutionTestCase<S extends z.ZodObject<any, any>> {
+export interface ExecutionTestCase<S extends z.ZodType = z.ZodType> {
   description: string;
   kind: ExecutionTestKind;
   params: z.infer<S>;
   expect: (output: string) => boolean;
 }
 
-export interface BeePlugin<
-  S extends z.ZodObject<any, any> = z.ZodObject<any, any>,
-> {
+export interface BeePlugin<S extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   schema: S;

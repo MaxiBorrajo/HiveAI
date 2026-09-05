@@ -63,7 +63,7 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
           node: "Executor" as const,
           label: state.selectedTool,
           durationMs: 0,
-          summary: "No existe esa herramienta en la colmena",
+          summary: "That tool does not exist in the hive",
         },
       ],
     };

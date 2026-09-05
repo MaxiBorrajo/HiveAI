@@ -6,8 +6,8 @@ import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { parseModelJSON } from "../../utils.ts";
 import { HiveAIState } from "../graph.ts";
 import {
-  ABSTENTION_VERIFICATOR_SYSTEM_PROMPT,
   abstentionVerificatorHumanPrompt,
+  buildAbstentionVerificatorSystemPrompt,
 } from "./prompt.ts";
 
 export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
@@ -34,17 +34,21 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
   });
 
   const response = await verificatorModel.invoke([
-    new SystemMessage(ABSTENTION_VERIFICATOR_SYSTEM_PROMPT),
+    new SystemMessage(buildAbstentionVerificatorSystemPrompt()),
     new HumanMessage(
       abstentionVerificatorHumanPrompt(state.currentPrompt, catalogSummary),
     ),
   ]);
+
+  console.log("RAW VERIFICATOR RESPONSE:", JSON.stringify(response.content));
 
   const parsed = parseModelJSON<{
     action: "confirm" | "challenge";
     reason: string;
     suggestedTool?: string;
   }>(response.content as string);
+
+  console.log("PARSED VERIFICATOR RESULT:", parsed);
 
   const durationMs = performance.now() - start;
 
@@ -55,9 +59,28 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
       steps: [
         {
           node: "AbstentionVerificator" as const,
-          label: "Confirmando abstención",
+          label: "Confirming abstention",
           durationMs,
-          summary: "Confirmó que no hace falta ninguna herramienta",
+          summary: "Confirmed that no tool is needed",
+        },
+      ],
+    };
+  }
+
+  const suggestedPlugin = parsed.suggestedTool
+    ? microkernel.getPlugin(parsed.suggestedTool)
+    : undefined;
+
+  if (!suggestedPlugin) {
+    return {
+      abstentionVerified: true,
+      abstentionChallenged: false,
+      steps: [
+        {
+          node: "AbstentionVerificator" as const,
+          label: "Confirming abstention",
+          durationMs,
+          summary: `Challenge rejected: suggested tool "${parsed.suggestedTool ?? "none"}" is not in the catalog`,
         },
       ],
     };
@@ -67,7 +90,7 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     abstentionVerified: true,
     abstentionChallenged: true,
     correction: {
-      tool: parsed.suggestedTool ?? "desconocida",
+      tool: parsed.suggestedTool ?? "unknown",
       reason: parsed.reason,
     },
     attempts: 1,
@@ -75,9 +98,9 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     steps: [
       {
         node: "AbstentionVerificator" as const,
-        label: "Confirmando abstención",
+        label: "Confirming abstention",
         durationMs,
-        summary: `Desafió la abstención: ${parsed.reason}`,
+        summary: `Challenged abstention: ${parsed.reason}`,
       },
     ],
   };

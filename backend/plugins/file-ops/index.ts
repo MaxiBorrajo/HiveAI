@@ -46,7 +46,7 @@ type FileOpsSchema = typeof schema;
 export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
   name = "file_ops";
   description =
-    "Creates, writes, touches, copies, or moves files and folders on disk. Use 'create' or 'write' to make a file with content (write overwrites existing content, create fails if the file already exists), 'touch' to create an empty file or update an existing file's timestamp, 'mkdir' to create a folder, 'copy'/'move' to duplicate or relocate a file or folder. Deletion is not supported by this tool.";
+    "Performs destructive and constructive filesystem operations (create, write, touch, mkdir, copy, move). USE CASES: Use this when the user explicitly requests to create new files, write code or text to disk, duplicate folders, or reorganize the directory structure. Always prefer this tool over shell commands for simple file manipulation to ensure cross-platform safety. Note: This tool does not support file deletion.";
 
   schema = schema;
 
@@ -174,7 +174,10 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
     {
       description: "Missing required operation property",
       kind: "error",
-      params: { operation: undefined as unknown as Operation, path: Deno.cwd() },
+      params: {
+        operation: undefined as unknown as Operation,
+        path: Deno.cwd(),
+      },
       expect: (output: string) =>
         output.toLowerCase().includes("invalid") ||
         output.toLowerCase().includes("error"),
@@ -191,7 +194,10 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
     await Deno.mkdir(dirname(path), { recursive: true });
   }
 
-  private async copyRecursive(source: string, destination: string): Promise<void> {
+  private async copyRecursive(
+    source: string,
+    destination: string,
+  ): Promise<void> {
     await Deno.mkdir(destination, { recursive: true });
     for await (const entry of Deno.readDir(source)) {
       const srcPath = join(source, entry.name);
@@ -221,7 +227,9 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       return `The provided content is too large (${content.length} chars). Maximum allowed is ${MAX_CONTENT_CHARS}.`;
     }
 
-    console.log(`[file-ops] 🐝 Requested '${operation}' on '${path}'${destination ? ` -> '${destination}'` : ""}`);
+    console.log(
+      `[file-ops] 🐝 Requested '${operation}' on '${path}'${destination ? ` -> '${destination}'` : ""}`,
+    );
 
     try {
       switch (operation) {
@@ -252,7 +260,10 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
             await Deno.utime(path, now, now);
             return `Updated timestamp: ${path}`;
           } catch {
-            const file = await Deno.open(path, { write: true, createNew: true });
+            const file = await Deno.open(path, {
+              write: true,
+              createNew: true,
+            });
             file.close();
             return `Created file: ${path}`;
           }
@@ -285,8 +296,12 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
           try {
             await Deno.rename(path, destination);
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            if (error instanceof Deno.errors.NotSupported || /EXDEV/i.test(message)) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            if (
+              error instanceof Deno.errors.NotSupported ||
+              /EXDEV/i.test(message)
+            ) {
               return `Error: Cannot move '${path}' to '${destination}' because they are on different drives/filesystems. Use run_shell to copy and then delete the source instead.`;
             }
             throw error;

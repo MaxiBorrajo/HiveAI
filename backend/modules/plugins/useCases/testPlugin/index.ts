@@ -1,5 +1,5 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import type { ZodObject } from "zod";
+import type { z, ZodObject } from "zod";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type {
   BeePlugin,
@@ -165,7 +165,7 @@ export async function executeSelectionTest(
   });
 }
 
-export async function executeExecutionTest<S extends ZodObject<any, any>>(
+export async function executeExecutionTest<S extends z.ZodType = z.ZodType>(
   hive: HiveMicrokernel,
   plugin: BeePlugin<S>,
   testCase: ExecutionTestCase<S>,

@@ -18,12 +18,12 @@ type Operation = "list" | "read";
 const schema = z.object({
   operation: z
     .enum(["list", "read"])
-    .describe("'list' to see a folder's contents, 'read' to get a file's text content."),
+    .describe(
+      "'list' to see a folder's contents, 'read' to get a file's text content.",
+    ),
   path: z
     .string()
-    .describe(
-      "Absolute path of the folder to list, or the file to read.",
-    ),
+    .describe("Absolute path of the folder to list, or the file to read."),
 });
 
 type FileReadSchema = typeof schema;
@@ -31,7 +31,7 @@ type FileReadSchema = typeof schema;
 export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
   name = "file_read";
   description =
-    "Reads the filesystem: 'list' shows what's inside a folder (its files and subfolders), 'read' returns the text content of a file. Use this whenever the user wants to see, show, browse, or check what's inside/in a directory or folder, or read/open/view a file's contents. Does not modify anything — use file_ops to create/write/copy/move.";
+    "Safely inspects the local filesystem in a read-only manner (list directories or read file contents). USE CASES: Use this whenever you need to understand the project structure, view code or configuration files, check if a file exists, or when the user asks you to 'read', 'show', or 'list' local files or folders. Do NOT use this for writing or modifying files.";
 
   schema = schema;
 
@@ -138,7 +138,10 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
     {
       description: "Missing required operation property",
       kind: "error",
-      params: { operation: undefined as unknown as Operation, path: Deno.cwd() },
+      params: {
+        operation: undefined as unknown as Operation,
+        path: Deno.cwd(),
+      },
       expect: (output: string) =>
         output.toLowerCase().includes("invalid") ||
         output.toLowerCase().includes("error"),
@@ -157,7 +160,10 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { operation, path } = parsed.data as { operation: Operation; path: string };
+    const { operation, path } = parsed.data as {
+      operation: Operation;
+      path: string;
+    };
 
     console.log(`[file-read] 🐝 Requested '${operation}' on '${path}'`);
 
@@ -180,8 +186,10 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
         }
 
         const lines: string[] = [];
-        if (dirs.length) lines.push(`Folders:\n${dirs.map((d) => `- ${d}/`).join("\n")}`);
-        if (files.length) lines.push(`Files:\n${files.map((f) => `- ${f}`).join("\n")}`);
+        if (dirs.length)
+          lines.push(`Folders:\n${dirs.map((d) => `- ${d}/`).join("\n")}`);
+        if (files.length)
+          lines.push(`Files:\n${files.map((f) => `- ${f}`).join("\n")}`);
 
         return `Contents of '${path}':\n${lines.join("\n")}`;
       }

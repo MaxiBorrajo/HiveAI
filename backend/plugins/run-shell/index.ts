@@ -54,7 +54,7 @@ type RunShellSchema = typeof schema;
 export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   name = "run_shell";
   description =
-    "Runs a real shell command line in bash, cmd, or powershell: system and CLI tasks like listing/sorting running processes, checking disk or memory usage, piping and chaining commands together, or any other command-line operation. Supports pipelines, redirection, and chaining. A human must approve the exact command before it runs (a brief wait), since it is not restricted to a fixed set of operations.";
+    "Executes raw shell commands (bash/cmd/powershell) with full pipeline and redirection support. USE CASES: Use this as a fallback for complex system administration tasks that native plugins cannot handle, such as checking memory usage, killing processes, installing packages, or running external CLI tools like git, npm, or python. A human must approve the command, so prefer native plugins (like file_read or file_ops) when possible.";
 
   schema = schema;
 
@@ -71,7 +71,8 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       shouldInvoke: true,
     },
     {
-      query: "run a powershell command to list running processes sorted by memory",
+      query:
+        "run a powershell command to list running processes sorted by memory",
       kind: "positive",
       shouldInvoke: true,
     },
@@ -155,7 +156,8 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
         command: "pwd",
         cwd: "/non/existent/directory/path/12345",
       },
-      expect: (output: string) => output.includes("does not exist or is inaccessible"),
+      expect: (output: string) =>
+        output.includes("does not exist or is inaccessible"),
     },
     {
       description: "cwd pointing to a file, not a directory, fails clearly",

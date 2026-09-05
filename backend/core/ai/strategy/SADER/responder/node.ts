@@ -77,7 +77,7 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
     steps: [
       {
         node: "HiveQueenResponder" as const,
-        label: "Redactando respuesta",
+        label: "Drafting response",
         durationMs,
         summary: String(response.content).replace(/\s+/g, " ").trim().slice(0, 200),
       },

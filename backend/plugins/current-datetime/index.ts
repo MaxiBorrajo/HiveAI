@@ -26,7 +26,7 @@ type CurrentDatetimeSchema = typeof schema;
 export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeSchema> {
   name = "current_datetime";
   description =
-    "Returns the current system date and time. Useful to know what day it is today or what time it is. It does not schedule events or calculate future dates.";
+    "Retrieves the system's current date, time, and timezone. USE CASES: Use this to ground yourself in the present moment when the user asks time-sensitive questions (e.g., 'What time is it?', 'What day is it today?', 'How long until X event?'). It is strictly for reading the current clock; do NOT use this for scheduling alarms, modifying the system time, or making web searches.";
 
   schema = schema;
 
