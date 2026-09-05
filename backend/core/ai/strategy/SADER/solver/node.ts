@@ -4,6 +4,7 @@ import { ChatOllama } from "@langchain/ollama";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { HiveAIState, type ChatStep } from "../graph.ts";
 import { buildSolverSystemPrompt } from "./prompt.ts";
+import { MAX_ATTEMPTS } from "../constants.ts";
 
 export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
   const start = performance.now();
@@ -123,7 +124,7 @@ export const shouldRespond = (state: typeof HiveAIState.State) => {
     if (state.abstentionVerified) return "HiveQueenResponder";
     return "AbstentionVerificator";
   }
-  if (state.attempts > 1) return "HiveQueenResponder";
+  if (state.attempts > MAX_ATTEMPTS) return "HiveQueenResponder";
   if (state.correction) return "Solver";
   return "Executor";
 };

@@ -9,6 +9,7 @@ import {
   abstentionVerificatorHumanPrompt,
   buildAbstentionVerificatorSystemPrompt,
 } from "./prompt.ts";
+import { MAX_ATTEMPTS } from "../constants.ts";
 
 export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
   state,
@@ -107,6 +108,6 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
 };
 
 export const shouldConfirmAbstention = (state: typeof HiveAIState.State) => {
-  if (state.abstentionChallenged && state.attempts <= 1) return "Solver";
+  if (state.abstentionChallenged && state.attempts <= MAX_ATTEMPTS) return "Solver";
   return "HiveQueenResponder";
 };

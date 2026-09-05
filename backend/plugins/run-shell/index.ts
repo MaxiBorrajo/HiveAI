@@ -125,7 +125,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       description: "Run a command with an explicit valid cwd",
       kind: "happy",
       params: { shell: "bash", command: "pwd", cwd: Deno.cwd() },
-      expect: (output: string) => output.trim().length > 0,
+      expect: (output: string) => output.includes(Deno.cwd()),
     },
     // 3 Edge
     {
@@ -133,13 +133,14 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       kind: "edge",
       params: { shell: "bash", command: "true" },
       expect: (output: string) =>
-        output.includes("no output") || output.trim().length >= 0,
+        output.includes("the command produced no output"),
     },
     {
       description: "Command writing to stderr on success is still reported",
       kind: "edge",
       params: { shell: "bash", command: "echo warning 1>&2; echo ok" },
-      expect: (output: string) => output.includes("ok"),
+      expect: (output: string) =>
+        output.includes("ok") && output.includes("stderr: warning"),
     },
     {
       description: "Non-zero exit code is reported with detail",
@@ -169,9 +170,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       description: "Missing required command property",
       kind: "error",
       params: { shell: "bash", command: undefined as unknown as string },
-      expect: (output: string) =>
-        output.toLowerCase().includes("invalid") ||
-        output.toLowerCase().includes("error"),
+      expect: (output: string) => output.toLowerCase().includes("invalid"),
     },
   ];
 

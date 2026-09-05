@@ -9,6 +9,7 @@ import {
   DIAGNOSTICIAN_SYSTEM_PROMPT,
   diagnosticianHumanPrompt,
 } from "./prompt.ts";
+import { MAX_ATTEMPTS } from "../constants.ts";
 
 export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
   const start = performance.now();
@@ -122,6 +123,6 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
 
 export const shouldRetry = (state: typeof HiveAIState.State) => {
   if (state.giveUp) return "HiveQueenResponder";
-  if (state.attempts > 1) return "HiveQueenResponder";
+  if (state.attempts > MAX_ATTEMPTS) return "HiveQueenResponder";
   return "Solver";
 };

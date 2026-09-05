@@ -127,7 +127,7 @@ export function Chat() {
                 isEmpty
               />
               <p className="text-center text-xs text-muted-foreground mt-2">
-                HiveQueen can make mistakes. Consider verifying important
+                HiveAI can make mistakes. Consider verifying important
                 information.
               </p>
             </div>
@@ -169,7 +169,7 @@ export function Chat() {
                   handleSend={handleSend}
                 />
                 <p className="text-center text-xs text-muted-foreground">
-                  HiveQueen can make mistakes. Consider verifying important
+                  HiveAI can make mistakes. Consider verifying important
                   information.
                 </p>
               </div>

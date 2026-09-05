@@ -14,7 +14,7 @@ const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const MODEL = "qwen3:8b";
-const SELECTOR_MODEL = "lfm2.5";
+const SELECTOR_MODEL = "qwen3:8b";
 
 hive.configure({
   dataDir: join(homeDir, ".hiveai", "storage"),

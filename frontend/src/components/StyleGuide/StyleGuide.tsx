@@ -151,7 +151,7 @@ export function StyleGuide() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="space-y-1">
-                  <p className="text-sm">HiveQueen</p>
+                  <p className="text-sm">HiveAI</p>
                   <p className="text-xs font-mono text-muted-foreground">
                     Status: Active
                   </p>
