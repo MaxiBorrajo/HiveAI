@@ -55,7 +55,7 @@ type WebReadSchema = typeof schema;
 export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
   name = "web_read";
   description =
-    "Fetches a URL and returns the readable text content of that page. Use it to read a page found via web_search. Does not execute JavaScript, so content that only appears after client-side rendering may not be included.";
+    "Fetches a URL and returns the readable text content of that page: read, open, view, fetch, or summarize the contents of a specific web page. Requires an explicit URL. Does not execute JavaScript, so content that only appears after client-side rendering may not be included.";
 
   schema = schema;
 
@@ -83,16 +83,20 @@ export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
       shouldInvoke: false,
     },
     {
-      query: "search the web for TypeScript tutorials",
-      kind: "negative",
-      shouldInvoke: false,
-    },
-    {
       query: "create a file called notes.txt",
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
+    {
+      query: "reset the counter",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    // 4 Ambiguous
+    {
+      query: "search the web for TypeScript tutorials",
+      kind: "ambiguous",
+    },
     {
       query: "what does example.com say about pricing?",
       kind: "ambiguous",

@@ -56,45 +56,19 @@ app.use(
   }),
 );
 
-app.use(
-  "/plugins/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["content-type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
-  }),
-);
-
-app.use(
-  "/chat/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["content-type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
-  }),
-);
-
-app.use(
-  "/interactions/*",
-  cors({
-    origin: "*",
-    allowHeaders: ["content-type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
-  }),
-);
-
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/chat", chatsRouter);
 app.route("/api/interactions", interactionsRouter);
 
-app.route("/plugins", pluginsRouter);
-app.route("/chat", chatsRouter);
-app.route("/interactions", interactionsRouter);
-
+// Serves the built frontend directly (packaged desktop app / production).
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 
 app.get("/", (c) => c.json("Welcome to HiveAI"));
 
+// A random free port avoids clashing with anything already running (or a
+// previous instance that didn't shut down cleanly). Written to
+// frontend/.env.local so the separate Vite dev server (used in local
+// development, alongside this same backend) knows which port to call.
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
 Deno.writeTextFileSync(
