@@ -32,11 +32,27 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
     }
   }
 
+  async function toggleAllPlugins(nextActive: boolean) {
+    const pluginsToChange = plugins.filter((p) => p.active !== nextActive);
+    if (pluginsToChange.length === 0) return;
+
+    setPlugins((prev) => prev.map((p) => ({ ...p, active: nextActive })));
+
+    try {
+      await Promise.all(
+        pluginsToChange.map((p) => setPluginActive(p.name, nextActive)),
+      );
+    } catch {
+      getPlugins().then(setPlugins);
+    }
+  }
+
   return (
     <>
       <PluginsMenu
         plugins={plugins}
         onToggle={togglePlugin}
+        onToggleAll={toggleAllPlugins}
         onOpenManage={() => setIsModalOpen(true)}
         forceOpenDownward={forceOpenDownward}
       />
@@ -45,6 +61,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         onOpenChange={setIsModalOpen}
         plugins={plugins}
         onToggle={togglePlugin}
+        onToggleAll={toggleAllPlugins}
       />
     </>
   );

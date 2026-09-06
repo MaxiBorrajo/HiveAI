@@ -1,7 +1,4 @@
 import { z } from "zod";
-import { JSDOM } from "npm:jsdom@25";
-import { Readability } from "npm:@mozilla/readability@0.5";
-import TurndownService from "npm:turndown@7.2";
 import type {
   BeeContext,
   BeePlugin,
@@ -10,13 +7,8 @@ import type {
 } from "./bee-plugin.ts";
 
 const FETCH_TIMEOUT_MS = 10_000;
-const JINA_TIMEOUT_MS = 15_000;
-const MAX_CONTENT_CHARS = 20_000;
-const MIN_ACCEPTABLE_CONTENT_CHARS = 200;
 const DEFAULT_SEARCH_LIMIT = 5;
 const MAX_SEARCH_LIMIT = 10;
-const READ_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 const SEARXNG_INSTANCE_URL = Deno.env.get("SEARXNG_INSTANCE_URL");
 
 const MAX_SEARCH_RETRIES = 3;
@@ -31,14 +23,7 @@ const DDG_USER_AGENTS = [
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
 ];
 
-const turndown = new TurndownService({
-  headingStyle: "atx",
-  codeBlockStyle: "fenced",
-});
-turndown.remove(["script", "style", "noscript", "iframe"]);
-
 const searchSchema = z.object({
-  action: z.literal("search"),
   query: z.string().min(1).describe("The search query to look up on the web."),
   limit: z
     .number()
@@ -51,17 +36,7 @@ const searchSchema = z.object({
     ),
 });
 
-const readSchema = z.object({
-  action: z.literal("read"),
-  url: z
-    .string()
-    .url()
-    .describe("The URL of the webpage to read and extract text from."),
-});
-
-const schema = z.discriminatedUnion("action", [searchSchema, readSchema]);
-
-type WebSchema = typeof schema;
+type WebSearchSchema = typeof searchSchema;
 
 interface SearchResult {
   title: string;
@@ -267,146 +242,28 @@ async function searchSearxng(
   return results;
 }
 
-async function performSearch(
-  input: z.infer<typeof searchSchema>,
-  context?: BeeContext,
-): Promise<string> {
-  const { query, limit = DEFAULT_SEARCH_LIMIT } = input;
-
-  let outcome: SearchResult[] | string;
-  if (SEARXNG_INSTANCE_URL) {
-    context?.reportStep(`Searching '${query}' via SearXNG`);
-    outcome = await searchSearxng(SEARXNG_INSTANCE_URL, query, limit);
-  } else {
-    context?.reportStep(`Searching '${query}' via DuckDuckGo`);
-    outcome = await searchDuckDuckGo(query, limit);
-  }
-
-  if (typeof outcome === "string") return outcome;
-  if (outcome.length === 0) return `No results found for '${query}'.`;
-
-  return `Search results for '${query}':\n\n${outcome
-    .map((r) => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}`)
-    .join("\n\n")}`;
-}
-
-function isPdfUrl(url: string): boolean {
-  return /\.pdf(\?|#|$)/i.test(url);
-}
-
-function truncate(content: string): string {
-  if (content.length <= MAX_CONTENT_CHARS) return content;
-  return `${content.slice(0, MAX_CONTENT_CHARS)}\n...(truncated)`;
-}
-
-async function extractWithReadability(
-  url: string,
-): Promise<{ content: string; title?: string } | null> {
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(url, FETCH_TIMEOUT_MS, {
-      "User-Agent": READ_USER_AGENT,
-      Accept: "text/html,*/*",
-    });
-  } catch {
-    return null;
-  }
-
-  if (!response.ok) return null;
-
-  const contentType = response.headers.get("content-type") ?? "";
-  if (contentType && !contentType.includes("text/html")) return null;
-
-  const html = await response.text();
-
-  let dom: JSDOM;
-  try {
-    dom = new JSDOM(html, { url });
-  } catch {
-    return null;
-  }
-
-  const article = new Readability(dom.window.document).parse();
-  if (!article?.content) return null;
-
-  const markdown = turndown.turndown(article.content).trim();
-  if (markdown.length < MIN_ACCEPTABLE_CONTENT_CHARS) return null;
-
-  return { content: markdown, title: article.title ?? undefined };
-}
-
-async function extractWithJina(url: string): Promise<string | null> {
-  const jinaUrl = `https://r.jina.ai/${url}`;
-
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(jinaUrl, JINA_TIMEOUT_MS, {
-      Accept: "text/plain",
-    });
-  } catch {
-    return null;
-  }
-
-  if (!response.ok) return null;
-
-  const text = (await response.text()).trim();
-  return text.length >= MIN_ACCEPTABLE_CONTENT_CHARS ? text : null;
-}
-
-async function performRead(
-  input: z.infer<typeof readSchema>,
-  context?: BeeContext,
-): Promise<string> {
-  const { url } = input;
-
-  if (isPdfUrl(url)) {
-    context?.reportStep("Extracting PDF via Jina");
-    const jinaResult = await extractWithJina(url);
-    if (jinaResult) return truncate(jinaResult);
-    return `Failed to extract content from PDF '${url}'.`;
-  }
-
-  context?.reportStep("Extracting content with Readability");
-  const readabilityResult = await extractWithReadability(url);
-  if (readabilityResult) {
-    const header = readabilityResult.title
-      ? `# ${readabilityResult.title}\n\n`
-      : "";
-    return truncate(`${header}${readabilityResult.content}`);
-  }
-
-  context?.reportStep("Falling back to Jina Reader");
-  const jinaResult = await extractWithJina(url);
-  if (jinaResult) return truncate(jinaResult);
-
-  return `Failed to extract readable content from '${url}'. The page may require JavaScript, be behind a paywall, or block automated access.`;
-}
-
-export default class WebPlugin implements BeePlugin<WebSchema> {
-  name = "web_search_and_read";
+export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
+  name = "web_search";
   description =
-    "Searches the web for real-time information or extracts text from specific URLs. Prefer this tool over your own knowledge when the request is about something that changes over time — even if you believe you already know the answer, since your training data may be outdated. Time markers like 'this year', 'currently', 'latest', 'now', 'today', or any specific year mentioned in the request ALWAYS mean you should search, regardless of how stable or well-known the general topic seems (e.g. 'who won the super bowl THIS YEAR' needs a search even though Super Bowl winners are usually well-documented facts, because 'this year' points to a specific, possibly recent result you may not have). Do NOT search for genuinely timeless questions with no time marker (what a language/concept/technology is, how something works, historical facts from a specific past date). USE CASES: Use the 'search' action for queries requiring up-to-date knowledge, recent news, trivia with time markers, or documentation lookups (e.g., 'who won the game this year', 'latest React docs'). Use the 'read' action when the user provides a specific link and asks you to summarize, translate, or analyze the content of that webpage.";
+    "Searches the web for real-time information. Prefer this tool over your own knowledge when the request is about something that changes over time — even if you believe you already know the answer, since your training data may be outdated. Time markers like 'this year', 'currently', 'latest', 'now', 'today', or any specific year mentioned in the request ALWAYS mean you should search, regardless of how stable or well-known the general topic seems (e.g. 'who won the super bowl THIS YEAR' needs a search even though Super Bowl winners are usually well-documented facts, because 'this year' points to a specific, possibly recent result you may not have). Do NOT search for genuinely timeless questions with no time marker (what a language/concept/technology is, how something works, historical facts from a specific past date). USE CASES: Use the 'search' action for queries requiring up-to-date knowledge, recent news, trivia with time markers, or documentation lookups (e.g., 'who won the game this year', 'latest React docs').";
 
-  schema = schema;
+  schema = searchSchema;
 
-  selectionTests: SelectionTestCase<WebSchema>[] = [
+  selectionTests: SelectionTestCase<WebSearchSchema>[] = [
     {
       query: "who won the super bowl this year?",
       kind: "positive",
       shouldInvoke: true,
-      expectedParams: { action: "search" },
     },
     {
       query: "search for the latest news on the JavaScript ecosystem",
       kind: "positive",
       shouldInvoke: true,
-      expectedParams: { action: "search" },
     },
     {
-      query: "summarize this article: https://example.com/article",
+      query: "what's the current price of bitcoin?",
       kind: "positive",
       shouldInvoke: true,
-      expectedParams: { action: "read" },
     },
     {
       query: "read the contents of README.md",
@@ -437,68 +294,65 @@ export default class WebPlugin implements BeePlugin<WebSchema> {
     },
   ];
 
-  executionTests: ExecutionTestCase<WebSchema>[] = [
+  executionTests: ExecutionTestCase<WebSearchSchema>[] = [
     {
       description: "Search for a common term",
       kind: "happy",
-      params: { action: "search", query: "Deno runtime" },
-      expect: (output: string) => output.length > 0,
+      params: { query: "Deno runtime" },
+      expect: (output: string) => output.startsWith("Search results for"),
     },
     {
       description: "Search with an explicit limit",
       kind: "happy",
-      params: {
-        action: "search",
-        query: "TypeScript 6.0 release notes",
-        limit: 3,
-      },
-      expect: (output: string) => output.length > 0,
+      params: { query: "TypeScript 6.0 release notes", limit: 3 },
+      expect: (output: string) => output.startsWith("Search results for"),
     },
     {
-      description: "Read a simple webpage",
+      description: "Search returns a well-formed result block",
       kind: "happy",
-      params: { action: "read", url: "https://example.com" },
+      params: { query: "Ecma International TC39" },
       expect: (output: string) =>
-        output.toLowerCase().includes("example domain"),
+        output.includes("URL:") && output.includes("Snippet:"),
     },
     {
       description: "Search query with only whitespace-adjacent punctuation",
       kind: "edge",
-      params: { action: "search", query: "??? !!!" },
+      params: { query: "??? !!!" },
       expect: (output: string) => output.length > 0,
     },
     {
       description: "Search with limit at the maximum boundary",
       kind: "edge",
-      params: { action: "search", query: "space exploration", limit: 10 },
-      expect: (output: string) => output.length > 0,
+      params: { query: "space exploration", limit: 10 },
+      expect: (output: string) => output.startsWith("Search results for"),
     },
     {
-      description: "Read a URL with no path, just a domain",
+      description: "Search with limit at the minimum boundary",
       kind: "edge",
-      params: { action: "read", url: "https://example.com/" },
-      expect: (output: string) => output.length > 0,
-    },
-    {
-      description: "Read an unreachable URL",
-      kind: "error",
-      params: {
-        action: "read",
-        url: "https://this-domain-does-not-exist-xyz123.invalid",
-      },
-      expect: (output: string) => output.startsWith("Failed"),
+      params: { query: "quantum computing", limit: 1 },
+      expect: (output: string) => output.startsWith("Search results for"),
     },
     {
       description: "Search with an empty query fails schema validation",
       kind: "error",
-      params: { action: "search", query: "" },
-      expect: (output: string) => output.length > 0,
+      params: { query: "" },
+      expect: (output: string) =>
+        output.startsWith("The provided parameters are invalid"),
     },
     {
-      description: "Read a malformed URL fails schema validation",
+      description:
+        "Search with limit above the maximum fails schema validation",
       kind: "error",
-      params: { action: "read", url: "not-a-real-url" } as z.infer<WebSchema>,
-      expect: (output: string) => output.length > 0,
+      params: { query: "test", limit: 999 },
+      expect: (output: string) =>
+        output.startsWith("The provided parameters are invalid"),
+    },
+    {
+      description: "Missing query field fails schema validation",
+      kind: "error",
+      params: {} as z.infer<WebSearchSchema>,
+      expect: (output: string) =>
+        output.startsWith("The provided parameters are invalid"),
     },
   ];
 
@@ -508,17 +362,28 @@ export default class WebPlugin implements BeePlugin<WebSchema> {
     this.context = context;
   }
 
-  async process(input: z.infer<WebSchema>): Promise<string> {
+  async process(input: z.infer<WebSearchSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    switch (parsed.data.action) {
-      case "search":
-        return await performSearch(parsed.data, this.context);
-      case "read":
-        return await performRead(parsed.data, this.context);
+    const { query, limit = DEFAULT_SEARCH_LIMIT } = parsed.data;
+
+    let outcome: SearchResult[] | string;
+    if (SEARXNG_INSTANCE_URL) {
+      this.context?.reportStep(`Searching '${query}' via SearXNG`);
+      outcome = await searchSearxng(SEARXNG_INSTANCE_URL, query, limit);
+    } else {
+      this.context?.reportStep(`Searching '${query}' via DuckDuckGo`);
+      outcome = await searchDuckDuckGo(query, limit);
     }
+
+    if (typeof outcome === "string") return outcome;
+    if (outcome.length === 0) return `No results found for '${query}'.`;
+
+    return `Search results for '${query}':\n\n${outcome
+      .map((r) => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}`)
+      .join("\n\n")}`;
   }
 }

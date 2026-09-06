@@ -5,7 +5,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuLabel,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
@@ -14,6 +13,7 @@ import type { Plugin } from "@/types/plugin";
 interface PluginsMenuProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
+  onToggleAll: (nextActive: boolean) => void;
   onOpenManage: () => void;
   // The trigger sits mid-screen in the empty-chat welcome layout, where
   // Base UI's automatic flip miscalculates and opens the menu upward even
@@ -26,9 +26,12 @@ interface PluginsMenuProps {
 export function PluginsMenu({
   plugins,
   onToggle,
+  onToggleAll,
   onOpenManage,
   forceOpenDownward = false,
 }: PluginsMenuProps) {
+  const allActive = plugins.length > 0 && plugins.every((p) => p.active);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -45,7 +48,22 @@ export function PluginsMenu({
         className="w-56"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Quick Plugins</DropdownMenuLabel>
+          <div className="flex flex-1 items-center justify-between  gap-1.5 px-1.5 py-1">
+            <span className="text-sm font-semibold">Quick Plugins</span>
+            <div
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Switch
+                checked={allActive}
+                onCheckedChange={(checked) => onToggleAll(checked)}
+                disabled={plugins.length === 0}
+                title="Toggle all plugins"
+              />
+            </div>
+          </div>
+
+          <DropdownMenuSeparator />
 
           {plugins.length === 0 ? (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">

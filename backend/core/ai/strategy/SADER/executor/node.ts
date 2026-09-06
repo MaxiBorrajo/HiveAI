@@ -9,7 +9,9 @@ import type { HiveAIState, ChatStep } from "../graph.ts";
 // misbehaving plugin could otherwise report unbounded text into the step log.
 function summarize(text: string, maxChars = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length > maxChars ? `${oneLine.slice(0, maxChars)}...` : oneLine;
+  return oneLine.length > maxChars
+    ? `${oneLine.slice(0, maxChars)}...`
+    : oneLine;
 }
 
 export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
@@ -69,7 +71,13 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
     };
   }
 
-  console.log(JSON.stringify(toolCall));
+  console.log(
+    `\n[SADER - Executor] Preparing to execute tool: "${toolCall.name}"`,
+  );
+  console.log(
+    `[SADER - Executor] Tool Call Payload:`,
+    JSON.stringify(toolCall),
+  );
 
   const start = performance.now();
 
@@ -78,6 +86,14 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
       tool.invoke(toolCall),
     );
     const durationMs = performance.now() - start;
+
+    console.log(
+      `[SADER - Executor] Execution successful for "${toolCall.name}"`,
+    );
+    console.log(
+      `[SADER - Executor] Output:`,
+      summarize(String(toolResult.content)),
+    );
 
     const steps: ChatStep[] = pluginSteps.map((pluginStep) => ({
       node: "Plugin",
@@ -103,6 +119,12 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
   } catch (error) {
     const durationMs = performance.now() - start;
     const detail = error instanceof Error ? error.message : String(error);
+
+    console.error(
+      `\n[SADER - Executor] Execution FAILED for "${toolCall.name}":`,
+      detail,
+    );
+
     return {
       messages: [
         new ToolMessage({

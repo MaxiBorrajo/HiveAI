@@ -37,6 +37,9 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     };
   }
 
+  console.log(`\n[SADER - Diagnostician] Starting diagnosis for plugin "${state.selectedTool}"`);
+  console.log(`[SADER - Diagnostician] Plugin output to diagnose:`, state.toolResult.output);
+
   const diagnosticianModel = new ChatOllama({
     model: state.model,
     think: true,
@@ -55,10 +58,14 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     ),
   ]);
 
+  console.log(`[SADER - Diagnostician] Raw model response:`, response.content);
+
   const parsed = parseModelJSON<{
     action: "retry" | "giveUp";
     reason: string;
   }>(response.content as string);
+
+  console.log(`[SADER - Diagnostician] Parsed diagnosis result:`, parsed);
 
   const durationMs = performance.now() - start;
 

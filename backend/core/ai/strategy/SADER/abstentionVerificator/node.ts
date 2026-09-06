@@ -41,7 +41,13 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     ),
   ]);
 
-  console.log("RAW VERIFICATOR RESPONSE:", JSON.stringify(response.content));
+  console.log(
+    `\n[SADER - AbstentionVerificator] Checking if we really should abstain`,
+  );
+  console.log(
+    `[SADER - AbstentionVerificator] Raw model response:`,
+    response.content,
+  );
 
   const parsed = parseModelJSON<{
     action: "confirm" | "challenge";
@@ -49,7 +55,10 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     suggestedTool?: string;
   }>(response.content as string);
 
-  console.log("PARSED VERIFICATOR RESULT:", parsed);
+  console.log(
+    `[SADER - AbstentionVerificator] Parsed verification result:`,
+    parsed,
+  );
 
   const durationMs = performance.now() - start;
 
@@ -108,6 +117,7 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
 };
 
 export const shouldConfirmAbstention = (state: typeof HiveAIState.State) => {
-  if (state.abstentionChallenged && state.attempts <= MAX_ATTEMPTS) return "Solver";
+  if (state.abstentionChallenged && state.attempts <= MAX_ATTEMPTS)
+    return "Solver";
   return "HiveQueenResponder";
 };

@@ -8,18 +8,31 @@ import type { Plugin } from "@/types/plugin";
 interface PluginListViewProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
+  onToggleAll: (nextActive: boolean) => void;
   onSelectPlugin: (name: string) => void;
 }
 
 export function PluginListView({
   plugins,
   onToggle,
+  onToggleAll,
   onSelectPlugin,
 }: PluginListViewProps) {
+  const allActive = plugins.length > 0 && plugins.every((p) => p.active);
+
   return (
     <>
-      <DialogHeader className="p-6 pb-0">
-        <DialogTitle>Manage Plugins</DialogTitle>
+      <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DialogTitle>Manage Plugins</DialogTitle>
+          <div title="Toggle all plugins">
+            <Switch
+              checked={allActive}
+              onCheckedChange={(checked) => onToggleAll(checked)}
+              disabled={plugins.length === 0}
+            />
+          </div>
+        </div>
       </DialogHeader>
 
       <ScrollArea className="flex-1 p-6 pt-2">

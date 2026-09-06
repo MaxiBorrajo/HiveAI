@@ -9,6 +9,7 @@ interface PluginsModalProps {
   onOpenChange: (open: boolean) => void;
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
+  onToggleAll: (nextActive: boolean) => void;
 }
 
 export function PluginsModal({
@@ -16,6 +17,7 @@ export function PluginsModal({
   onOpenChange,
   plugins,
   onToggle,
+  onToggleAll,
 }: PluginsModalProps) {
   const [selectedPluginName, setSelectedPluginName] = useState<string | null>(
     null,
@@ -44,6 +46,7 @@ export function PluginsModal({
           <PluginListView
             plugins={plugins}
             onToggle={onToggle}
+            onToggleAll={onToggleAll}
             onSelectPlugin={setSelectedPluginName}
           />
         )}

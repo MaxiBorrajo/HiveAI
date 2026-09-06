@@ -23,6 +23,14 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
       ]
     : [];
 
+  console.log(`\n[SADER - Solver] Starting tool selection phase`);
+  if (correctionMessages.length > 0) {
+    console.log(
+      `[SADER - Solver] Applying correction context:`,
+      state.correction,
+    );
+  }
+
   const response = await selectorModel
     .bindTools(microkernel.getTools())
     .invoke([
@@ -31,9 +39,12 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
       ...correctionMessages,
     ]);
 
+  console.log(`[SADER - Solver] Raw model response:`, response.content);
+  console.log(`[SADER - Solver] Tool calls requested:`, response.tool_calls);
+
   const toolNames =
     (response.tool_calls ?? []).map((tc) => tc.name).join(", ") || "none";
-  console.log(`Selector decided: [${toolNames}]`);
+  console.log(`[SADER - Solver] Selector decided: [${toolNames}]`);
 
   const durationMs = performance.now() - start;
 

@@ -66,10 +66,20 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
             systemPrompt: RESPONDER_SUCCESS_SYSTEM_PROMPT,
           };
 
+  console.log(`\n[SADER - Responder] Starting response generation`);
+  console.log(
+    `[SADER - Responder] State: noTool=${isNoToolNeeded}, giveUp=${isUnrecoverableFailure}, outOfAttempts=${outOfAttempts}`,
+  );
+
   const response = await responder.invoke([
     new SystemMessage(prompts.systemPrompt),
     new HumanMessage(prompts.humanPrompt),
   ]);
+
+  console.log(
+    `[SADER - Responder] Final answer output:`,
+    String(response.content).substring(0, 150) + "...",
+  );
 
   const durationMs = performance.now() - start;
 
@@ -80,7 +90,10 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
         node: "HiveQueenResponder" as const,
         label: "Drafting response",
         durationMs,
-        summary: String(response.content).replace(/\s+/g, " ").trim().slice(0, 200),
+        summary: String(response.content)
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200),
       },
     ],
   };

@@ -53,10 +53,35 @@ export function PluginTestsView({
   const [testResults, setTestResults] = useState<Record<string, TestResult>>(
     {},
   );
+  const [expandedResults, setExpandedResults] = useState<Set<string>>(
+    new Set(),
+  );
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
 
   const isRunning = abortController !== null;
+
+  const handleToggleExpand = (id: string) => {
+    setExpandedResults((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleAllExpand = () => {
+    if (expandedResults.size > 0) {
+      setExpandedResults(new Set()); // Hide all
+    } else {
+      // Expand all tests that have results
+      const idsWithResults = Object.keys(testResults).filter(
+        (id) => !!testResults[id]?.details,
+      );
+      setExpandedResults(new Set(idsWithResults));
+    }
+  };
+
   const allSelected =
     allTests.length > 0 && selectedTestIds.size === allTests.length;
 
@@ -245,16 +270,28 @@ export function PluginTestsView({
       {/* Control Bar & Progress */}
       <div className="flex flex-col border-b border-border bg-muted/20">
         <div className="flex items-center justify-between px-6 pb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={toggleAll}
-              disabled={isRunning || allTests.length === 0}
-              className="size-4 accent-primary"
-            />
-            <span className="text-xs font-medium">Select all</span>
-          </label>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                disabled={isRunning || allTests.length === 0}
+                className="size-4 accent-primary"
+              />
+              <span className="text-xs font-medium">Select all</span>
+            </label>
+
+            {testsCompletedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleAllExpand}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {expandedResults.size > 0 ? "Hide Results" : "View Results"}
+              </button>
+            )}
+          </div>
 
           <Button
             size="sm"
@@ -401,6 +438,8 @@ export function PluginTestsView({
                 id={id}
                 test={test}
                 isSelected={isSelected}
+                isExpanded={expandedResults.has(id)}
+                onToggleExpand={handleToggleExpand}
                 res={res}
                 onToggle={toggleTest}
                 isRunning={isRunning}

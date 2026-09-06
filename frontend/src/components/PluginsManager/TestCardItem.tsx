@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Check,
   X,
@@ -18,12 +17,12 @@ export function TestCardItem({
   test,
   id,
   isSelected,
+  isExpanded,
+  onToggleExpand,
   res,
   onToggle,
   isRunning,
 }: any) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   let kindColor = "bg-slate-100 text-slate-700 border-slate-200";
   let KindIcon = Box;
 
@@ -183,7 +182,7 @@ export function TestCardItem({
                   onClick={(e) => {
                     e.preventDefault(); // prevent triggering the label checkbox
                     e.stopPropagation();
-                    setIsExpanded(!isExpanded);
+                    onToggleExpand(id);
                   }}
                   className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors bg-muted/30 hover:bg-muted/50 px-3 py-1.5 rounded-full border border-border/50"
                 >
