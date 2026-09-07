@@ -2,37 +2,78 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { TestTube } from "lucide-react";
+import { Ellipsis, TestTube, ToggleLeft, ToggleRight } from "lucide-react";
 import type { Plugin } from "@/types/plugin";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu.tsx";
 
 interface PluginListViewProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
-  onSelectPlugin: (name: string) => void;
+  onSelectPlugins: (plugins: Plugin[]) => void;
 }
 
 export function PluginListView({
   plugins,
   onToggle,
   onToggleAll,
-  onSelectPlugin,
+  onSelectPlugins,
 }: PluginListViewProps) {
   const allActive = plugins.length > 0 && plugins.every((p) => p.active);
 
   return (
     <>
-      <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          <DialogTitle>Manage Plugins</DialogTitle>
-          <div title="Toggle all plugins">
-            <Switch
-              checked={allActive}
-              onCheckedChange={(checked) => onToggleAll(checked)}
+      <DialogHeader className="p-6 pb-0 flex flex-row items-center">
+        <DialogTitle>Manage Plugins</DialogTitle>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="" title="Options">
+            <Ellipsis className="size-5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            side="bottom"
+            sideOffset={8}
+            className="w-56"
+          >
+            <DropdownMenuItem
+              key="Toggle all plugins"
+              closeOnClick={false}
+              onClick={() => onToggleAll(!allActive)}
               disabled={plugins.length === 0}
-            />
-          </div>
-        </div>
+            >
+              <div className="flex items-center gap-2">
+                {allActive ? (
+                  <ToggleRight size={12} />
+                ) : (
+                  <ToggleLeft size={12} />
+                )}
+
+                <span className="text-sm font-mono truncate">
+                  Toggle all plugins
+                </span>
+              </div>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              key="Run all tests"
+              onClick={() => onSelectPlugins(plugins)}
+            >
+              <div className="flex items-center gap-2">
+                <TestTube size={12} />
+                <span className="text-sm font-mono truncate">
+                  Run all tests
+                </span>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </DialogHeader>
 
       <ScrollArea className="flex-1 p-6 pt-2">
@@ -69,7 +110,7 @@ export function PluginListView({
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => onSelectPlugin(plugin.name)}
+                    onClick={() => onSelectPlugins([plugin])}
                     className="shrink-0 h-8 gap-1 px-3"
                   >
                     <TestTube size={12} />

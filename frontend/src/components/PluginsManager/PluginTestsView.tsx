@@ -3,8 +3,14 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, Square, Box, Clock, Coins } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import type { Plugin } from "@/types/plugin";
-import { runPluginTest } from "@/lib/get-plugins";
+import { runPluginTest, saveTestResults } from "@/lib/get-plugins";
 import { TestCardItem } from "./TestCardItem";
 
 type TestStatus = "idle" | "running" | "success" | "error";
@@ -26,30 +32,54 @@ interface TestResult {
 }
 
 export function PluginTestsView({
-  plugin,
+  plugins,
   onBack,
 }: {
-  plugin: Plugin;
+  plugins: Plugin[];
   onBack: () => void;
 }) {
-  const allTests = [
-    ...(plugin.selectionTests || []).map((t, i) => ({
-      ...t,
-      type: "selection" as const,
-      originalIndex: i,
-      label: t.query,
-    })),
-    ...(plugin.executionTests || []).map((t, i) => ({
-      ...t,
-      type: "execution" as const,
-      originalIndex: i,
-      label: t.description,
-    })),
-  ];
+  const pluginsWithTests = useMemo(() => {
+    return plugins
+      .map((plugin) => {
+        const tests = [
+          ...(plugin.selectionTests || []).map((t, i) => ({
+            ...t,
+            type: "selection" as const,
+            originalIndex: i,
+            label: t.query,
+            id: `${plugin.name}-selection-${i}`,
+            pluginName: plugin.name,
+          })),
+          ...(plugin.executionTests || []).map((t, i) => ({
+            ...t,
+            type: "execution" as const,
+            originalIndex: i,
+            label: t.description,
+            id: `${plugin.name}-execution-${i}`,
+            pluginName: plugin.name,
+          })),
+        ];
+        return {
+          pluginName: plugin.name,
+          tests,
+        };
+      })
+      .filter((p) => p.tests.length > 0);
+  }, [plugins]);
+
+  const allTests = useMemo(
+    () => pluginsWithTests.flatMap((p) => p.tests),
+    [pluginsWithTests],
+  );
 
   const [selectedTestIds, setSelectedTestIds] = useState<Set<string>>(
-    new Set(allTests.map((t) => `${t.type}-${t.originalIndex}`)),
+    () => new Set(allTests.map((t) => t.id)),
   );
+
+  useEffect(() => {
+    setSelectedTestIds(new Set(allTests.map((t) => t.id)));
+  }, [allTests]);
+
   const [testResults, setTestResults] = useState<Record<string, TestResult>>(
     {},
   );
@@ -128,7 +158,7 @@ export function PluginTestsView({
     let edgeNegativePassed = 0;
 
     allTests.forEach((t) => {
-      const id = `${t.type}-${t.originalIndex}`;
+      const id = t.id;
       if (!selectedTestIds.has(id)) return;
       const res = testResults[id];
       if (!res) return;
@@ -180,6 +210,32 @@ export function PluginTestsView({
     };
   }, [isFinished, testResults, selectedTestIds, allTests, testsToRunCount]);
 
+  const downloadResults = async () => {
+    const results = allTests
+      .filter((t) => selectedTestIds.has(t.id))
+      .map((t) => {
+        const res = testResults[t.id];
+        return {
+          pluginName: t.pluginName,
+          type: t.type,
+          kind: t.kind,
+          label: t.label,
+          status: res?.status || "idle",
+          errors: res?.errors || [],
+          failureCategory: res?.failureCategory || null,
+          details: res?.details || null,
+          metrics: res?.metrics || null,
+        };
+      });
+
+    try {
+      const { path } = await saveTestResults({ summary, results });
+      alert(`Results saved to:\n${path}`);
+    } catch (err) {
+      alert(`Failed to save results: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
   function toggleTest(id: string) {
     if (isRunning) return;
     setSelectedTestIds((prev) => {
@@ -195,15 +251,13 @@ export function PluginTestsView({
     if (allSelected) {
       setSelectedTestIds(new Set());
     } else {
-      setSelectedTestIds(
-        new Set(allTests.map((t) => `${t.type}-${t.originalIndex}`)),
-      );
+      setSelectedTestIds(new Set(allTests.map((t) => t.id)));
     }
   }
 
   async function runSelectedTests() {
     if (isRunning) {
-      abortController.abort();
+      abortController?.abort();
       setAbortController(null);
       setIsRunning(false);
       setAbortedByUser(true);
@@ -223,19 +277,17 @@ export function PluginTestsView({
       return next;
     });
 
-    const testsToRun = allTests.filter((t) =>
-      selectedTestIds.has(`${t.type}-${t.originalIndex}`),
-    );
+    const testsToRun = allTests.filter((t) => selectedTestIds.has(t.id));
 
     for (const test of testsToRun) {
       if (controller.signal.aborted) break;
 
-      const id = `${test.type}-${test.originalIndex}`;
+      const id = test.id;
       setTestResults((prev) => ({ ...prev, [id]: { status: "running" } }));
 
       try {
         const res = await runPluginTest(
-          plugin.name,
+          test.pluginName,
           test.type,
           test.originalIndex,
           controller.signal,
@@ -266,12 +318,12 @@ export function PluginTestsView({
           });
           break;
         }
-        console.log("llegue");
+        console.error("Test execution failed:", err);
         setTestResults((prev) => ({
           ...prev,
           [id]: {
             status: "error",
-            errors: [err.message],
+            errors: [err.message || "Unknown error"],
             failureCategory: "Exception",
           },
         }));
@@ -279,6 +331,8 @@ export function PluginTestsView({
     }
     setAbortController(null);
   }
+
+  const titleText = plugins.length === 1 ? plugins[0].name : "Test Results";
 
   return (
     <>
@@ -293,7 +347,7 @@ export function PluginTestsView({
           <ArrowLeft size={16} />
         </Button>
         <div className="flex-1 min-w-0">
-          <DialogTitle className="font-mono text-sm">{plugin.name}</DialogTitle>
+          <DialogTitle className="font-mono text-sm">{titleText}</DialogTitle>
         </div>
       </DialogHeader>
 
@@ -320,6 +374,18 @@ export function PluginTestsView({
               >
                 {expandedResults.size > 0 ? "Hide Results" : "View Results"}
               </button>
+            )}
+
+            {summary && (
+              <>
+                <button
+                  type="button"
+                  onClick={downloadResults}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Download Results
+                </button>
+              </>
             )}
           </div>
 
@@ -456,26 +522,49 @@ export function PluginTestsView({
             </div>
           )}
 
-          {/* Test Cards */}
-          {allTests.map((test) => {
-            const id = `${test.type}-${test.originalIndex}`;
-            const isSelected = selectedTestIds.has(id);
-            const res = testResults[id];
+          <Accordion
+            multiple
+            defaultValue={pluginsWithTests.map((p) => p.pluginName)}
+            className="w-full space-y-4"
+          >
+            {pluginsWithTests.map((group) => (
+              <AccordionItem
+                key={group.pluginName}
+                value={group.pluginName}
+                className="border rounded-lg bg-card overflow-hidden"
+              >
+                <AccordionTrigger className="px-4 py-3 hover:no-underline bg-muted/30">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <span>{group.pluginName}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      ({group.tests.length} tests)
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-4 flex flex-col gap-4 border-t">
+                  {group.tests.map((test) => {
+                    const id = test.id;
+                    const isSelected = selectedTestIds.has(id);
+                    const res = testResults[id];
 
-            return (
-              <TestCardItem
-                key={id}
-                id={id}
-                test={test}
-                isSelected={isSelected}
-                isExpanded={expandedResults.has(id)}
-                onToggleExpand={handleToggleExpand}
-                res={res}
-                onToggle={toggleTest}
-                isRunning={isRunning}
-              />
-            );
-          })}
+                    return (
+                      <TestCardItem
+                        key={id}
+                        id={id}
+                        test={test}
+                        isSelected={isSelected}
+                        isExpanded={expandedResults.has(id)}
+                        onToggleExpand={handleToggleExpand}
+                        res={res}
+                        onToggle={toggleTest}
+                        isRunning={isRunning}
+                      />
+                    );
+                  })}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </ScrollArea>
     </>

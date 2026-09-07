@@ -3,6 +3,7 @@ import { handleGetPlugins } from "./useCases/getPlugins/index.ts";
 import { handleActivatePlugin } from "./useCases/activatePlugin/index.ts";
 import { handleDeactivatePlugin } from "./useCases/deactivatePlugin/index.ts";
 import { handleTest } from "./useCases/testPlugin/index.ts";
+import { handleSaveTestResults } from "./useCases/saveTestResults/index.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 
 export const pluginsRouter = new Hono<{
@@ -25,6 +26,12 @@ pluginsRouter.post("/:name/activate", (c) => {
 pluginsRouter.post("/:name/deactivate", (c) => {
   const name = c.req.param("name");
   return handleDeactivatePlugin(c.get("hive"), name, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.post("/test-results", async (c) => {
+  return handleSaveTestResults(c.req.raw, {
     "content-type": "application/json",
   });
 });
