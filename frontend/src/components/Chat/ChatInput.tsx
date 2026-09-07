@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PluginsManager } from "../PluginsManager/PluginsManager.tsx";
+import { ModesManager } from "../ModesManager/ModesManager.tsx";
 
 interface ChatInputProps {
   input: string;
@@ -37,6 +38,7 @@ export function ChatInput({
       <div className="mt-2 flex items-center justify-between">
         <div className="flex gap-2">
           <PluginsManager forceOpenDownward={isEmpty} />
+          <ModesManager />
         </div>
         <Button onClick={handleSend} disabled={isThinking || !input.trim()}>
           Send

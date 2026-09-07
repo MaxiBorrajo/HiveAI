@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+
 export interface ChatStep {
   node: "Selector" | "Executor" | "HiveQueen" | "Plugin";
   label: string;
@@ -14,3 +16,22 @@ export interface Message {
   usedTools?: string[];
   steps?: ChatStep[];
 }
+
+export  interface ChatMode {
+    name: string;
+    description: string;
+    icon: ReactElement;
+    parameters?: [
+      {
+        group: string;
+        parameters: {
+          name: string;
+          description: string;
+          type: "string" | "number" | "boolean";
+          defaultValue: string | number | boolean;
+          currentValue?: string | number | boolean;
+          options?: string[] | number[] | boolean[];
+        }[];
+      },
+    ];
+  }
