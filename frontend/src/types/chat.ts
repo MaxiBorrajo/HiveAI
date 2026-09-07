@@ -17,21 +17,19 @@ export interface Message {
   steps?: ChatStep[];
 }
 
-export  interface ChatMode {
+export interface ChatMode {
+  name: string;
+  description: string;
+  icon: ReactElement;
+  parameters?: {
     name: string;
     description: string;
-    icon: ReactElement;
-    parameters?: [
-      {
-        group: string;
-        parameters: {
-          name: string;
-          description: string;
-          type: "string" | "number" | "boolean";
-          defaultValue: string | number | boolean;
-          currentValue?: string | number | boolean;
-          options?: string[] | number[] | boolean[];
-        }[];
-      },
-    ];
-  }
+    type: "string" | "number" | "boolean";
+    defaultValue: string | number | boolean;
+    currentValue?: string | number | boolean;
+    options?: string[] | number[] | boolean[];
+    minValue?: number;
+    maxValue?: number;
+    requiresReload: boolean
+  }[];
+}

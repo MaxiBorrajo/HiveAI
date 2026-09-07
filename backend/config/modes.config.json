@@ -1,0 +1,413 @@
+[
+  {
+    "name": "fast",
+    "description": "",
+    "parameters": [
+      {
+        "name": "k_cache_type",
+        "description": "",
+        "type": "string",
+        "defaultValue": "q4_0",
+        "currentValue": "q4_0",
+        "options": ["f16", "q8_0", "q4_0"],
+        "requiresReload": true
+      },
+      {
+        "name": "v_cache_type",
+        "description": "",
+        "type": "string",
+        "defaultValue": "q4_0",
+        "currentValue": "q4_0",
+        "options": ["f16", "q8_0", "q4_0"],
+        "requiresReload": true
+      },
+      {
+        "name": "n_ctx",
+        "description": "",
+        "type": "number",
+        "defaultValue": 2048,
+        "currentValue": 2048,
+        "minValue": 512,
+        "maxValue": 131072,
+        "requiresReload": true
+      },
+      {
+        "name": "n_gpu_layers",
+        "description": "",
+        "type": "number",
+        "defaultValue": -1,
+        "currentValue": -1,
+        "minValue": -1,
+        "maxValue": 80,
+        "requiresReload": true
+      },
+      {
+        "name": "n_batch",
+        "description": "",
+        "type": "number",
+        "defaultValue": 2048,
+        "currentValue": 2048,
+        "minValue": 1,
+        "maxValue": 4096,
+        "requiresReload": true
+      },
+      {
+        "name": "n_threads",
+        "description": "",
+        "type": "number",
+        "defaultValue": 1,
+        "currentValue": 1,
+        "minValue": 1,
+        "requiresReload": true
+      },
+      {
+        "name": "mmap",
+        "description": "",
+        "type": "boolean",
+        "defaultValue": false,
+        "currentValue": false,
+        "requiresReload": true
+      },
+      {
+        "name": "mlock",
+        "description": "",
+        "type": "boolean",
+        "defaultValue": false,
+        "currentValue": false,
+        "requiresReload": true
+      },
+      {
+        "name": "temperature",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 0.0,
+        "maxValue": 2.0,
+        "requiresReload": false
+      },
+      {
+        "name": "top_k",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0,
+        "currentValue": 0,
+        "minValue": 0,
+        "maxValue": 100,
+        "requiresReload": false
+      },
+      {
+        "name": "top_p",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 0.0,
+        "maxValue": 1.0,
+        "requiresReload": false
+      },
+
+      {
+        "name": "repeat_penalty",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 1.0,
+        "maxValue": 1.5,
+        "requiresReload": false
+      },
+      {
+        "name": "num_predict",
+        "description": "",
+        "type": "number",
+        "defaultValue": 1,
+        "currentValue": 1,
+        "minValue": 1,
+        "requiresReload": false
+      },
+      {
+        "name": "spec_deco",
+        "description": "",
+        "type": "string",
+        "defaultValue": "",
+        "currentValue": "",
+        "requiresReload": true
+      }
+    ]
+  },
+  {
+    "name": "quality",
+    "description": "",
+    "parameters": [
+      {
+        "name": "k_cache_type",
+        "description": "",
+        "type": "string",
+        "defaultValue": "q4_0",
+        "currentValue": "q4_0",
+        "options": ["f16", "q8_0", "q4_0"],
+        "requiresReload": true
+      },
+      {
+        "name": "v_cache_type",
+        "description": "",
+        "type": "string",
+        "defaultValue": "q4_0",
+        "currentValue": "q4_0",
+        "options": ["f16", "q8_0", "q4_0"],
+        "requiresReload": true
+      },
+      {
+        "name": "n_ctx",
+        "description": "",
+        "type": "number",
+        "defaultValue": 2048,
+        "currentValue": 2048,
+        "minValue": 512,
+        "maxValue": 131072,
+        "requiresReload": true
+      },
+      {
+        "name": "n_gpu_layers",
+        "description": "",
+        "type": "number",
+        "defaultValue": -1,
+        "currentValue": -1,
+        "minValue": -1,
+        "maxValue": 80,
+        "requiresReload": true
+      },
+      {
+        "name": "n_batch",
+        "description": "",
+        "type": "number",
+        "defaultValue": 2048,
+        "currentValue": 2048,
+        "minValue": 1,
+        "maxValue": 4096,
+        "requiresReload": true
+      },
+      {
+        "name": "n_threads",
+        "description": "",
+        "type": "number",
+        "defaultValue": 1,
+        "currentValue": 1,
+        "minValue": 1,
+        "requiresReload": true
+      },
+      {
+        "name": "mmap",
+        "description": "",
+        "type": "boolean",
+        "defaultValue": false,
+        "currentValue": false,
+        "requiresReload": true
+      },
+      {
+        "name": "mlock",
+        "description": "",
+        "type": "boolean",
+        "defaultValue": false,
+        "currentValue": false,
+        "requiresReload": true
+      },
+      {
+        "name": "temperature",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 0.0,
+        "maxValue": 2.0,
+        "requiresReload": false
+      },
+      {
+        "name": "top_k",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0,
+        "currentValue": 0,
+        "minValue": 0,
+        "maxValue": 100,
+        "requiresReload": false
+      },
+      {
+        "name": "top_p",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 0.0,
+        "maxValue": 1.0,
+        "requiresReload": false
+      },
+
+      {
+        "name": "repeat_penalty",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 1.0,
+        "maxValue": 1.5,
+        "requiresReload": false
+      },
+      {
+        "name": "num_predict",
+        "description": "",
+        "type": "number",
+        "defaultValue": 1,
+        "currentValue": 1,
+        "minValue": 1,
+        "requiresReload": false
+      },
+      {
+        "name": "spec_deco",
+        "description": "",
+        "type": "string",
+        "defaultValue": "",
+        "currentValue": "",
+        "requiresReload": true
+      }
+    ]
+  },
+  {
+    "name": "custom",
+    "description": "",
+    "parameters": [
+      {
+        "name": "k_cache_type",
+        "description": "",
+        "type": "string",
+        "defaultValue": "q4_0",
+        "currentValue": "q4_0",
+        "options": ["f16", "q8_0", "q4_0"],
+        "requiresReload": true
+      },
+      {
+        "name": "v_cache_type",
+        "description": "",
+        "type": "string",
+        "defaultValue": "q4_0",
+        "currentValue": "q4_0",
+        "options": ["f16", "q8_0", "q4_0"],
+        "requiresReload": true
+      },
+      {
+        "name": "n_ctx",
+        "description": "",
+        "type": "number",
+        "defaultValue": 2048,
+        "currentValue": 2048,
+        "minValue": 512,
+        "maxValue": 131072,
+        "requiresReload": true
+      },
+      {
+        "name": "n_gpu_layers",
+        "description": "",
+        "type": "number",
+        "defaultValue": -1,
+        "currentValue": -1,
+        "minValue": -1,
+        "maxValue": 80,
+        "requiresReload": true
+      },
+      {
+        "name": "n_batch",
+        "description": "",
+        "type": "number",
+        "defaultValue": 2048,
+        "currentValue": 2048,
+        "minValue": 1,
+        "maxValue": 4096,
+        "requiresReload": true
+      },
+      {
+        "name": "n_threads",
+        "description": "",
+        "type": "number",
+        "defaultValue": 1,
+        "currentValue": 1,
+        "minValue": 1,
+        "requiresReload": true
+      },
+      {
+        "name": "mmap",
+        "description": "",
+        "type": "boolean",
+        "defaultValue": false,
+        "currentValue": false,
+        "requiresReload": true
+      },
+      {
+        "name": "mlock",
+        "description": "",
+        "type": "boolean",
+        "defaultValue": false,
+        "currentValue": false,
+        "requiresReload": true
+      },
+      {
+        "name": "temperature",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 0.0,
+        "maxValue": 2.0,
+        "requiresReload": false
+      },
+      {
+        "name": "top_k",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0,
+        "currentValue": 0,
+        "minValue": 0,
+        "maxValue": 100,
+        "requiresReload": false
+      },
+      {
+        "name": "top_p",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 0.0,
+        "maxValue": 1.0,
+        "requiresReload": false
+      },
+
+      {
+        "name": "repeat_penalty",
+        "description": "",
+        "type": "number",
+        "defaultValue": 0.0,
+        "currentValue": 0.0,
+        "minValue": 1.0,
+        "maxValue": 1.5,
+        "requiresReload": false
+      },
+      {
+        "name": "num_predict",
+        "description": "",
+        "type": "number",
+        "defaultValue": 1,
+        "currentValue": 1,
+        "minValue": 1,
+        "requiresReload": false
+      },
+      {
+        "name": "spec_deco",
+        "description": "",
+        "type": "string",
+        "defaultValue": "",
+        "currentValue": "",
+        "requiresReload": true
+      }
+    ]
+  }
+]
