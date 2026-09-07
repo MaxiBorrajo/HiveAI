@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -58,8 +58,13 @@ export function PluginTestsView({
   );
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [abortedByUser, setAbortedByUser] = useState(false);
 
-  const isRunning = abortController !== null;
+  useEffect(() => {
+    setIsRunning(abortController !== null);
+  }, [abortController]);
 
   const handleToggleExpand = (id: string) => {
     setExpandedResults((prev) => {
@@ -84,23 +89,29 @@ export function PluginTestsView({
 
   const allSelected =
     allTests.length > 0 && selectedTestIds.size === allTests.length;
-
-  const testsToRunCount = selectedTestIds.size;
   const testsCompletedCount = Object.entries(testResults).filter(
     ([id, res]) =>
       selectedTestIds.has(id) &&
       (res.status === "success" || res.status === "error"),
   ).length;
 
+  const testsToRunCount = abortedByUser
+    ? testsCompletedCount - 1 // If aborted, consider one test as not completed
+    : selectedTestIds.size;
+
   const progressPercent =
     testsToRunCount > 0
       ? Math.round((testsCompletedCount / testsToRunCount) * 100)
       : 0;
 
-  const isFinished =
-    !isRunning &&
-    testsCompletedCount > 0 &&
-    testsCompletedCount === testsToRunCount;
+  useEffect(() => {
+    setIsFinished(
+      (!isRunning &&
+        testsCompletedCount > 0 &&
+        testsCompletedCount === testsToRunCount) ||
+        abortedByUser,
+    );
+  }, [testsCompletedCount, testsToRunCount, isRunning]);
 
   // Compute Summary Metrics
   const summary = useMemo(() => {
@@ -194,8 +205,12 @@ export function PluginTestsView({
     if (isRunning) {
       abortController.abort();
       setAbortController(null);
+      setIsRunning(false);
+      setAbortedByUser(true);
       return;
     }
+
+    setAbortedByUser(false);
 
     const controller = new AbortController();
     setAbortController(controller);
@@ -225,6 +240,7 @@ export function PluginTestsView({
           test.originalIndex,
           controller.signal,
         );
+        console.log(`Test result for ${id}:`, res);
         setTestResults((prev) => ({
           ...prev,
           [id]: {
@@ -235,8 +251,22 @@ export function PluginTestsView({
             metrics: res.metrics,
           },
         }));
-      } catch (err: any) {
-        if (err.name === "AbortError") break;
+      } catch (err) {
+        if (err.name === "AbortError") {
+          setTestResults((prev) => {
+            const next = { ...prev };
+            if (next[id]?.status === "running") {
+              next[id] = {
+                status: "error",
+                errors: ["Test aborted by user."],
+                failureCategory: "Aborted",
+              };
+            }
+            return next;
+          });
+          break;
+        }
+        console.log("llegue");
         setTestResults((prev) => ({
           ...prev,
           [id]: {

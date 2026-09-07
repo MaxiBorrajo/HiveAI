@@ -13,8 +13,8 @@ export const homeDir: string | undefined =
 const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const MODEL = "qwen3.5:0.8b";
-const SELECTOR_MODEL = "qwen3.5:0.8b";
+const MODEL = "qwen3:1.7b";
+const SELECTOR_MODEL = "qwen3:1.7b";
 
 hive.configure({
   dataDir: join(homeDir, ".hiveai", "storage"),

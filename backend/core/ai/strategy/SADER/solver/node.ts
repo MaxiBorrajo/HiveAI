@@ -12,7 +12,7 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
 
   const selectorModel = new ChatOllama({
     model: state.selectorModel,
-    think: true,
+    think: false,
   });
 
   const correctionMessages = state.correction

@@ -1,5 +1,5 @@
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import type { z, ZodObject } from "zod";
+import { type AIMessage, HumanMessage } from "@langchain/core/messages";
+import type { z } from "zod";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type {
   BeePlugin,
@@ -65,6 +65,8 @@ export async function handleTest(
       testCase as ExecutionTestCase<typeof plugin.schema>,
     );
   }
+
+ 
 }
 
 export async function executeSelectionTest(
@@ -186,19 +188,19 @@ export async function executeExecutionTest<S extends z.ZodType = z.ZodType>(
         `Output did not meet expectations. Output returned: ${result.message}`,
       );
     }
-  } catch (err: any) {
+  } catch (err) {
     failureCategory = "Exception";
-    errors.push(err.message || String(err));
-  } finally {
-    const end = performance.now();
-    return Response.json({
-      success,
-      errors,
-      failureCategory,
-      details,
-      metrics: {
-        durationMs: Math.round(end - start),
-      },
-    });
+    errors.push(String(err));
   }
+
+  const end = performance.now();
+  return Response.json({
+    success,
+    errors,
+    failureCategory,
+    details,
+    metrics: {
+      durationMs: Math.round(end - start),
+    },
+  });
 }
