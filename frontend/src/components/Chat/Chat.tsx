@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
 import { sendMessage } from "../../lib/send-message.ts";
+import { sendMessage } from "@/lib/chats/sendMessage";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";

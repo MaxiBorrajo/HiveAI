@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/accordion";
 import type { Plugin } from "@/types/plugin";
 import { runPluginTest, saveTestResults } from "@/lib/get-plugins";
+import { runPluginTest } from "@/lib/plugins/runPluginTest";
+import { saveTestResults } from "@/lib/plugins/saveTestResults";
 import { TestCardItem } from "./TestCardItem";
 
 type TestStatus = "idle" | "running" | "success" | "error";

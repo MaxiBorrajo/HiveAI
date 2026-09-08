@@ -1,7 +1,7 @@
-import { API_URL } from "./config";
+import { API_URL } from "../config";
 import type { ChatStep } from "@/types/chat";
 
-interface StreamHandlers {
+export interface StreamHandlers {
   onThinking: () => void;
   onThinkingDelta: (content: string) => void;
   onToken: (content: string) => void;
@@ -17,7 +17,7 @@ export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
 ): Promise<void> {
-  const response = await fetch(`${API_URL}/api/chat`, {
+  const response = await fetch(`${API_URL}/api/chats`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message: content }),
@@ -63,3 +63,4 @@ export async function sendMessage(
     }
   }
 }
+

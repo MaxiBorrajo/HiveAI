@@ -21,6 +21,7 @@ export interface ChatMode {
   name: string;
   description: string;
   icon: ReactElement;
+  isCurrent?: boolean;
   parameters?: {
     name: string;
     description: string;
@@ -30,6 +31,7 @@ export interface ChatMode {
     options?: string[] | number[] | boolean[];
     minValue?: number;
     maxValue?: number;
-    requiresReload: boolean
+    note?: string;
+    requiresReload: boolean;
   }[];
 }

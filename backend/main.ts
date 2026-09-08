@@ -7,6 +7,7 @@ import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { pluginsRouter } from "./modules/plugins/router.ts";
 import { chatsRouter } from "./modules/chats/router.ts";
 import { interactionsRouter } from "./modules/interactions/router.ts";
+import { modesRouter } from "./modules/modes/router.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -57,7 +58,8 @@ app.use(
 );
 
 app.route("/api/plugins", pluginsRouter);
-app.route("/api/chat", chatsRouter);
+app.route("/api/chats", chatsRouter);
+app.route("/api/modes", modesRouter);
 app.route("/api/interactions", interactionsRouter);
 
 // Serves the built frontend directly (packaged desktop app / production).
