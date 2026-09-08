@@ -1,3 +1,4 @@
+import axios from "axios";
 import { API_URL } from "../config";
 import type {
   Plugin,
@@ -14,8 +15,8 @@ interface BackendPlugin {
 }
 
 export async function getPlugins(): Promise<Plugin[]> {
-  const response = await fetch(`${API_URL}/api/plugins`);
-  const plugins: BackendPlugin[] = await response.json();
+  const response = await axios.get(`${API_URL}/api/plugins`);
+  const plugins: BackendPlugin[] = response.data;
 
   return plugins.map((plugin) => ({
     id: plugin.name,
@@ -26,4 +27,3 @@ export async function getPlugins(): Promise<Plugin[]> {
     executionTests: plugin.executionTests || [],
   }));
 }
-

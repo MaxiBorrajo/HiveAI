@@ -22,7 +22,10 @@ export interface ChatMode {
   description: string;
   icon: ReactElement;
   isCurrent?: boolean;
-  parameters?: {
+  parameters?: ChatModeParameter[];
+}
+
+export interface ChatModeParameter {
     name: string;
     description: string;
     type: "string" | "number" | "boolean";
@@ -33,5 +36,4 @@ export interface ChatMode {
     maxValue?: number;
     note?: string;
     requiresReload: boolean;
-  }[];
-}
+  }

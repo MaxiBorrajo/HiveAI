@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { getPlugins, setPluginActive } from "@/lib/get-plugins";
 import { getPlugins } from "@/lib/plugins/getPlugins";
 import { setPluginActive } from "@/lib/plugins/setPluginActive";
 import type { Plugin } from "@/types/plugin";

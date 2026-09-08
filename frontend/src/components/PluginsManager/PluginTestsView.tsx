@@ -10,7 +10,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import type { Plugin } from "@/types/plugin";
-import { runPluginTest, saveTestResults } from "@/lib/get-plugins";
 import { runPluginTest } from "@/lib/plugins/runPluginTest";
 import { saveTestResults } from "@/lib/plugins/saveTestResults";
 import { TestCardItem } from "./TestCardItem";
@@ -234,7 +233,9 @@ export function PluginTestsView({
       const { path } = await saveTestResults({ summary, results });
       alert(`Results saved to:\n${path}`);
     } catch (err) {
-      alert(`Failed to save results: ${err instanceof Error ? err.message : err}`);
+      alert(
+        `Failed to save results: ${err instanceof Error ? err.message : err}`,
+      );
     }
   };
 
@@ -306,7 +307,7 @@ export function PluginTestsView({
           },
         }));
       } catch (err) {
-        if (err.name === "AbortError") {
+        if (err instanceof Error && err.name === "CanceledError") {
           setTestResults((prev) => {
             const next = { ...prev };
             if (next[id]?.status === "running") {
@@ -321,11 +322,15 @@ export function PluginTestsView({
           break;
         }
         console.error("Test execution failed:", err);
+        const errorMessage =
+          err instanceof Error
+            ? (err as any).response?.data?.message || err.message
+            : "Unknown error";
         setTestResults((prev) => ({
           ...prev,
           [id]: {
             status: "error",
-            errors: [err.message || "Unknown error"],
+            errors: [errorMessage],
             failureCategory: "Exception",
           },
         }));

@@ -1,4 +1,4 @@
-import * as modes from '../../../../config/modes.config.json' with { type: "json" };
+import modes from '../../../../config/modes.config.json' with { type: "json" };
 
 export function getModes(
   headers: Record<string, string>,

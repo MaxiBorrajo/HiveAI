@@ -1,3 +1,4 @@
+import axios from "axios";
 import { API_URL } from "../config";
 import type { ChatStep } from "@/types/chat";
 
@@ -17,17 +18,20 @@ export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
 ): Promise<void> {
-  const response = await fetch(`${API_URL}/api/chats`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ message: content }),
-  });
+  const response = await axios.post(
+    `${API_URL}/api/chats`,
+    { message: content },
+    {
+      responseType: "stream",
+      adapter: "fetch",
+    },
+  );
 
-  if (!response.ok || !response.body) {
-    throw new Error(`The backend responded with status ${response.status}`);
+  if (!response.data) {
+    throw new Error(`The backend responded with no body`);
   }
 
-  const reader = response.body.getReader();
+  const reader = response.data.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
@@ -56,11 +60,14 @@ export async function sendMessage(
       } else if (eventName === "token") {
         handlers.onToken(payload.content);
       } else if (eventName === "done") {
-        handlers.onDone(payload.content, payload.usedTools ?? [], payload.steps ?? []);
+        handlers.onDone(
+          payload.content,
+          payload.usedTools ?? [],
+          payload.steps ?? [],
+        );
       } else if (eventName === "error") {
         handlers.onError(payload.message);
       }
     }
   }
 }
-

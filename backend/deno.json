@@ -2,6 +2,9 @@
   "name": "hive-ai",
   "version": "0.1.0",
   "exports": "./main.ts",
+  "resolveJsonModule": true,
+  "esModuleInterop": true,
+  "moduleResolution": "node",
   "compilerOptions": {
     "types": ["npm:@types/node"]
   },

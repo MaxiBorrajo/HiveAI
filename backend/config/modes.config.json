@@ -3,7 +3,7 @@
     "name": "fast",
     "isCurrent": false,
     "description": "Prioritizes inference speed over output fidelity",
-    "parameters": {"k_cache_type": }[
+    "parameters": [
       {
         "name": "k_cache_type",
         "description": "Quantization type for the Key (K) cache in attention layers. Lower bit precision reduces VRAM and memory bandwidth usage at a minor cost to precision.",

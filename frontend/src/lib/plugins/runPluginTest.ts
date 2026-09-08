@@ -1,3 +1,4 @@
+import axios from "axios";
 import { API_URL } from "../config";
 
 export async function runPluginTest(
@@ -6,16 +7,10 @@ export async function runPluginTest(
   index: number,
   signal: AbortSignal,
 ) {
-  const response = await fetch(
+  const response = await axios.post(
     `${API_URL}/api/plugins/${encodeURIComponent(name)}/test/${type}/${index}`,
-    {
-      method: "POST",
-      signal,
-    },
+    {},
+    { signal },
   );
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json();
+  return response.data;
 }
-
