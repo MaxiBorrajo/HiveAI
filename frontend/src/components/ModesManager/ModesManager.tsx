@@ -14,15 +14,15 @@ import { getModes } from "../../lib/modes/getModes.ts";
 import { Button } from "../ui/button.tsx";
 import { Switch } from "../ui/switch.tsx";
 import { Slider } from "../ui/slider.tsx";
+import { setMode } from "../../lib/modes/setMode.ts";
 
 export function ModesManager() {
   const [modes, setModes] = useState<ChatMode[]>([]);
 
   useEffect(() => {
-    getModes().then((modes) => {
-      console.log(modes);
+    getModes().then(({ data }) => {
       setModes(
-        modes.map((mode) => ({
+        data.map((mode) => ({
           ...mode,
           icon:
             mode.name === "fast" ? (
@@ -64,6 +64,11 @@ export function ModesManager() {
         parameter.currentValue = parameter.defaultValue;
       });
     });
+  };
+
+  const changeMode = async (mode: ChatMode) => {
+    setCurrentMode(mode);
+    await setMode(mode);
   };
 
   const onChange = (
@@ -127,7 +132,7 @@ export function ModesManager() {
                         Reset
                       </Button>
                       <Button
-                        onClick={() => setCurrentMode(mode)}
+                        onClick={() => changeMode(mode)}
                         title="Apply the selected mode and its parameters"
                         size="sm"
                       >

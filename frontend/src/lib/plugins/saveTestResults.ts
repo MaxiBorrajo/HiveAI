@@ -1,9 +1,9 @@
 import axios from "axios";
-import { API_URL } from "../config";
+import { API_URL, type ResponseEntity } from "../config";
 
 export async function saveTestResults(
   data: unknown,
-): Promise<{ path: string }> {
+): Promise<ResponseEntity<{ path: string }>> {
   const response = await axios.post(
     `${API_URL}/api/plugins/test-results`,
     data,

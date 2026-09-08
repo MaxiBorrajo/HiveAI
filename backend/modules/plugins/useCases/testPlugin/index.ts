@@ -6,10 +6,11 @@ import type {
   ExecutionTestCase,
   SelectionTestCase,
 } from "../../../../core/microkernel/bee-plugin.ts";
-import type { TestKind } from "./types.ts";
+import type { ExecutionTestResult, SelectionTestResult, TestKind } from "./types.ts";
 import { HiveMind } from "../../../../core/ai/strategy/SADER/graph.ts";
 import { homeDir } from "hive-ai";
 import { join } from "node:path";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 export async function handleTest(
   hive: HiveMicrokernel,
@@ -32,10 +33,10 @@ export async function handleTest(
   const plugin = hive.getPlugin(pluginName);
 
   if (!plugin) {
-    return Response.json(
-      { error: "Plugin not found" },
-      { status: 404, headers },
-    );
+    return ResponseBuilder.error(["Plugin not found"], undefined, {
+      status: 404,
+      headers,
+    });
   }
 
   const tests =
@@ -45,7 +46,10 @@ export async function handleTest(
   console.log(tests[index]);
 
   if (!plugin || !tests || !tests[index]) {
-    return Response.json({ error: "Test not found" }, { status: 404, headers });
+    return ResponseBuilder.error(["Test not found"], undefined, {
+      status: 404,
+      headers,
+    });
   }
 
   const testCase = tests[index];
@@ -65,8 +69,6 @@ export async function handleTest(
       testCase as ExecutionTestCase<typeof plugin.schema>,
     );
   }
-
- 
 }
 
 export async function executeSelectionTest(
@@ -150,9 +152,7 @@ export async function executeSelectionTest(
   }
   const end = performance.now();
   const durationMs = Math.round(end - start);
-  return Response.json({
-    success,
-    errors,
+  const data: SelectionTestResult = {
     failureCategory,
     details,
     metrics: {
@@ -164,7 +164,13 @@ export async function executeSelectionTest(
           ? Number(((outputTokens / durationMs) * 1000).toFixed(1))
           : 0,
     },
-  });
+  };
+
+  if (success) {
+    return ResponseBuilder.success(data);
+  } else {
+    return ResponseBuilder.error(errors, data);
+  }
 }
 
 export async function executeExecutionTest<S extends z.ZodType = z.ZodType>(
@@ -194,13 +200,17 @@ export async function executeExecutionTest<S extends z.ZodType = z.ZodType>(
   }
 
   const end = performance.now();
-  return Response.json({
-    success,
-    errors,
+  const data: ExecutionTestResult = {
     failureCategory,
     details,
     metrics: {
       durationMs: Math.round(end - start),
     },
-  });
+  };
+
+  if (success) {
+    return ResponseBuilder.success(data);
+  } else {
+    return ResponseBuilder.error(errors, data);
+  }
 }

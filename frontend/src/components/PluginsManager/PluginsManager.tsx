@@ -14,7 +14,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    getPlugins().then(setPlugins);
+    getPlugins().then(({ data }) => setPlugins(data));
   }, []);
 
   async function togglePlugin(plugin: Plugin, nextActive: boolean) {
@@ -44,7 +44,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         pluginsToChange.map((p) => setPluginActive(p.name, nextActive)),
       );
     } catch {
-      getPlugins().then(setPlugins);
+      getPlugins().then(({ data }) => setPlugins(data));
     }
   }
 

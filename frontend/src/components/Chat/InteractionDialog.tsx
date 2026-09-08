@@ -29,9 +29,9 @@ export function InteractionDialog() {
 
     async function poll() {
       try {
-        const interactions = await listPendingInteractions();
+        const { data } = await listPendingInteractions();
         if (!cancelled) {
-          setPending((current) => current ?? interactions[0] ?? null);
+          setPending((current) => current ?? data[0] ?? null);
         }
       } catch {
         // Backend unreachable; try again on the next tick.
@@ -99,7 +99,10 @@ export function InteractionDialog() {
           >
             Rechazar
           </Button>
-          <Button disabled={isResolving} onClick={() => handleDecision("approve")}>
+          <Button
+            disabled={isResolving}
+            onClick={() => handleDecision("approve")}
+          >
             Aprobar
           </Button>
         </DialogFooter>

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { homeDir } from "hive-ai";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 export async function handleSaveTestResults(
   req: Request,
@@ -17,5 +18,5 @@ export async function handleSaveTestResults(
 
   await Deno.writeTextFile(filePath, body);
 
-  return Response.json({ path: filePath }, { headers });
+  return ResponseBuilder.success({ path: filePath }, { headers });
 }

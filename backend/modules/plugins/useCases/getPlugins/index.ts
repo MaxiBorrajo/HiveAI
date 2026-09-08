@@ -1,6 +1,7 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 import type { GetPluginsResponse } from "./types.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 export function getPlugins(hive: HiveMicrokernel): GetPluginsResponse {
   return hive
@@ -28,5 +29,5 @@ export function handleGetPlugins(
   headers: Record<string, string>,
 ): Response {
   const plugins = getPlugins(hive);
-  return Response.json(plugins, { headers });
+  return ResponseBuilder.success(plugins, { headers });
 }

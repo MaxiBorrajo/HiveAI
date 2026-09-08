@@ -2,7 +2,7 @@ import axios from "axios";
 import { API_URL, type ResponseEntity } from "../config";
 import type { ChatMode } from "@/types/chat";
 
-export async function getModes(): Promise<ResponseEntity<ChatMode[]>> {
-  const response = await axios.get(`${API_URL}/api/modes`);
+export async function setMode(mode: ChatMode): Promise<ResponseEntity<string>> {
+  const response = await axios.put(`${API_URL}/api/modes`, mode);
   return response.data;
 }

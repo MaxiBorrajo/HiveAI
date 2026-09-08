@@ -1,24 +1,10 @@
 import axios from "axios";
-import { API_URL } from "../config";
-import type {
-  Plugin,
-  SelectionTestCase,
-  ExecutionTestCase,
-} from "@/types/plugin";
+import { API_URL, type ResponseEntity } from "../config";
+import type { Plugin } from "@/types/plugin";
 
-interface BackendPlugin {
-  name: string;
-  description: string;
-  active: boolean;
-  selectionTests?: SelectionTestCase[];
-  executionTests?: ExecutionTestCase[];
-}
-
-export async function getPlugins(): Promise<Plugin[]> {
+export async function getPlugins(): Promise<ResponseEntity<Plugin[]>> {
   const response = await axios.get(`${API_URL}/api/plugins`);
-  const plugins: BackendPlugin[] = response.data;
-
-  return plugins.map((plugin) => ({
+  response.data.data = response.data.data.map((plugin) => ({
     id: plugin.name,
     name: plugin.name,
     description: plugin.description,
@@ -26,4 +12,5 @@ export async function getPlugins(): Promise<Plugin[]> {
     selectionTests: plugin.selectionTests || [],
     executionTests: plugin.executionTests || [],
   }));
+  return response.data;
 }

@@ -1,9 +1,3 @@
-export type TestKind = "execution" | "selection";
-
-export interface TestErrorResponse {
-  error: string;
-}
-
 export interface SelectionTestResult {
   failureCategory: string | undefined;
   details: {

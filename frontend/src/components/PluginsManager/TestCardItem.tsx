@@ -11,7 +11,20 @@ import {
   Coins,
   ChevronDown,
   ChevronUp,
+  type LucideIcon,
 } from "lucide-react";
+import type { PluginTestItem, TestResult } from "@/types/plugin";
+
+export interface TestCardItemProps {
+  test: PluginTestItem;
+  id: string;
+  isSelected: boolean;
+  isExpanded: boolean;
+  onToggleExpand: (id: string) => void;
+  res?: TestResult;
+  onToggle: (id: string) => void;
+  isRunning: boolean;
+}
 
 export function TestCardItem({
   test,
@@ -22,9 +35,9 @@ export function TestCardItem({
   res,
   onToggle,
   isRunning,
-}: any) {
+}: TestCardItemProps) {
   let kindColor = "bg-slate-100 text-slate-700 border-slate-200";
-  let KindIcon = Box;
+  let KindIcon: LucideIcon = Box;
 
   if (test.kind === "positive" || test.kind === "happy") {
     kindColor = "bg-green-50 text-green-700 border-green-200";
@@ -133,7 +146,7 @@ export function TestCardItem({
               </div>
             )}
 
-            {test.type === "selection" && (test as any).expectedParams && (
+            {test.type === "selection" && test.expectedParams && (
               <div
                 title="The exact parameters the LLM is expected to extract from the query"
                 className="mt-3 bg-muted/50 rounded-md p-2.5 border border-border/50 cursor-help"
@@ -142,12 +155,12 @@ export function TestCardItem({
                   Expected Params
                 </p>
                 <pre className="text-[11px] font-mono text-foreground/80 whitespace-pre-wrap">
-                  {JSON.stringify((test as any).expectedParams, null, 2)}
+                  {JSON.stringify(test.expectedParams, null, 2)}
                 </pre>
               </div>
             )}
 
-            {test.type === "execution" && (test as any).params && (
+            {test.type === "execution" && test.params && (
               <div
                 title="The exact parameters passed directly into the plugin's process method"
                 className="mt-3 bg-muted/50 rounded-md p-2.5 border border-border/50 cursor-help"
@@ -156,7 +169,7 @@ export function TestCardItem({
                   Params
                 </p>
                 <pre className="text-[11px] font-mono text-foreground/80 whitespace-pre-wrap">
-                  {JSON.stringify((test as any).params, null, 2)}
+                  {JSON.stringify(test.params, null, 2)}
                 </pre>
               </div>
             )}
@@ -167,7 +180,7 @@ export function TestCardItem({
                 className="mt-3 bg-destructive/10 cursor-help text-destructive rounded-md p-3 border border-destructive/20"
               >
                 <ul className="text-xs list-disc list-inside space-y-1">
-                  {res.errors.map((err: string, i: number) => (
+                  {res.errors.map((err, i) => (
                     <li key={i}>{err}</li>
                   ))}
                 </ul>
@@ -214,7 +227,7 @@ export function TestCardItem({
       </label>
 
       {/* Actual Results Accordion Panel */}
-      {hasResults && isExpanded && (
+      {hasResults && isExpanded && res?.details && (
         <div
           title="The actual results returned during the test"
           className="rounded-xl border border-border bg-card shadow-sm p-4 text-foreground cursor-help min-w-0 animate-in slide-in-from-top-2 fade-in-0 duration-200"

@@ -9,28 +9,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { Plugin } from "@/types/plugin";
+import { isAxiosError } from "axios";
+import type { Plugin, PluginTestItem, TestResult } from "@/types/plugin";
 import { runPluginTest } from "@/lib/plugins/runPluginTest";
 import { saveTestResults } from "@/lib/plugins/saveTestResults";
 import { TestCardItem } from "./TestCardItem";
-
-type TestStatus = "idle" | "running" | "success" | "error";
-interface TestResult {
-  status: TestStatus;
-  errors?: string[];
-  failureCategory?: string;
-  details?: {
-    selectedTool?: string | null;
-    extractedParams?: Record<string, unknown> | null;
-    output?: string | null;
-  };
-  metrics?: {
-    durationMs: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    tokensPerSecond?: number;
-  };
-}
 
 export function PluginTestsView({
   plugins,
@@ -42,7 +25,7 @@ export function PluginTestsView({
   const pluginsWithTests = useMemo(() => {
     return plugins
       .map((plugin) => {
-        const tests = [
+        const tests: PluginTestItem[] = [
           ...(plugin.selectionTests || []).map((t, i) => ({
             ...t,
             type: "selection" as const,
@@ -230,8 +213,10 @@ export function PluginTestsView({
       });
 
     try {
-      const { path } = await saveTestResults({ summary, results });
-      alert(`Results saved to:\n${path}`);
+      const { data } = await saveTestResults({ summary, results });
+      if (data?.path) {
+        alert(`Results saved to:\n${data.path}`);
+      }
     } catch (err) {
       alert(
         `Failed to save results: ${err instanceof Error ? err.message : err}`,
@@ -289,21 +274,20 @@ export function PluginTestsView({
       setTestResults((prev) => ({ ...prev, [id]: { status: "running" } }));
 
       try {
-        const res = await runPluginTest(
+        const { success, errors, data } = await runPluginTest(
           test.pluginName,
           test.type,
           test.originalIndex,
           controller.signal,
         );
-        console.log(`Test result for ${id}:`, res);
         setTestResults((prev) => ({
           ...prev,
           [id]: {
-            status: res.success ? "success" : "error",
-            errors: res.errors,
-            failureCategory: res.failureCategory,
-            details: res.details,
-            metrics: res.metrics,
+            status: success ? "success" : "error",
+            errors: errors,
+            failureCategory: data?.failureCategory,
+            details: data?.details,
+            metrics: data?.metrics,
           },
         }));
       } catch (err) {
@@ -322,9 +306,11 @@ export function PluginTestsView({
           break;
         }
         console.error("Test execution failed:", err);
-        const errorMessage =
-          err instanceof Error
-            ? (err as any).response?.data?.message || err.message
+        const errorMessage = isAxiosError(err)
+          ? (err.response?.data as { message?: string } | undefined)?.message ||
+            err.message
+          : err instanceof Error
+            ? err.message
             : "Unknown error";
         setTestResults((prev) => ({
           ...prev,
