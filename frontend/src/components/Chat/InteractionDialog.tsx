@@ -16,10 +16,6 @@ import {
 
 const POLL_INTERVAL_MS = 1500;
 
-// Generic across any plugin that needs a human to approve something before it
-// proceeds — not just run_shell. Polls for pending interactions and renders
-// UI based on each entry's payload.kind, so a future "choice"/"input" kind
-// only needs a new branch here, not a new dialog + polling loop.
 export function InteractionDialog() {
   const [pending, setPending] = useState<PendingInteraction | null>(null);
   const [isResolving, setIsResolving] = useState(false);
@@ -29,12 +25,11 @@ export function InteractionDialog() {
 
     async function poll() {
       try {
-        const interactions = await listPendingInteractions();
+        const { data } = await listPendingInteractions();
         if (!cancelled) {
-          setPending((current) => current ?? interactions[0] ?? null);
+          setPending((current) => current ?? data[0] ?? null);
         }
       } catch {
-        // Backend unreachable; try again on the next tick.
       }
     }
 
@@ -58,8 +53,6 @@ export function InteractionDialog() {
   }
 
   if (pending && pending.payload.kind !== "approval") {
-    // Unknown/unsupported kind: don't block the user on a dialog we can't
-    // render meaningfully for.
     return null;
   }
 
@@ -99,7 +92,10 @@ export function InteractionDialog() {
           >
             Rechazar
           </Button>
-          <Button disabled={isResolving} onClick={() => handleDecision("approve")}>
+          <Button
+            disabled={isResolving}
+            onClick={() => handleDecision("approve")}
+          >
             Aprobar
           </Button>
         </DialogFooter>

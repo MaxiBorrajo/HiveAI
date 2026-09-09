@@ -2,24 +2,84 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { TestTube } from "lucide-react";
+import { Ellipsis, TestTube, ToggleLeft, ToggleRight } from "lucide-react";
 import type { Plugin } from "@/types/plugin";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu.tsx";
 
 interface PluginListViewProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
-  onSelectPlugin: (name: string) => void;
+  onToggleAll: (nextActive: boolean) => void;
+  onSelectPlugins: (plugins: Plugin[]) => void;
+  hasModel?: boolean;
 }
 
 export function PluginListView({
   plugins,
   onToggle,
-  onSelectPlugin,
+  onToggleAll,
+  onSelectPlugins,
+  hasModel = true,
 }: PluginListViewProps) {
+  const allActive = plugins.length > 0 && plugins.every((p) => p.active);
+
   return (
     <>
-      <DialogHeader className="p-6 pb-0">
+      <DialogHeader className="p-6 pb-0 flex flex-row items-center">
         <DialogTitle>Manage Plugins</DialogTitle>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="" title="Options">
+            <Ellipsis className="size-5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            side="bottom"
+            sideOffset={8}
+            className="w-56"
+          >
+            <DropdownMenuItem
+              key="Toggle all plugins"
+              closeOnClick={false}
+              onClick={() => onToggleAll(!allActive)}
+              disabled={plugins.length === 0}
+            >
+              <div className="flex items-center gap-2">
+                {allActive ? (
+                  <ToggleRight size={12} />
+                ) : (
+                  <ToggleLeft size={12} />
+                )}
+
+                <span className="text-sm font-mono truncate">
+                  Toggle all plugins
+                </span>
+              </div>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              key="Run all tests"
+              onClick={() => onSelectPlugins(plugins)}
+              disabled={!hasModel}
+              title={
+                hasModel ? undefined : "Select a model before running tests"
+              }
+            >
+              <div className="flex items-center gap-2">
+                <TestTube size={12} />
+                <span className="text-sm font-mono truncate">
+                  Run all tests
+                </span>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </DialogHeader>
 
       <ScrollArea className="flex-1 p-6 pt-2">
@@ -37,14 +97,14 @@ export function PluginListView({
             >
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-semibold items-center flex gap-2 mb-2">
+                  <div className="font-mono text-sm font-semibold items-center flex gap-2 mb-2">
                     <Switch
                       checked={plugin.active}
                       onCheckedChange={(checked) => onToggle(plugin, checked)}
                       className="mt-0.5"
                     />{" "}
                     {plugin.name}
-                  </p>
+                  </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {plugin.description}
                   </p>
@@ -56,7 +116,13 @@ export function PluginListView({
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => onSelectPlugin(plugin.name)}
+                    onClick={() => onSelectPlugins([plugin])}
+                    disabled={!hasModel}
+                    title={
+                      hasModel
+                        ? undefined
+                        : "Select a model before running tests"
+                    }
                     className="shrink-0 h-8 gap-1 px-3"
                   >
                     <TestTube size={12} />

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { getPlugins, setPluginActive } from "@/lib/get-plugins";
+import { getPlugins } from "@/lib/plugins/getPlugins";
+import { setPluginActive } from "@/lib/plugins/setPluginActive";
 import type { Plugin } from "@/types/plugin";
+import { useModels } from "@/context/ModelsContext";
 import { PluginsMenu } from "./PluginsMenu";
 import { PluginsModal } from "./PluginsModal";
 
@@ -9,11 +11,12 @@ interface PluginsManagerProps {
 }
 
 export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
+  const { hasModel } = useModels();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    getPlugins().then(setPlugins);
+    getPlugins().then(({ data }) => setPlugins(data));
   }, []);
 
   async function togglePlugin(plugin: Plugin, nextActive: boolean) {
@@ -32,11 +35,27 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
     }
   }
 
+  async function toggleAllPlugins(nextActive: boolean) {
+    const pluginsToChange = plugins.filter((p) => p.active !== nextActive);
+    if (pluginsToChange.length === 0) return;
+
+    setPlugins((prev) => prev.map((p) => ({ ...p, active: nextActive })));
+
+    try {
+      await Promise.all(
+        pluginsToChange.map((p) => setPluginActive(p.name, nextActive)),
+      );
+    } catch {
+      getPlugins().then(({ data }) => setPlugins(data));
+    }
+  }
+
   return (
     <>
       <PluginsMenu
         plugins={plugins}
         onToggle={togglePlugin}
+        onToggleAll={toggleAllPlugins}
         onOpenManage={() => setIsModalOpen(true)}
         forceOpenDownward={forceOpenDownward}
       />
@@ -45,6 +64,8 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         onOpenChange={setIsModalOpen}
         plugins={plugins}
         onToggle={togglePlugin}
+        onToggleAll={toggleAllPlugins}
+        hasModel={hasModel}
       />
     </>
   );

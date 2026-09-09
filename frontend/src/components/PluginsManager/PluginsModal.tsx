@@ -9,6 +9,8 @@ interface PluginsModalProps {
   onOpenChange: (open: boolean) => void;
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
+  onToggleAll: (nextActive: boolean) => void;
+  hasModel?: boolean;
 }
 
 export function PluginsModal({
@@ -16,18 +18,15 @@ export function PluginsModal({
   onOpenChange,
   plugins,
   onToggle,
+  onToggleAll,
+  hasModel = true,
 }: PluginsModalProps) {
-  const [selectedPluginName, setSelectedPluginName] = useState<string | null>(
-    null,
-  );
+  const [selectedPlugins, setSelectedPlugins] = useState<Plugin[]>([]);
 
-  // Reset internal view when modal closes
   function handleOpenChange(open: boolean) {
-    if (!open) setSelectedPluginName(null);
+    if (!open) setSelectedPlugins([]);
     onOpenChange(open);
   }
-
-  const selectedPlugin = plugins.find((p) => p.name === selectedPluginName);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -35,16 +34,18 @@ export function PluginsModal({
         className="w-[90vw] max-w-3xl sm:max-w-[90vw] md:max-w-[90vw] lg:max-w-3xl h-[80vh] p-0 flex flex-col overflow-scroll"
         showCloseButton
       >
-        {selectedPlugin ? (
+        {selectedPlugins.length > 0 ? (
           <PluginTestsView
-            plugin={selectedPlugin}
-            onBack={() => setSelectedPluginName(null)}
+            plugins={selectedPlugins}
+            onBack={() => setSelectedPlugins([])}
           />
         ) : (
           <PluginListView
             plugins={plugins}
             onToggle={onToggle}
-            onSelectPlugin={setSelectedPluginName}
+            onToggleAll={onToggleAll}
+            onSelectPlugins={setSelectedPlugins}
+            hasModel={hasModel}
           />
         )}
       </DialogContent>

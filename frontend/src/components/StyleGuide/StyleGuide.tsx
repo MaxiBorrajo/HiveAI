@@ -9,7 +9,6 @@ export function StyleGuide() {
   return (
     <div className="min-h-screen bg-background text-foreground p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-12">
-        {/* Cabecera / Logo */}
         <section className="space-y-4">
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="HiveAI" width={48} height={48} />
@@ -27,7 +26,6 @@ export function StyleGuide() {
 
         <Separator />
 
-        {/* Colores */}
         <section className="space-y-4">
           <h2 className="text-display text-lg">Semantic Colors</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -76,7 +74,6 @@ export function StyleGuide() {
 
         <Separator />
 
-        {/* Tipografía */}
         <section className="space-y-4">
           <h2 className="text-display text-lg">Typography</h2>
           <div className="space-y-4 bg-card p-6 rounded-lg border border-border">
@@ -114,12 +111,10 @@ export function StyleGuide() {
 
         <Separator />
 
-        {/* Componentes UI */}
         <section className="space-y-8">
           <h2 className="text-display text-lg">Shadcn Components</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Botones */}
             <div className="space-y-4">
               <h3 className="text-sm text-muted-foreground font-mono">
                 Buttons
@@ -133,7 +128,6 @@ export function StyleGuide() {
               </div>
             </div>
 
-            {/* Badges & Avatar */}
             <div className="space-y-4">
               <h3 className="text-sm text-muted-foreground font-mono">
                 Badges & Avatar
@@ -159,7 +153,6 @@ export function StyleGuide() {
               </div>
             </div>
 
-            {/* Textarea */}
             <div className="space-y-4 md:col-span-2">
               <h3 className="text-sm text-muted-foreground font-mono">
                 Text input (Chat input)
@@ -171,7 +164,6 @@ export function StyleGuide() {
               />
             </div>
 
-            {/* Skeleton */}
             <div className="space-y-4 md:col-span-2">
               <h3 className="text-sm text-muted-foreground font-mono">
                 Loading state (Skeleton)

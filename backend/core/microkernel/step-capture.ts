@@ -1,12 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// Lets a plugin report sub-steps of its own work (e.g. "trying provider X",
-// "retrying") that show up alongside the Selector/Executor/HiveQueen steps in
-// the chat UI, without the plugin knowing anything about LangGraph or the
-// chat state. AsyncLocalStorage keeps each tool.invoke() call's reports
-// isolated even if multiple tool calls ever run concurrently — a plain
-// module-level array would mix reports from different plugins together.
-
 export interface PluginStepReport {
   label: string;
   reportedAt: number;

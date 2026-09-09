@@ -1,4 +1,4 @@
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
 import { HiveAIState } from "../graph.ts";
 import { ChatOllama } from "@langchain/ollama";
@@ -17,16 +17,16 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   state,
 ) => {
   const start = performance.now();
-  const responder = new ChatOllama({
+  const responderOptions = {
     model: state.model,
     think: false,
     temperature: 0.0,
-    // Caps generation length as a hard safety net: a local/quantized model
-    // can occasionally fall into a repetition loop and never emit a natural
-    // stop token, which would otherwise stream forever with nothing to cut
-    // it off.
     numPredict: 1024,
-  });
+    ...state.modelOptions,
+  };
+  const responder = new ChatOllama(responderOptions);
+
+  console.log(`[SADER - Responder] Effective Ollama options:`, responderOptions);
 
   const isNoToolNeeded =
     state.selectedTool === "NONE" && state.abstentionVerified;
@@ -66,12 +66,31 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
             systemPrompt: RESPONDER_SUCCESS_SYSTEM_PROMPT,
           };
 
+  console.log(`\n[SADER - Responder] Starting response generation`);
+  console.log(
+    `[SADER - Responder] State: noTool=${isNoToolNeeded}, giveUp=${isUnrecoverableFailure}, outOfAttempts=${outOfAttempts}`,
+  );
+
   const response = await responder.invoke([
     new SystemMessage(prompts.systemPrompt),
     new HumanMessage(prompts.humanPrompt),
   ]);
 
+  console.log(
+    `[SADER - Responder] Final answer output:`,
+    String(response.content).substring(0, 150) + "...",
+  );
+
   const durationMs = performance.now() - start;
+  const outputTokens = (response as AIMessage).usage_metadata?.output_tokens ?? 0;
+  const tokensPerSecond =
+    durationMs > 0 && outputTokens > 0
+      ? Number(((outputTokens / durationMs) * 1000).toFixed(1))
+      : 0;
+
+  console.log(
+    `[SADER - Responder] ${outputTokens} output tokens in ${durationMs.toFixed(0)}ms (${tokensPerSecond} tok/s)`,
+  );
 
   return {
     messages: [response],
@@ -80,7 +99,10 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
         node: "HiveQueenResponder" as const,
         label: "Drafting response",
         durationMs,
-        summary: String(response.content).replace(/\s+/g, " ").trim().slice(0, 200),
+        summary: String(response.content)
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200),
       },
     ],
   };

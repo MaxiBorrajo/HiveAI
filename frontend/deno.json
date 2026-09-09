@@ -1,5 +1,4 @@
 {
-  "name": "HiveAI",
   "nodeModulesDir": "auto",
   "identifier": "com.hiveai.desktop",
   "desktop": {

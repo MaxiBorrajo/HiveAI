@@ -6,17 +6,10 @@ import {
   HiveAIState,
   type ChatStep,
 } from "../../../../core/ai/strategy/SADER/graph.ts";
+import { resolveModelOptions } from "../../../modes/utils/resolveModelOptions.ts";
 
 let chatHistory: BaseMessage[] = [];
 
-// Streams the final answer token-by-token via Server-Sent Events, instead of
-// waiting for the whole graph run to finish. LangGraph's "messages" stream
-// mode emits every token from every LLM-backed node. Only HiveQueenResponder
-// produces user-facing text, so "token" is filtered to that node — but
-// reasoning ("thinking_delta") is forwarded from ANY node, since
-// HiveQueenResponder itself runs with think: false (it never reasons) while
-// AbstentionVerificator/Diagnostician do think — that's the actual "thinking"
-// the user sees a delay for, and it would otherwise be silently dropped.
 export function handleChat(
   hive: HiveMicrokernel,
   model: string,
@@ -54,10 +47,11 @@ export function handleChat(
 
         chatHistory.push(new HumanMessage(userText));
 
-        // Solver/Executor/Diagnostician can take a while before
-        // HiveQueenResponder emits its first token. Tell the frontend to show
-        // a "thinking" indicator immediately; it clears it on the first token.
         send("thinking", {});
+
+        const modelOptions = await resolveModelOptions(
+          hive.getConfig().get("currentMode"),
+        );
 
         let fullContent = "";
         const steps: ChatStep[] = [];
@@ -68,6 +62,7 @@ export function handleChat(
             model,
             selectorModel,
             currentPrompt: userText,
+            modelOptions,
           },
           { streamMode: ["messages", "values"] },
         )) {
@@ -101,18 +96,12 @@ export function handleChat(
             continue;
           }
 
-          // mode === "values": full state snapshot after each node — used to
-          // pick up the accumulated step log along the way.
           steps.length = 0;
           steps.push(...payload.steps);
         }
 
         chatHistory.push(new AIMessage(fullContent));
 
-        // Tools used during this turn. The Executor's ToolMessage lives in
-        // the graph's own internal state (state.messages), never copied into
-        // chatHistory — the accumulated step log is what actually reflects
-        // which tools ran, via each "Executor" step's label (the tool name).
         const usedTools = Array.from(
           new Set(
             steps

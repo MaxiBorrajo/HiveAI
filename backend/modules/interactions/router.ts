@@ -2,10 +2,6 @@ import { Hono } from "hono";
 import { handleListInteractions } from "./useCases/listInteractions/index.ts";
 import { handleResolveInteraction } from "./useCases/resolveInteraction/index.ts";
 
-// Generic human-interaction flow: any plugin can block waiting for one of
-// these to resolve its pending entry before it proceeds (see
-// core/microkernel/human-interaction.ts and BeeContext.requestApproval). The
-// frontend polls GET / and renders UI based on each entry's payload.kind.
 export const interactionsRouter = new Hono();
 
 interactionsRouter.get("/", (c) => {

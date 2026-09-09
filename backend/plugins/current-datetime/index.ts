@@ -31,7 +31,6 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
   schema = schema;
 
   selectionTests: SelectionTestCase<CurrentDatetimeSchema>[] = [
-    // 3 Positive
     {
       query: "what time is it right now?",
       kind: "positive",
@@ -47,7 +46,6 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
       kind: "positive",
       shouldInvoke: true,
     },
-    // 3 Negative
     {
       query: "add a coffee to the counter",
       kind: "negative",
@@ -63,7 +61,6 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
     {
       query: "how many days until New Year's Eve?",
       kind: "ambiguous",
@@ -79,7 +76,6 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
   ];
 
   executionTests: ExecutionTestCase<CurrentDatetimeSchema>[] = [
-    // 3 Happy
     {
       description: "Get current date only",
       kind: "happy",
@@ -99,7 +95,6 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
       expect: (output: string) =>
         output.includes("Today is") && output.includes("current time is"),
     },
-    // 3 Edge
     {
       description: "Get time with UTC timezone",
       kind: "edge",
@@ -122,7 +117,6 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
       expect: (output: string) =>
         output.includes("Today is") && output.includes("current time is"),
     },
-    // 3 Error
     {
       description: "Invalid IANA timezone name",
       kind: "error",

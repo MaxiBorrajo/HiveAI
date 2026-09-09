@@ -2,7 +2,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
-import { sendMessage } from "../../lib/send-message.ts";
+import { sendMessage } from "../../lib/chats/sendMessage.ts";
+import { reportError } from "../../lib/toastManager.ts";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
@@ -79,6 +80,7 @@ export function Chat() {
           );
         },
         onError: (errorMessage) => {
+          reportError([errorMessage]);
           throw new Error(errorMessage);
         },
       });
@@ -218,7 +220,6 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: Message })
     );
   }
 
-  // User Message
   return (
     <div className="flex w-full justify-end">
       <div className="max-w-[75%] rounded-2xl bg-card border border-border px-5 py-3 text-sm text-foreground">
@@ -237,11 +238,6 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: Message })
   );
 });
 
-// Defined once, outside the component: react-markdown re-parses the whole
-// content string on every render, and treats a new `components` object
-// identity as a signal to redo more work than necessary. An inline object
-// literal here would be recreated (new identity) on every token during
-// streaming, on top of the unavoidable re-parse.
 const markdownComponents: Components = {
   h1: ({ children }) => (
     <h1 className="mt-3 mb-1.5 text-lg font-semibold">{children}</h1>

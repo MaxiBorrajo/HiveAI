@@ -14,6 +14,7 @@ dist-ssr
 
 # Environment variables
 .env
+modes.config.json
 
 # Editor directories and files
 .vscode/*
