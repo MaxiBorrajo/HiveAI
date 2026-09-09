@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TriangleAlertIcon } from "lucide-react";
 import { PluginsManager } from "../PluginsManager/PluginsManager.tsx";
 import { ModesManager } from "../ModesManager/ModesManager.tsx";
 import { ModelManager } from "../ModelManager/ModelManager.tsx";
-import type { CurrentModels, ModelInfo } from "@/types/model";
+import { useModels } from "@/context/ModelsContext";
 
 interface ChatInputProps {
   input: string;
@@ -22,9 +21,7 @@ export function ChatInput({
   handleSend,
   isEmpty,
 }: ChatInputProps) {
-  const [hasModel, setHasModel] = useState(false);
-  const [hasAvailableModels, setHasAvailableModels] = useState(true);
-  const [openManageSignal, setOpenManageSignal] = useState(0);
+  const { hasModel, hasAvailableModels, openManage } = useModels();
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -53,7 +50,7 @@ export function ChatInput({
             variant="secondary"
             size="sm"
             className="ml-auto shrink-0"
-            onClick={() => setOpenManageSignal((n) => n + 1)}
+            onClick={openManage}
           >
             Select models
           </Button>
@@ -71,18 +68,9 @@ export function ChatInput({
         />
         <div className="mt-2 flex items-center justify-between">
           <div className="flex gap-2">
-            <PluginsManager forceOpenDownward={isEmpty} hasModel={hasModel} />
-            <ModesManager hasModel={hasModel} />
-            <ModelManager
-              forceOpenDownward={isEmpty}
-              openManageSignal={openManageSignal}
-              onCurrentModelsChange={(current: CurrentModels) =>
-                setHasModel(!!current.model && !!current.selectorModel)
-              }
-              onAvailableModelsChange={(models: ModelInfo[]) =>
-                setHasAvailableModels(models.length > 0)
-              }
-            />
+            <PluginsManager forceOpenDownward={isEmpty} />
+            <ModesManager />
+            <ModelManager forceOpenDownward={isEmpty} />
           </div>
           <Button
             onClick={handleSend}

@@ -9,6 +9,7 @@ import {
 import { Chat } from "@/components/Chat";
 import { StyleGuide } from "@/components/StyleGuide";
 import { toastManager } from "@/lib/toastManager";
+import { ModelsProvider } from "@/context/ModelsContext";
 
 function App() {
   const [showStyleGuide, setShowStyleGuide] = useState(false);
@@ -16,7 +17,9 @@ function App() {
   return (
     <ToastProvider toastManager={toastManager}>
       <TooltipProvider>
-        {showStyleGuide ? <StyleGuide /> : <Chat />}
+        <ModelsProvider>
+          {showStyleGuide ? <StyleGuide /> : <Chat />}
+        </ModelsProvider>
 
         {/* Only for development; remove when the style guide is no longer needed */}
         <button

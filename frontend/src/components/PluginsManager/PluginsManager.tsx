@@ -2,18 +2,16 @@ import { useEffect, useState } from "react";
 import { getPlugins } from "@/lib/plugins/getPlugins";
 import { setPluginActive } from "@/lib/plugins/setPluginActive";
 import type { Plugin } from "@/types/plugin";
+import { useModels } from "@/context/ModelsContext";
 import { PluginsMenu } from "./PluginsMenu";
 import { PluginsModal } from "./PluginsModal";
 
 interface PluginsManagerProps {
   forceOpenDownward?: boolean;
-  hasModel?: boolean;
 }
 
-export function PluginsManager({
-  forceOpenDownward,
-  hasModel = true,
-}: PluginsManagerProps) {
+export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
+  const { hasModel } = useModels();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 

@@ -17,12 +17,10 @@ import { Button } from "../ui/button.tsx";
 import { Switch } from "../ui/switch.tsx";
 import { Slider } from "../ui/slider.tsx";
 import { setMode } from "../../lib/modes/setMode.ts";
+import { useModels } from "@/context/ModelsContext";
 
-interface ModesManagerProps {
-  hasModel?: boolean;
-}
-
-export function ModesManager({ hasModel = true }: ModesManagerProps) {
+export function ModesManager() {
+  const { hasModel } = useModels();
   const [modes, setModes] = useState<ChatMode[]>([]);
 
   useEffect(() => {
