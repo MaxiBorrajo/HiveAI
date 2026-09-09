@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Loader2 } from "lucide-react";
 import { getModels } from "@/lib/models/getModels";
 import { getCurrentModels } from "@/lib/models/getCurrentModels";
 import { setModels as setModelsRequest } from "@/lib/models/setModels";
@@ -21,6 +22,8 @@ interface ModelsContextValue {
   refreshModels: () => void;
   changeModel: (name: string) => Promise<void>;
   changeSelectorModel: (name: string) => Promise<void>;
+  modeResetSignal: number;
+  runBusy: <T>(message: string, task: () => Promise<T>) => Promise<T>;
 }
 
 const ModelsContext = createContext<ModelsContextValue | null>(null);
@@ -32,6 +35,17 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     selectorModel: "",
   });
   const [isManageOpen, setIsManageOpen] = useState(false);
+  const [modeResetSignal, setModeResetSignal] = useState(0);
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+
+  async function runBusy<T>(message: string, task: () => Promise<T>): Promise<T> {
+    setBusyMessage(message);
+    try {
+      return await task();
+    } finally {
+      setBusyMessage(null);
+    }
+  }
 
   function refreshModels() {
     getModels().then(({ data }) => setModels(data ?? []));
@@ -46,12 +60,15 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     const previousModel = current.model;
     setCurrent((prev) => ({ ...prev, model: name }));
 
-    try {
-      const { data } = await setModelsRequest({ model: name });
-      if (data) setCurrent((prev) => ({ ...prev, model: data.model }));
-    } catch {
-      setCurrent((prev) => ({ ...prev, model: previousModel }));
-    }
+    await runBusy("Applying model change...", async () => {
+      try {
+        const { data } = await setModelsRequest({ model: name });
+        if (data) setCurrent((prev) => ({ ...prev, model: data.model }));
+        setModeResetSignal((n) => n + 1);
+      } catch {
+        setCurrent((prev) => ({ ...prev, model: previousModel }));
+      }
+    });
   }
 
   async function changeSelectorModel(name: string) {
@@ -84,10 +101,23 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     refreshModels,
     changeModel,
     changeSelectorModel,
+    modeResetSignal,
+    runBusy,
   };
 
   return (
-    <ModelsContext.Provider value={value}>{children}</ModelsContext.Provider>
+    <ModelsContext.Provider value={value}>
+      {children}
+
+      {busyMessage && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/40 backdrop-blur-xs">
+          <Loader2 className="size-8 animate-spin text-white" />
+          <p className="max-w-xs text-center text-sm text-white">
+            {busyMessage}
+          </p>
+        </div>
+      )}
+    </ModelsContext.Provider>
   );
 }
 

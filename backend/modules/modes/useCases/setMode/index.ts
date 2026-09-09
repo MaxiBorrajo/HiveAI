@@ -16,12 +16,29 @@ export class InvalidModeError extends Error {
   }
 }
 
+export async function clearKvCacheOverride(hive: HiveMicrokernel): Promise<void> {
+  const config = hive.getConfig();
+  if (!config.get("ollamaKvCacheType")) return;
+
+  try {
+    await restartOllamaService(null);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new InvalidModeError([
+      `Failed to restart Ollama to clear kv_cache_type: ${detail}`,
+    ]);
+  }
+
+  hive.configure({ ollamaKvCacheType: "" });
+}
+
 async function applyServiceRestartParameters(
   hive: HiveMicrokernel,
   incoming: ChatMode,
   referenceMode: ChatMode,
 ): Promise<void> {
   const config = hive.getConfig();
+  const activeOverride = config.get("ollamaKvCacheType");
 
   const kvCacheParam = (incoming.parameters ?? []).find(
     (p) => p.name === "kv_cache_type",
@@ -30,16 +47,16 @@ async function applyServiceRestartParameters(
     (p) => p.name === "kv_cache_type",
   );
 
-  if (
-    !kvCacheParam ||
-    !referenceParam?.requiresServiceRestart ||
-    typeof kvCacheParam.currentValue !== "string"
-  ) {
+  if (!kvCacheParam || !referenceParam?.requiresServiceRestart) {
+    return clearKvCacheOverride(hive);
+  }
+
+  if (typeof kvCacheParam.currentValue !== "string") {
     return;
   }
 
   const nextKvCacheType = kvCacheParam.currentValue;
-  if (nextKvCacheType === config.get("ollamaKvCacheType")) {
+  if (nextKvCacheType === activeOverride) {
     return;
   }
 

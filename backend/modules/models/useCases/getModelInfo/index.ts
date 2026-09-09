@@ -6,7 +6,14 @@ export async function fetchModelInfo(
   modelName: string,
 ): Promise<ModelInfo | null> {
   const ollama = new Ollama();
-  const { models } = await ollama.list();
+
+  let models: Awaited<ReturnType<typeof ollama.list>>["models"];
+  try {
+    ({ models } = await ollama.list());
+  } catch {
+    return null;
+  }
+
   const modelEntry = models.find((m) => m.name === modelName);
 
   if (!modelEntry) return null;

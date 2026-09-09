@@ -23,6 +23,7 @@ export interface ChatMode {
   icon: ReactElement;
   isCurrent?: boolean;
   parameters?: ChatModeParameter[];
+  performanceNote?: string;
 }
 
 export interface ChatModeParameter {

@@ -16,7 +16,13 @@ export async function fetchAvailableModels(
   filters: ModelFilters = {},
 ): Promise<ModelInfo[]> {
   const ollama = new Ollama();
-  const { models } = await ollama.list();
+
+  let models: Awaited<ReturnType<typeof ollama.list>>["models"];
+  try {
+    ({ models } = await ollama.list());
+  } catch {
+    return [];
+  }
 
   const modelInfos = (
     await Promise.all(models.map((m) => fetchModelInfo(m.name)))

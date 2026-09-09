@@ -35,7 +35,7 @@ export function mapModeToOllamaOptions(
 ): OllamaModelOptions {
   const byName = new Map(parameters.map((p) => [p.name, p.currentValue]));
 
-  return {
+  const options: OllamaModelOptions = {
     numCtx: toNumber(byName.get("n_ctx")),
     numGpu: toNumber(byName.get("n_gpu_layers")),
     numThread: toNumber(byName.get("n_threads")),
@@ -48,6 +48,12 @@ export function mapModeToOllamaOptions(
     repeatPenalty: toNumber(byName.get("repeat_penalty")),
     numPredict: resolveNumPredict(parameters),
   };
+  
+  for (const key of Object.keys(options)) {
+    if (options[key] === undefined) delete options[key];
+  }
+
+  return options;
 }
 
 export async function resolveModelOptions(

@@ -43,7 +43,7 @@ export function ModelMenu({
       >
         <BrainCircuit className="size-4" />
         <span className="text-sm font-mono truncate max-w-32">
-          {current.model || "No model selected"}
+          {current.model || "No model"}
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent

@@ -3,6 +3,10 @@ import { ResponseBuilder } from "../../../../core/api/response.ts";
 import { fetchAvailableModels } from "../getModels/index.ts";
 import { fetchCurrentModels } from "../getCurrentModels/index.ts";
 import { setCurrentMode } from "../../../modes/useCases/setCurrentMode/index.ts";
+import {
+  clearKvCacheOverride,
+  InvalidModeError,
+} from "../../../modes/useCases/setMode/index.ts";
 import { CurrentModels } from "../../types.ts";
 
 const DEFAULT_MODE = "default";
@@ -51,6 +55,7 @@ export async function updateModels(
   });
 
   if (model) {
+    await clearKvCacheOverride(hive);
     setCurrentMode(hive, DEFAULT_MODE);
   }
 
@@ -76,7 +81,7 @@ export async function setModels(
     const current = await updateModels(hive, body);
     return ResponseBuilder.success(current, { headers });
   } catch (error) {
-    if (error instanceof InvalidModelsError) {
+    if (error instanceof InvalidModelsError || error instanceof InvalidModeError) {
       return ResponseBuilder.error(error.errors, undefined, {
         headers,
         status: 400,

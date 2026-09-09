@@ -3,6 +3,7 @@ export interface ChatMode {
   description: string;
   isCurrent: boolean;
   parameters?: ChatModeParameter[];
+  performanceNote?: string;
 }
 
 export interface ChatModeParameter {

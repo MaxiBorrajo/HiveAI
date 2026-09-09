@@ -10,7 +10,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
-import { Cog, Sparkles, TriangleAlert, User, Zap } from "lucide-react";
+import { Cog, Info, Sparkles, TriangleAlert, User, Zap } from "lucide-react";
 import type { ChatMode, ChatModeParameter } from "../../types/chat.ts";
 import { getModes } from "../../lib/modes/getModes.ts";
 import { Button } from "../ui/button.tsx";
@@ -19,35 +19,44 @@ import { Slider } from "../ui/slider.tsx";
 import { setMode } from "../../lib/modes/setMode.ts";
 import { useModels } from "@/context/ModelsContext";
 
+const iconForMode = (name: string) =>
+  name === "fast" ? (
+    <Zap className="size-4" />
+  ) : name === "quality" ? (
+    <Sparkles className="size-4" />
+  ) : name === "custom" ? (
+    <Cog className="size-4" />
+  ) : (
+    <User className="size-4" />
+  );
+
 export function ModesManager() {
-  const { hasModel } = useModels();
+  const { hasModel, modeResetSignal, runBusy } = useModels();
   const [modes, setModes] = useState<ChatMode[]>([]);
-
-  useEffect(() => {
-    getModes().then(({ data }) => {
-      setModes(
-        data.map((mode) => ({
-          ...mode,
-          icon:
-            mode.name === "fast" ? (
-              <Zap className="size-4" />
-            ) : mode.name === "quality" ? (
-              <Sparkles className="size-4" />
-            ) : mode.name === "custom" ? (
-              <Cog className="size-4" />
-            ) : (
-              <User className="size-4" />
-            ),
-        })),
-      );
-    });
-  }, []);
-
   const [currentMode, setCurrentMode] = useState<ChatMode>({
     name: "default",
     description: "Default mode with balanced performance",
     icon: <User className="size-4" />,
   });
+
+  function refreshModes() {
+    getModes().then(({ data }) => {
+      if (!data) return;
+      const withIcons = data.map((mode) => ({
+        ...mode,
+        icon: iconForMode(mode.name),
+      }));
+      setModes(withIcons);
+
+      const active = withIcons.find((mode) => mode.isCurrent);
+      if (active) setCurrentMode(active);
+    });
+  }
+
+  useEffect(refreshModes, []);
+  useEffect(() => {
+    if (modeResetSignal) refreshModes();
+  }, [modeResetSignal]);
 
   const changeModes = (
     mode: ChatMode,
@@ -69,17 +78,18 @@ export function ModesManager() {
     });
   };
 
-  const [isApplying, setIsApplying] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const changeMode = async (mode: ChatMode) => {
-    setIsApplying(true);
-    try {
-      await setMode(mode);
-      setCurrentMode(mode);
-    } catch {
-    } finally {
-      setIsApplying(false);
-    }
+    setIsOpen(false);
+    await runBusy("Applying mode change...", async () => {
+      try {
+        await setMode(mode);
+        refreshModes();
+      } catch {
+        // Toast already shown by the shared apiClient interceptor.
+      }
+    });
   };
 
   const onChange = (
@@ -99,7 +109,7 @@ export function ModesManager() {
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger
         className="flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring px-1"
         title="Modes"
@@ -135,6 +145,12 @@ export function ModesManager() {
                       <ModeOption mode={mode} />
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent sideOffset={10}>
+                      {mode.performanceNote && (
+                        <div className="flex w-0 min-w-full items-start gap-1.5 rounded-md bg-blue-500/10 p-2 text-xs text-blue-600 dark:text-blue-400">
+                          <Info className="size-3.5 shrink-0 translate-y-0.5" />
+                          <span>{mode.performanceNote}</span>
+                        </div>
+                      )}
                       {mode.parameters.map((parameter) => (
                         <div
                           key={`${mode.name}-${parameter.name}`}
@@ -158,7 +174,6 @@ export function ModesManager() {
                         </Button>
                         <Button
                           onClick={() => changeMode(mode)}
-                          disabled={isApplying}
                           title={
                             mode.parameters?.some(
                               (p) => p.requiresServiceRestart,
@@ -168,7 +183,7 @@ export function ModesManager() {
                           }
                           size="sm"
                         >
-                          {isApplying ? "Applying..." : "Apply"}
+                          Apply
                         </Button>
                       </div>
                     </DropdownMenuSubContent>
@@ -176,7 +191,8 @@ export function ModesManager() {
                 ) : (
                   <DropdownMenuItem
                     closeOnClick
-                    onClick={() => setCurrentMode(mode)}
+                    onClick={() => changeMode(mode)}
+                    title="Switching here may restart the Ollama service if a kv_cache_type override was active, clearing it back to Ollama's own default — this affects every model, not just this one, and may prompt for your password."
                   >
                     <ModeOption mode={mode} />
                   </DropdownMenuItem>
@@ -320,9 +336,10 @@ export function ModeOption({ mode }: { mode: ChatMode }) {
       title={mode.description}
     >
       {mode.icon}
-      <span className="text-sm font-mono truncate capitalize">
-        {mode.name}
-      </span>
+      <span className="text-sm font-mono truncate capitalize">{mode.name}</span>
+      {mode.performanceNote && (
+        <Info className="size-3.5 shrink-0 text-blue-500" />
+      )}
     </div>
   );
 }

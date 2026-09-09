@@ -10,7 +10,10 @@
         "type": "string",
         "defaultValue": "q4_0",
         "currentValue": "q4_0",
-        "options": ["q8_0", "q4_0"],
+        "options": [
+          "q8_0",
+          "q4_0"
+        ],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -50,7 +53,7 @@
         "description": "Number of CPU threads to allocate for computation during inference.",
         "type": "number",
         "defaultValue": null,
-        "currentValue": null,
+        "currentValue": 8,
         "note": "default = physical cores detected at runtime",
         "minValue": 1,
         "maxValue": null,
@@ -79,8 +82,8 @@
         "type": "number",
         "defaultValue": 0.7,
         "currentValue": 0.7,
-        "minValue": 0.0,
-        "maxValue": 2.0,
+        "minValue": 0,
+        "maxValue": 2,
         "requiresServiceRestart": false
       },
       {
@@ -99,8 +102,8 @@
         "type": "number",
         "defaultValue": 0.9,
         "currentValue": 0.9,
-        "minValue": 0.0,
-        "maxValue": 1.0,
+        "minValue": 0,
+        "maxValue": 1,
         "requiresServiceRestart": false
       },
       {
@@ -109,7 +112,7 @@
         "type": "number",
         "defaultValue": 1.1,
         "currentValue": 1.1,
-        "minValue": 1.0,
+        "minValue": 1,
         "maxValue": 1.5,
         "requiresServiceRestart": false
       },
@@ -135,7 +138,10 @@
         "type": "string",
         "defaultValue": "f16",
         "currentValue": "f16",
-        "options": ["f16", "q8_0"],
+        "options": [
+          "f16",
+          "q8_0"
+        ],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -175,7 +181,7 @@
         "description": "Number of CPU threads to allocate for computation during inference.",
         "type": "number",
         "defaultValue": null,
-        "currentValue": null,
+        "currentValue": 8,
         "note": "default = physical cores detected at runtime",
         "minValue": 1,
         "maxValue": null,
@@ -194,7 +200,7 @@
         "description": "Locks model weights in physical RAM to prevent the operating system from paging memory to swap disk, ensuring stable latency.",
         "type": "boolean",
         "defaultValue": true,
-        "currentValue": true,
+        "currentValue": false,
         "note": "true only if sufficient free RAM is available, validated at runtime",
         "requiresServiceRestart": false
       },
@@ -204,8 +210,8 @@
         "type": "number",
         "defaultValue": 0.6,
         "currentValue": 0.6,
-        "minValue": 0.0,
-        "maxValue": 2.0,
+        "minValue": 0,
+        "maxValue": 2,
         "requiresServiceRestart": false
       },
       {
@@ -224,8 +230,8 @@
         "type": "number",
         "defaultValue": 0.95,
         "currentValue": 0.95,
-        "minValue": 0.0,
-        "maxValue": 1.0,
+        "minValue": 0,
+        "maxValue": 1,
         "requiresServiceRestart": false
       },
       {
@@ -234,7 +240,7 @@
         "type": "number",
         "defaultValue": 1.1,
         "currentValue": 1.1,
-        "minValue": 1.0,
+        "minValue": 1,
         "maxValue": 1.5,
         "requiresServiceRestart": false
       },
@@ -260,7 +266,11 @@
         "type": "string",
         "defaultValue": "q8_0",
         "currentValue": "q8_0",
-        "options": ["f16", "q8_0", "q4_0"],
+        "options": [
+          "f16",
+          "q8_0",
+          "q4_0"
+        ],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -328,8 +338,8 @@
         "type": "number",
         "defaultValue": 0.7,
         "currentValue": 0.7,
-        "minValue": 0.0,
-        "maxValue": 2.0,
+        "minValue": 0,
+        "maxValue": 2,
         "requiresServiceRestart": false
       },
       {
@@ -348,8 +358,8 @@
         "type": "number",
         "defaultValue": 0.9,
         "currentValue": 0.9,
-        "minValue": 0.0,
-        "maxValue": 1.0,
+        "minValue": 0,
+        "maxValue": 1,
         "requiresServiceRestart": false
       },
       {
@@ -358,7 +368,7 @@
         "type": "number",
         "defaultValue": 1.1,
         "currentValue": 1.1,
-        "minValue": 1.0,
+        "minValue": 1,
         "maxValue": 1.5,
         "requiresServiceRestart": false
       },
