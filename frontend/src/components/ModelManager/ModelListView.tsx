@@ -49,7 +49,7 @@ export function ModelListView({
                   <div className="flex-1 min-w-0">
                     <p className="font-mono text-sm font-semibold flex items-center flex-wrap gap-2 mb-2">
                       {model.name}
-                      {isModel && <Badge variant="default">Model</Badge>}
+                      {isModel && <Badge variant="default">Respond</Badge>}
                       {isSelectorModel && (
                         <Badge variant="secondary">Selector</Badge>
                       )}
@@ -79,16 +79,18 @@ export function ModelListView({
                     size="sm"
                     disabled={isModel}
                     onClick={() => onChangeModel(model.name)}
+                    title="Used to respond to messages and verify results. Prefer a larger, more capable model here."
                   >
-                    Use as model
+                    Use to respond &amp; verify
                   </Button>
                   <Button
                     variant={isSelectorModel ? "default" : "outline"}
                     size="sm"
                     disabled={isSelectorModel}
                     onClick={() => onChangeSelectorModel(model.name)}
+                    title="Used to quickly select which plugins to run. Prefer a smaller, faster model here."
                   >
-                    Use as selector
+                    Use as tool selector
                   </Button>
                 </div>
               </div>

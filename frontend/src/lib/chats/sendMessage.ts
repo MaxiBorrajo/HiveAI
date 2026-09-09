@@ -1,5 +1,4 @@
-import axios from "axios";
-import { API_URL } from "../config";
+import { apiClient } from "../apiClient";
 import type { ChatStep } from "@/types/chat";
 
 export interface StreamHandlers {
@@ -18,8 +17,8 @@ export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
 ): Promise<void> {
-  const response = await axios.post(
-    `${API_URL}/api/chats`,
+  const response = await apiClient.post(
+    "/api/chats",
     { message: content },
     {
       responseType: "stream",

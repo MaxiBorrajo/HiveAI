@@ -40,11 +40,11 @@ export function ModelMenu({
     >
       <DropdownMenuTrigger
         className="flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring px-1.5 py-0.5 gap-2"
-        title="Model"
+        title="Models"
       >
         <BrainCircuit className="size-4" />
         <span className="text-sm font-mono truncate max-w-32">
-          {current.model || "No model"}
+          {current.model || "No model selected"}
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -56,7 +56,7 @@ export function ModelMenu({
       >
         <DropdownMenuGroup>
           <div className="px-1.5 py-1">
-            <span className="text-sm font-medium">Model</span>
+            <span className="text-sm font-medium">Models</span>
           </div>
 
           <DropdownMenuSeparator />

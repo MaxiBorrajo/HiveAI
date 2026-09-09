@@ -17,6 +17,7 @@ interface PluginListViewProps {
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
   onSelectPlugins: (plugins: Plugin[]) => void;
+  hasModel?: boolean;
 }
 
 export function PluginListView({
@@ -24,6 +25,7 @@ export function PluginListView({
   onToggle,
   onToggleAll,
   onSelectPlugins,
+  hasModel = true,
 }: PluginListViewProps) {
   const allActive = plugins.length > 0 && plugins.every((p) => p.active);
 
@@ -64,6 +66,10 @@ export function PluginListView({
             <DropdownMenuItem
               key="Run all tests"
               onClick={() => onSelectPlugins(plugins)}
+              disabled={!hasModel}
+              title={
+                hasModel ? undefined : "Select a model before running tests"
+              }
             >
               <div className="flex items-center gap-2">
                 <TestTube size={12} />
@@ -111,6 +117,12 @@ export function PluginListView({
                     variant="secondary"
                     size="sm"
                     onClick={() => onSelectPlugins([plugin])}
+                    disabled={!hasModel}
+                    title={
+                      hasModel
+                        ? undefined
+                        : "Select a model before running tests"
+                    }
                     className="shrink-0 h-8 gap-1 px-3"
                   >
                     <TestTube size={12} />

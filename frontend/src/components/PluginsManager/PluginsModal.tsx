@@ -10,6 +10,7 @@ interface PluginsModalProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
+  hasModel?: boolean;
 }
 
 export function PluginsModal({
@@ -18,6 +19,7 @@ export function PluginsModal({
   plugins,
   onToggle,
   onToggleAll,
+  hasModel = true,
 }: PluginsModalProps) {
   const [selectedPlugins, setSelectedPlugins] = useState<Plugin[]>([]);
 
@@ -44,6 +46,7 @@ export function PluginsModal({
             onToggle={onToggle}
             onToggleAll={onToggleAll}
             onSelectPlugins={setSelectedPlugins}
+            hasModel={hasModel}
           />
         )}
       </DialogContent>

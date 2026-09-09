@@ -9,11 +9,18 @@ import { ModelsModal } from "./ModelsModal";
 interface ModelManagerProps {
   forceOpenDownward?: boolean;
   onCurrentModelsChange?: (current: CurrentModels) => void;
+  onAvailableModelsChange?: (models: ModelInfo[]) => void;
+  // Bumping this number (e.g. from an external "select a model" banner)
+  // opens the management modal, without the caller needing to control
+  // isModalOpen directly.
+  openManageSignal?: number;
 }
 
 export function ModelManager({
   forceOpenDownward,
   onCurrentModelsChange,
+  onAvailableModelsChange,
+  openManageSignal,
 }: ModelManagerProps) {
   const [models, setModelsList] = useState<ModelInfo[]>([]);
   const [current, setCurrentState] = useState<CurrentModels>({
@@ -32,13 +39,21 @@ export function ModelManager({
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   function refreshModels() {
-    getModels().then(({ data }) => setModelsList(data ?? []));
+    getModels().then(({ data }) => {
+      const list = data ?? [];
+      setModelsList(list);
+      onAvailableModelsChange?.(list);
+    });
     getCurrentModels().then(({ data }) => {
       if (data) setCurrent(data);
     });
   }
 
   useEffect(refreshModels, []);
+
+  useEffect(() => {
+    if (openManageSignal) setIsModalOpen(true);
+  }, [openManageSignal]);
 
   async function changeModel(name: string) {
     const previousModel = current.model;

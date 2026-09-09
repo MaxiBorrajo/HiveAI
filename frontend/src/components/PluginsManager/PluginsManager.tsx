@@ -7,9 +7,13 @@ import { PluginsModal } from "./PluginsModal";
 
 interface PluginsManagerProps {
   forceOpenDownward?: boolean;
+  hasModel?: boolean;
 }
 
-export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
+export function PluginsManager({
+  forceOpenDownward,
+  hasModel = true,
+}: PluginsManagerProps) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -63,6 +67,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         plugins={plugins}
         onToggle={togglePlugin}
         onToggleAll={toggleAllPlugins}
+        hasModel={hasModel}
       />
     </>
   );

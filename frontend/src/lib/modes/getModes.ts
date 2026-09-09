@@ -1,8 +1,8 @@
-import axios from "axios";
-import { API_URL, type ResponseEntity } from "../config";
+import { apiClient } from "../apiClient";
+import type { ResponseEntity } from "../config";
 import type { ChatMode } from "@/types/chat";
 
 export async function getModes(): Promise<ResponseEntity<ChatMode[]>> {
-  const response = await axios.get(`${API_URL}/api/modes`);
+  const response = await apiClient.get("/api/modes");
   return response.data;
 }

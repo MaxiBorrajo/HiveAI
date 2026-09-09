@@ -1,5 +1,5 @@
-import axios from "axios";
-import { API_URL, type ResponseEntity } from "../config";
+import { apiClient } from "../apiClient";
+import type { ResponseEntity } from "../config";
 import type { ModelFilters, ModelInfo } from "@/types/model";
 
 export async function getModels(
@@ -17,6 +17,6 @@ export async function getModels(
       }
     : undefined;
 
-  const response = await axios.get(`${API_URL}/api/models`, { params });
+  const response = await apiClient.get("/api/models", { params });
   return response.data;
 }

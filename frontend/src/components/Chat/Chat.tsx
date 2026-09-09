@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
 import { sendMessage } from "../../lib/chats/sendMessage.ts";
+import { reportError } from "../../lib/toastManager.ts";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
@@ -79,6 +80,10 @@ export function Chat() {
           );
         },
         onError: (errorMessage) => {
+          // Errors from the SSE stream never touch axios (the HTTP response
+          // itself is a 200), so the shared interceptor never sees them —
+          // report it here instead, same as any other API failure.
+          reportError([errorMessage]);
           throw new Error(errorMessage);
         },
       });
