@@ -120,7 +120,7 @@ export function ModesManager({ hasModel = true }: ModesManagerProps) {
 
           {modes.map((mode) => {
             return (
-              <>
+              <div key={mode.name} className="contents">
                 {mode.parameters ? (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger
@@ -167,14 +167,13 @@ export function ModesManager({ hasModel = true }: ModesManagerProps) {
                   </DropdownMenuSub>
                 ) : (
                   <DropdownMenuItem
-                    key={mode.name}
                     closeOnClick
                     onClick={() => setCurrentMode(mode)}
                   >
                     <ModeOption mode={mode} />
                   </DropdownMenuItem>
                 )}
-              </>
+              </div>
             );
           })}
         </DropdownMenuGroup>

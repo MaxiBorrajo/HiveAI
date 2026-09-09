@@ -97,14 +97,14 @@ export function PluginListView({
             >
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-semibold items-center flex gap-2 mb-2">
+                  <div className="font-mono text-sm font-semibold items-center flex gap-2 mb-2">
                     <Switch
                       checked={plugin.active}
                       onCheckedChange={(checked) => onToggle(plugin, checked)}
                       className="mt-0.5"
                     />{" "}
                     {plugin.name}
-                  </p>
+                  </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {plugin.description}
                   </p>

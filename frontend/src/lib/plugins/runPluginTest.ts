@@ -11,7 +11,7 @@ export async function runPluginTest(
   const response = await apiClient.post(
     `/api/plugins/${encodeURIComponent(name)}/test/${type}/${index}`,
     {},
-    { signal },
+    { signal, silenceErrorToast: true },
   );
   return response.data;
 }

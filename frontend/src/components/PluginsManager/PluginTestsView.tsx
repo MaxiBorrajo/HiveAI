@@ -429,7 +429,7 @@ export function PluginTestsView({
                   title="Percentage of successful tests across the current run (Passed / Total)"
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Pass Rate
                   </span>
                   <div className="flex items-end gap-2">
@@ -448,7 +448,7 @@ export function PluginTestsView({
                   title="Percentage of Edge, Negative, and Error tests that passed. Measures the plugin's robustness to invalid or tricky inputs."
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Resilience Score
                   </span>
                   <span
@@ -462,7 +462,7 @@ export function PluginTestsView({
                   title="Average execution time per test in seconds (Total duration / Number of tests)"
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Avg Latency
                   </span>
                   <div className="flex items-center gap-1.5 text-foreground">
@@ -480,7 +480,7 @@ export function PluginTestsView({
                   title="Total number of input and output tokens consumed across all Selection tests in this run"
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Tokens Used
                   </span>
                   <div className="flex items-center gap-1.5 text-foreground">

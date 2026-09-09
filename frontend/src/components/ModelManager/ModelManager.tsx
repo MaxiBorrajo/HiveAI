@@ -1,4 +1,4 @@
-import { useEffect, useState, type SetStateAction } from "react";
+import { useEffect, useState } from "react";
 import { getModels } from "@/lib/models/getModels";
 import { getCurrentModels } from "@/lib/models/getCurrentModels";
 import { setModels } from "@/lib/models/setModels";
@@ -23,18 +23,14 @@ export function ModelManager({
   openManageSignal,
 }: ModelManagerProps) {
   const [models, setModelsList] = useState<ModelInfo[]>([]);
-  const [current, setCurrentState] = useState<CurrentModels>({
+  const [current, setCurrent] = useState<CurrentModels>({
     model: "",
     selectorModel: "",
   });
 
-  function setCurrent(update: SetStateAction<CurrentModels>) {
-    setCurrentState((prev) => {
-      const next = typeof update === "function" ? update(prev) : update;
-      onCurrentModelsChange?.(next);
-      return next;
-    });
-  }
+  useEffect(() => {
+    onCurrentModelsChange?.(current);
+  }, [current, onCurrentModelsChange]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
 
