@@ -1,13 +1,30 @@
 import { useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { Chat } from "@/components/Chat";
 import { StyleGuide } from "@/components/StyleGuide";
+import {
+  DraftEditorProvider,
+  useDraftEditor,
+} from "@/components/PluginsManager/draft-editor-context";
+import { DraftEditorPage } from "@/components/PluginsManager/DraftEditorPage";
 
-function App() {
+function AppContent() {
   const [showStyleGuide, setShowStyleGuide] = useState(false);
+  const { openDraftName, closeDraft, notifyPluginImported } = useDraftEditor();
+
+  if (openDraftName) {
+    return (
+      <DraftEditorPage
+        draftName={openDraftName}
+        onClose={closeDraft}
+        onImported={notifyPluginImported}
+      />
+    );
+  }
 
   return (
-    <TooltipProvider>
+    <>
       {showStyleGuide ? <StyleGuide /> : <Chat />}
 
       {/* Only for development; remove when the style guide is no longer needed */}
@@ -18,6 +35,17 @@ function App() {
       >
         {showStyleGuide ? "Show Chat" : "Show Style Guide"}
       </button>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <TooltipProvider>
+      <DraftEditorProvider>
+        <AppContent />
+      </DraftEditorProvider>
+      <Toaster position="bottom-right" />
     </TooltipProvider>
   );
 }

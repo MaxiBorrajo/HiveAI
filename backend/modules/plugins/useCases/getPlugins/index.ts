@@ -9,6 +9,7 @@ export function getPlugins(hive: HiveMicrokernel): GetPluginsResponse {
     active: hive.isActive(plugin.name),
     selectionTests: plugin.selectionTests || [],
     executionTests: plugin.executionTests || [],
+    isExternal: hive.isExternalPlugin(plugin.name),
   }));
 }
 

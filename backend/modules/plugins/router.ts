@@ -3,6 +3,10 @@ import { handleGetPlugins } from "./useCases/getPlugins/index.ts";
 import { handleActivatePlugin } from "./useCases/activatePlugin/index.ts";
 import { handleDeactivatePlugin } from "./useCases/deactivatePlugin/index.ts";
 import { handleTest } from "./useCases/testPlugin/index.ts";
+import { handleImportPlugin } from "./useCases/importPlugin/index.ts";
+import { handleRemovePlugin } from "./useCases/removePlugin/index.ts";
+import { handleExportPlugin } from "./useCases/exportPlugin/index.ts";
+import { handleEditPlugin } from "./useCases/editPlugin/index.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 
 export const pluginsRouter = new Hono<{
@@ -25,6 +29,31 @@ pluginsRouter.post("/:name/activate", (c) => {
 pluginsRouter.post("/:name/deactivate", (c) => {
   const name = c.req.param("name");
   return handleDeactivatePlugin(c.get("hive"), name, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.post("/import", (c) => {
+  return handleImportPlugin(c.get("hive"), c.req.raw, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.get("/:name/export", (c) => {
+  const name = c.req.param("name");
+  return handleExportPlugin(c.get("hive"), name, {});
+});
+
+pluginsRouter.post("/:name/edit", (c) => {
+  const name = c.req.param("name");
+  return handleEditPlugin(c.get("hive"), name, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.delete("/:name", (c) => {
+  const name = c.req.param("name");
+  return handleRemovePlugin(c.get("hive"), name, {
     "content-type": "application/json",
   });
 });

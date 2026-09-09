@@ -9,6 +9,13 @@ interface PluginsModalProps {
   onOpenChange: (open: boolean) => void;
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
+  onImportPlugin: (files: FileList) => void;
+  onRemovePlugin: (plugin: Plugin) => void;
+  onEditPlugin: (plugin: Plugin) => void;
+  isImporting: boolean;
+  importError: string | null;
+  onDismissImportError: () => void;
+  onOpenDraft: (name: string) => void;
 }
 
 export function PluginsModal({
@@ -16,6 +23,13 @@ export function PluginsModal({
   onOpenChange,
   plugins,
   onToggle,
+  onImportPlugin,
+  onRemovePlugin,
+  onEditPlugin,
+  isImporting,
+  importError,
+  onDismissImportError,
+  onOpenDraft,
 }: PluginsModalProps) {
   const [selectedPluginName, setSelectedPluginName] = useState<string | null>(
     null,
@@ -45,6 +59,13 @@ export function PluginsModal({
             plugins={plugins}
             onToggle={onToggle}
             onSelectPlugin={setSelectedPluginName}
+            onImportPlugin={onImportPlugin}
+            onRemovePlugin={onRemovePlugin}
+            onEditPlugin={onEditPlugin}
+            isImporting={isImporting}
+            importError={importError}
+            onDismissImportError={onDismissImportError}
+            onOpenDraft={onOpenDraft}
           />
         )}
       </DialogContent>

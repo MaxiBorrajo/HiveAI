@@ -1,6 +1,11 @@
 export interface HiveSettings {
   dataDir: string;
   model: string;
+  // Base URL external plugin subprocesses call back to for
+  // requestApproval/reportStep (see core/microkernel/external-plugins/ and
+  // modules/externalPluginCallbacks). Empty until main.ts knows its own
+  // listening port.
+  callbackBaseUrl: string;
 }
 
 export class HiveConfig {
