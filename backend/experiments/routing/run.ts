@@ -19,8 +19,6 @@ const outputPath = join(RESULTS_DIR, `${runId}.jsonl`);
 
 await Deno.mkdir(RESULTS_DIR, { recursive: true });
 
-// Reanudación: si el archivo de esta corrida ya existe, salteamos las consultas
-// que ya completaron todas sus repeticiones con esta misma configuración.
 const completedQueryIds = new Set<string>();
 
 try {

@@ -27,6 +27,9 @@
     "npm:hono@^4.6.1": "4.13.5",
     "npm:jsdom@25": "25.0.1",
     "npm:nanoid@5": "5.1.16",
+    "npm:ollama@~0.6.3": "0.6.3",
+    "npm:systeminformation@*": "5.33.9",
+    "npm:systeminformation@^5.33.9": "5.33.9",
     "npm:turndown@7.2": "7.2.4",
     "npm:zod-to-json-schema@^3.25.2": "3.25.2_zod@4.4.3",
     "npm:zod@^4.4.3": "4.4.3"
@@ -522,6 +525,11 @@
     "symbol-tree@3.2.4": {
       "integrity": "sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw=="
     },
+    "systeminformation@5.33.9": {
+      "integrity": "sha512-mlE+h4IVAA4F4O6sc8NFpClFvsO6yjQ/uVKTq3kmruYqno2CenyDQhyOqRO7q5sl2FZie9c+R3E7pKOBKPDHCA==",
+      "os": ["darwin", "linux", "win32", "freebsd", "openbsd", "netbsd", "sunos", "android"],
+      "bin": true
+    },
     "tldts-core@6.1.86": {
       "integrity": "sha512-Je6p7pkk+KMzMv2XXKmAE3McmolOQFdxkKw0R8EYNr7sELW46JqnNeTX8ybPiQgvg1ymCoF8LXs5fzFaZvJPTA=="
     },
@@ -614,6 +622,8 @@
       "npm:@types/node@*",
       "npm:dotenv@^17.4.2",
       "npm:hono@^4.6.1",
+      "npm:ollama@~0.6.3",
+      "npm:systeminformation@^5.33.9",
       "npm:zod-to-json-schema@^3.25.2",
       "npm:zod@^4.4.3"
     ]

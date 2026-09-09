@@ -13,7 +13,8 @@ import type {
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
-import { tool } from "@langchain/core/tools";
+import { type DynamicStructuredTool, tool } from "@langchain/core/tools";
+import type { RunnableConfig } from "@langchain/core/runnables";
 import {
   launchExternalPlugin,
   stopSharedHostIfIdle,
@@ -60,7 +61,15 @@ export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
   private activePlugins: Set<string> = new Set();
-  private config = new HiveConfig({ dataDir: "", model: "", callbackBaseUrl: "" });
+  private config = new HiveConfig({
+    dataDir: "",
+    configDir: "",
+    model: "",
+    selectorModel: "",
+    currentMode: "default",
+    ollamaKvCacheType: "",
+    callbackBaseUrl: "",
+  });
 
   public static getInstance(): HiveMicrokernel {
     if (!this.instance) {
@@ -215,8 +224,6 @@ export class HiveMicrokernel {
       counts[t.kind]++;
       const parsed = schema.safeParse(t.params);
 
-      // We expect 'error' tests to potentially fail schema validation.
-      // For 'happy' and 'edge', they must pass the schema.
       if (!parsed.success && t.kind !== "error") {
         issues.push(
           `case "${t.description}" has params that do not pass its own schema`,
@@ -393,7 +400,7 @@ export class HiveMicrokernel {
 
   private transformToTool(
     plugin: BeePlugin,
-  ): import("@langchain/core/tools").DynamicStructuredTool<
+  ): DynamicStructuredTool<
     z.ZodType,
     Record<string, unknown>,
     Record<string, unknown>,
@@ -402,8 +409,13 @@ export class HiveMicrokernel {
     string
   > {
     return tool(
-      async (input: unknown) => {
-        const result = await this.execute(plugin.name, input);
+      async (
+        input: unknown,
+        config?: RunnableConfig,
+      ) => {
+        const result = await this.execute(plugin.name, input, {
+          signal: config?.signal,
+        });
         return result.message;
       },
       {
@@ -577,6 +589,7 @@ export class HiveMicrokernel {
   async execute(
     name: string,
     data: unknown,
+    options?: { signal?: AbortSignal },
   ): Promise<{ success: boolean; message: string }> {
     const plugin = this.getPlugin(name);
 
@@ -589,13 +602,15 @@ export class HiveMicrokernel {
     const result = plugin.schema.safeParse(data);
 
     if (!result.success) {
-      const errorMessage = `ERROR: Bee '${name}' was given invalid nectar: ${z.prettifyError(result.error)}`;
+      const errorMessage = `ERROR: Bee '${name}' was given invalid nectar: ${z.prettifyError(
+        result.error,
+      )}`;
       console.error(errorMessage);
       return { success: false, message: errorMessage };
     }
 
     try {
-      const response = await plugin.process(result.data);
+      const response = await plugin.process(result.data, options);
       return { success: true, message: response };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

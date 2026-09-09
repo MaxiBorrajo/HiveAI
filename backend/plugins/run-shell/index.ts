@@ -8,16 +8,6 @@ import type {
 
 const MAX_OUTPUT_CHARS = 4000;
 
-// Real shell execution (bash / cmd / powershell), for anything that needs pipes,
-// redirection, chaining, or a command outside of file_ops' fixed set of operations.
-// The model supplies a free-form command string that IS interpreted by a shell.
-// There is no process sandbox here (no
-// container, no restricted OS user), so the only real containment is a human
-// approving the exact command before it runs. Approval goes through
-// context.requestApproval() (from BeeContext), never a direct import of the
-// microkernel's internals — that's what lets this same mechanism work for
-// third-party plugins loaded from outside this repo, not just built-in ones.
-
 const SHELL_LAUNCHERS: Record<
   string,
   (command: string) => { bin: string; args: string[] }
@@ -59,7 +49,6 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   schema = schema;
 
   selectionTests: SelectionTestCase<RunShellSchema>[] = [
-    // 3 Positive
     {
       query: "run 'ls -la | grep .ts' in bash",
       kind: "positive",
@@ -76,7 +65,6 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       kind: "positive",
       shouldInvoke: true,
     },
-    // 3 Negative
     {
       query: "what time is it?",
       kind: "negative",
@@ -92,7 +80,6 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
     {
       query: "list the files in this folder",
       kind: "ambiguous",
@@ -108,7 +95,6 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   ];
 
   executionTests: ExecutionTestCase<RunShellSchema>[] = [
-    // 3 Happy
     {
       description: "Run a simple echo command via bash",
       kind: "happy",
@@ -127,7 +113,6 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       params: { shell: "bash", command: "pwd", cwd: Deno.cwd() },
       expect: (output: string) => output.includes(Deno.cwd()),
     },
-    // 3 Edge
     {
       description: "Command producing no output still returns a message",
       kind: "edge",
@@ -148,7 +133,6 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       params: { shell: "bash", command: "exit 3" },
       expect: (output: string) => output.includes("exit code 3"),
     },
-    // 3 Error
     {
       description: "Invalid, non-existent cwd fails clearly",
       kind: "error",

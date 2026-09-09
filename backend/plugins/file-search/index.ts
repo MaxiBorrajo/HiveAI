@@ -59,7 +59,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
   schema = schema;
 
   selectionTests: SelectionTestCase<FileSearchSchema>[] = [
-    // 3 Positive
     {
       query: "search for the file report.pdf in my documents",
       kind: "positive",
@@ -75,7 +74,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       kind: "positive",
       shouldInvoke: true,
     },
-    // 3 Negative
     {
       query: "what time is it?",
       kind: "negative",
@@ -91,7 +89,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
     {
       query: "read what is inside README.md",
       kind: "ambiguous",
@@ -107,7 +104,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
   ];
 
   executionTests: ExecutionTestCase<FileSearchSchema>[] = [
-    // 3 Happy
     {
       description: "Search for a known existing file in current directory",
       kind: "happy",
@@ -129,7 +125,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       expect: (output: string) =>
         output.includes("Found") && output.includes("plugins"),
     },
-    // 3 Edge
     {
       description: "Search with maxResults capped to 1",
       kind: "edge",
@@ -153,7 +148,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
       expect: (output: string) =>
         output.includes("Found") && output.toLowerCase().includes("deno.json"),
     },
-    // 3 Error
     {
       description: "Search in a non-existent folder",
       kind: "error",
@@ -202,12 +196,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
     return dirs;
   }
 
-  // Breadth-first search across all `roots` at once, using a single shared queue
-  // and a fixed pool of MAX_CONCURRENCY workers that live for the whole search.
-  // Unlike a per-directory recursive fan-out, this caps the number of directories
-  // being read at any given moment to a constant, regardless of how wide the tree
-  // is at any level — a directory with hundreds of subfolders can't spawn hundreds
-  // of concurrent Deno.readDir calls.
   private async searchDirs(
     roots: string[],
     maxDepth: number,
@@ -220,11 +208,6 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
     type QueueItem = { dir: string; depth: number };
     const queue: QueueItem[] = roots.map((dir) => ({ dir, depth: maxDepth }));
     let cursor = 0;
-    // Tracks workers currently mid-readDir: if it hits 0 while the queue is
-    // drained, the search is genuinely done (nothing left to ever enqueue).
-    // Without this, a worker that finds the queue temporarily empty would
-    // exit for good even though a sibling worker is about to enqueue more
-    // subdirectories for it to pick up.
     let workersInFlight = 0;
 
     const worker = async () => {

@@ -34,7 +34,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
   schema = schema;
 
   selectionTests: SelectionTestCase<CounterSchema>[] = [
-    // 3 Positive
     {
       query: "add a coffee to the count",
       kind: "positive",
@@ -50,7 +49,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
       kind: "positive",
       shouldInvoke: true,
     },
-    // 3 Negative
     {
       query: "what time is it in Tokyo?",
       kind: "negative",
@@ -66,7 +64,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
     {
       query: "how many words are in this document?",
       kind: "ambiguous",
@@ -82,7 +79,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
   ];
 
   executionTests: ExecutionTestCase<CounterSchema>[] = [
-    // 3 Happy
     {
       description: "Increment counter by 1",
       kind: "happy",
@@ -103,7 +99,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
       params: { name: "coffees", action: "reset", amount: 1 },
       expect: (output: string) => output.includes("was reset to 0"),
     },
-    // 3 Edge
     {
       description: "Get value of a non-existent counter",
       kind: "edge",
@@ -122,7 +117,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
       params: { name: "coffees", action: "increment", amount: -2 },
       expect: (output: string) => output.includes("was incremented by -2"),
     },
-    // 3 Error
     {
       description: "Invalid action provided",
       kind: "error",
@@ -143,7 +137,6 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
     },
   ];
 
-  // Backward compatibility alias for microkernel / UI
   get testCases() {
     return this.selectionTests;
   }

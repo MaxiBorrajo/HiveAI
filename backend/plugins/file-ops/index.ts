@@ -9,13 +9,6 @@ import type {
 
 const MAX_CONTENT_CHARS = 50_000;
 
-// Native filesystem operations (create/write/copy/move/mkdir), implemented directly
-// with Deno's fs APIs instead of spawning external processes. This avoids the
-// portability problems of commands like `touch` (no reliable equivalent on stock
-// Windows) and needs no human approval like run_shell does: no shell interpreter
-// is ever involved, so there is no injection surface to defend against.
-// Deletion is intentionally not supported by this plugin.
-
 type Operation = "create" | "write" | "touch" | "mkdir" | "copy" | "move";
 
 const schema = z.object({
@@ -51,7 +44,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
   schema = schema;
 
   selectionTests: SelectionTestCase<FileOpsSchema>[] = [
-    // 3 Positive
     {
       query: "create a file called notes.txt with the text 'hello world'",
       kind: "positive",
@@ -67,7 +59,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       kind: "positive",
       shouldInvoke: true,
     },
-    // 3 Negative
     {
       query: "what time is it?",
       kind: "negative",
@@ -83,7 +74,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
     {
       query: "delete the old logs folder",
       kind: "ambiguous",
@@ -99,7 +89,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
   ];
 
   executionTests: ExecutionTestCase<FileOpsSchema>[] = [
-    // 3 Happy
     {
       description: "Create a new file with content",
       kind: "happy",
@@ -129,7 +118,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       },
       expect: (output: string) => output.includes("Created folder"),
     },
-    // 3 Edge
     {
       description: "Touch a non-existent file creates it",
       kind: "edge",
@@ -155,7 +143,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       params: { operation: "mkdir", path: Deno.cwd() },
       expect: (output: string) => output.includes("Created folder"),
     },
-    // 3 Error
     {
       description: "Copy without a destination fails clearly",
       kind: "error",

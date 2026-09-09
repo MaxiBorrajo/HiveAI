@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Check,
   X,
@@ -12,20 +11,33 @@ import {
   Coins,
   ChevronDown,
   ChevronUp,
+  type LucideIcon,
 } from "lucide-react";
+import type { PluginTestItem, TestResult } from "@/types/plugin";
+
+export interface TestCardItemProps {
+  test: PluginTestItem;
+  id: string;
+  isSelected: boolean;
+  isExpanded: boolean;
+  onToggleExpand: (id: string) => void;
+  res?: TestResult;
+  onToggle: (id: string) => void;
+  isRunning: boolean;
+}
 
 export function TestCardItem({
   test,
   id,
   isSelected,
+  isExpanded,
+  onToggleExpand,
   res,
   onToggle,
   isRunning,
-}: any) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
+}: TestCardItemProps) {
   let kindColor = "bg-slate-100 text-slate-700 border-slate-200";
-  let KindIcon = Box;
+  let KindIcon: LucideIcon = Box;
 
   if (test.kind === "positive" || test.kind === "happy") {
     kindColor = "bg-green-50 text-green-700 border-green-200";
@@ -64,7 +76,7 @@ export function TestCardItem({
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span
                 title="Test category: whether it tests LLM tool selection or direct execution"
-                className={`text-[10px] cursor-help font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                className={`text-[0.625rem] cursor-help font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                   test.type === "selection"
                     ? "bg-blue-50 text-blue-700 border-blue-200"
                     : "bg-purple-50 text-purple-700 border-purple-200"
@@ -74,39 +86,38 @@ export function TestCardItem({
               </span>
               <span
                 title="Type of scenario this test represents"
-                className={`text-[10px] cursor-help font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-1 ${kindColor}`}
+                className={`text-[0.625rem] cursor-help font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border flex items-center gap-1 ${kindColor}`}
               >
-                <KindIcon size={10} />
+                <KindIcon size={11} />
                 {test.kind}
               </span>
 
-              {/* Performance Metrics */}
               <div className="flex items-center gap-2 ml-auto">
                 {res?.metrics?.inputTokens !== undefined &&
                   res?.metrics?.outputTokens !== undefined && (
                     <span
                       title="Tokens (Input / Output)"
-                      className="flex items-center gap-1 text-[10px] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
+                      className="flex items-center gap-1 text-[0.625rem] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
                     >
-                      <Coins size={10} />
+                      <Coins size={11} />
                       {res.metrics.inputTokens} / {res.metrics.outputTokens}
                     </span>
                   )}
                 {res?.metrics?.tokensPerSecond ? (
                   <span
                     title="Tokens generated per second"
-                    className="flex items-center gap-1 text-[10px] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
+                    className="flex items-center gap-1 text-[0.625rem] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
                   >
-                    <Zap size={10} />
+                    <Zap size={11} />
                     {res.metrics.tokensPerSecond} t/s
                   </span>
                 ) : null}
                 {res?.metrics?.durationMs !== undefined && (
                   <span
                     title="Execution duration in seconds"
-                    className="flex items-center gap-1 text-[10px] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
+                    className="flex items-center gap-1 text-[0.625rem] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
                   >
-                    <Clock size={10} />
+                    <Clock size={11} />
                     {(res.metrics.durationMs / 1000).toFixed(2)}s
                   </span>
                 )}
@@ -124,40 +135,39 @@ export function TestCardItem({
               {test.label}
             </p>
 
-            {/* Failure Category Badge */}
             {res?.failureCategory && (
               <div className="mt-2 mb-1">
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-[10px] font-bold uppercase tracking-wider rounded-md border border-red-200">
-                  <AlertTriangle size={12} />
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-[0.625rem] font-bold uppercase tracking-wider rounded-md border border-red-200">
+                  <AlertTriangle size={11} />
                   Failure: {res.failureCategory}
                 </span>
               </div>
             )}
 
-            {test.type === "selection" && (test as any).expectedParams && (
+            {test.type === "selection" && test.expectedParams && (
               <div
                 title="The exact parameters the LLM is expected to extract from the query"
                 className="mt-3 bg-muted/50 rounded-md p-2.5 border border-border/50 cursor-help"
               >
-                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">
+                <p className="text-[0.625rem] uppercase font-bold text-muted-foreground mb-1">
                   Expected Params
                 </p>
-                <pre className="text-[11px] font-mono text-foreground/80 whitespace-pre-wrap">
-                  {JSON.stringify((test as any).expectedParams, null, 2)}
+                <pre className="text-xs font-mono text-foreground/80 whitespace-pre-wrap">
+                  {JSON.stringify(test.expectedParams, null, 2)}
                 </pre>
               </div>
             )}
 
-            {test.type === "execution" && (test as any).params && (
+            {test.type === "execution" && test.params && (
               <div
                 title="The exact parameters passed directly into the plugin's process method"
                 className="mt-3 bg-muted/50 rounded-md p-2.5 border border-border/50 cursor-help"
               >
-                <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">
+                <p className="text-[0.625rem] uppercase font-bold text-muted-foreground mb-1">
                   Params
                 </p>
-                <pre className="text-[11px] font-mono text-foreground/80 whitespace-pre-wrap">
-                  {JSON.stringify((test as any).params, null, 2)}
+                <pre className="text-xs font-mono text-foreground/80 whitespace-pre-wrap">
+                  {JSON.stringify(test.params, null, 2)}
                 </pre>
               </div>
             )}
@@ -168,22 +178,21 @@ export function TestCardItem({
                 className="mt-3 bg-destructive/10 cursor-help text-destructive rounded-md p-3 border border-destructive/20"
               >
                 <ul className="text-xs list-disc list-inside space-y-1">
-                  {res.errors.map((err: string, i: number) => (
+                  {res.errors.map((err, i) => (
                     <li key={i}>{err}</li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {/* View Results Toggle Button */}
             {hasResults && (
               <div className="mt-4 pt-4 border-t border-border flex justify-center">
                 <button
                   type="button"
                   onClick={(e) => {
-                    e.preventDefault(); // prevent triggering the label checkbox
+                    e.preventDefault();
                     e.stopPropagation();
-                    setIsExpanded(!isExpanded);
+                    onToggleExpand(id);
                   }}
                   className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors bg-muted/30 hover:bg-muted/50 px-3 py-1.5 rounded-full border border-border/50"
                 >
@@ -214,20 +223,19 @@ export function TestCardItem({
         </div>
       </label>
 
-      {/* Actual Results Accordion Panel */}
-      {hasResults && isExpanded && (
+      {hasResults && isExpanded && res?.details && (
         <div
           title="The actual results returned during the test"
           className="rounded-xl border border-border bg-card shadow-sm p-4 text-foreground cursor-help min-w-0 animate-in slide-in-from-top-2 fade-in-0 duration-200"
         >
-          <p className="text-[10px] uppercase font-bold text-muted-foreground mb-3 flex items-center gap-1 border-b border-border pb-2">
-            <CheckCircle2 size={12} className="text-muted-foreground" /> Actual
+          <p className="text-[0.625rem] uppercase font-bold text-muted-foreground mb-3 flex items-center gap-1 border-b border-border pb-2">
+            <CheckCircle2 size={11} className="text-muted-foreground" /> Actual
             Results
           </p>
           {test.type === "selection" ? (
             <div className="space-y-4">
               <div>
-                <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">
+                <p className="text-[0.625rem] font-bold uppercase text-muted-foreground mb-1">
                   Selected Tool
                 </p>
                 <div className="font-mono text-xs bg-muted/50 px-2 py-1.5 rounded-md border border-border inline-block">
@@ -236,10 +244,10 @@ export function TestCardItem({
               </div>
               {res.details.extractedParams && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">
+                  <p className="text-[0.625rem] font-bold uppercase text-muted-foreground mb-1">
                     Extracted Params
                   </p>
-                  <pre className="text-[11px] font-mono text-foreground/90 bg-muted/50 p-2.5 rounded-md border border-border whitespace-pre-wrap">
+                  <pre className="text-xs font-mono text-foreground/90 bg-muted/50 p-2.5 rounded-md border border-border whitespace-pre-wrap">
                     {JSON.stringify(res.details.extractedParams, null, 2)}
                   </pre>
                 </div>
@@ -247,10 +255,10 @@ export function TestCardItem({
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">
+              <p className="text-[0.625rem] font-bold uppercase text-muted-foreground mb-1">
                 Plugin Output
               </p>
-              <pre className="text-[11px] font-mono text-foreground/90 bg-muted/50 p-2.5 rounded-md border border-border whitespace-pre-wrap overflow-y-auto max-h-[300px]">
+              <pre className="text-xs font-mono text-foreground/90 bg-muted/50 p-2.5 rounded-md border border-border whitespace-pre-wrap overflow-y-auto max-h-[300px]">
                 {res.details.output || "<empty>"}
               </pre>
             </div>

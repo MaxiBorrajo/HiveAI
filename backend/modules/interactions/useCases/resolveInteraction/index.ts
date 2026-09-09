@@ -1,4 +1,5 @@
 import { humanInteractionQueue } from "../../../../core/microkernel/human-interaction.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 export function handleResolveInteraction(
   id: string,
@@ -9,5 +10,12 @@ export function handleResolveInteraction(
     kind: "approval",
     approved: decision === "approve",
   });
-  return Response.json({ success: ok }, { headers, status: ok ? 200 : 404 });
+  if (ok) {
+    return ResponseBuilder.success("Interaction resolved", { headers });
+  } else {
+    return ResponseBuilder.error(["Interaction not found"], undefined, {
+      headers,
+      status: 404,
+    });
+  }
 }

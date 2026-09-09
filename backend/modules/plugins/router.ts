@@ -7,10 +7,12 @@ import { handleImportPlugin } from "./useCases/importPlugin/index.ts";
 import { handleRemovePlugin } from "./useCases/removePlugin/index.ts";
 import { handleExportPlugin } from "./useCases/exportPlugin/index.ts";
 import { handleEditPlugin } from "./useCases/editPlugin/index.ts";
+import { handleSaveTestResults } from "./useCases/saveTestResults/index.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
+import { requireModelsConfigured } from "../../core/api/guards.ts";
 
 export const pluginsRouter = new Hono<{
-  Variables: { hive: HiveMicrokernel; model: string; selectorModel: string };
+  Variables: { hive: HiveMicrokernel };
 }>();
 
 pluginsRouter.get("/", (c) => {
@@ -58,18 +60,31 @@ pluginsRouter.delete("/:name", (c) => {
   });
 });
 
+pluginsRouter.post("/test-results", async (c) => {
+  return handleSaveTestResults(c.req.raw, {
+    "content-type": "application/json",
+  });
+});
+
 pluginsRouter.post("/:name/test/:type/:index", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const hive = c.get("hive");
+
+  const guardError = requireModelsConfigured(hive, headers);
+  if (guardError) return guardError;
+
   const name = c.req.param("name");
   const type = c.req.param("type") as "selection" | "execution";
   const index = parseInt(c.req.param("index"), 10);
+  const config = hive.getConfig();
   return handleTest(
-    c.get("hive"),
-    c.get("model"),
-    c.get("selectorModel"),
+    hive,
+    config.get("model"),
+    config.get("selectorModel"),
     name,
     index,
     type,
     c.req.raw,
-    { "content-type": "application/json" },
+    headers,
   );
 });

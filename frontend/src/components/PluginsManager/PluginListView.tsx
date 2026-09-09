@@ -3,45 +3,58 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { TestTube, Upload, Trash2, Download, Pencil, Loader2 } from "lucide-react";
+import {
+  Ellipsis,
+  TestTube,
+  ToggleLeft,
+  ToggleRight,
+  Upload,
+  Trash2,
+  Download,
+  Pencil,
+  Loader2,
+} from "lucide-react";
 import type { Plugin } from "@/types/plugin";
 import { DraftListView } from "./DraftListView";
-import { exportPlugin } from "@/lib/get-plugins";
+import { exportPlugin } from "@/lib/plugins/exportPlugin";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu.tsx";
 
 interface PluginListViewProps {
   plugins: Plugin[];
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
-  onSelectPlugin: (name: string) => void;
+  onToggleAll: (nextActive: boolean) => void;
+  onSelectPlugins: (plugins: Plugin[]) => void;
+  hasModel?: boolean;
   onImportPlugin: (files: FileList) => void;
   onRemovePlugin: (plugin: Plugin) => void;
   onEditPlugin: (plugin: Plugin) => void;
   isImporting: boolean;
-  importError: string | null;
-  onDismissImportError: () => void;
   onOpenDraft: (name: string) => void;
 }
 
 export function PluginListView({
   plugins,
   onToggle,
-  onSelectPlugin,
+  onToggleAll,
+  onSelectPlugins,
+  hasModel = true,
   onImportPlugin,
   onRemovePlugin,
   onEditPlugin,
   isImporting,
-  importError,
-  onDismissImportError,
   onOpenDraft,
 }: PluginListViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const allActive = plugins.length > 0 && plugins.every((p) => p.active);
 
   async function handleExport(plugin: Plugin) {
-    try {
-      await exportPlugin(plugin.name);
-    } catch {
-      // Best-effort — export failures aren't currently surfaced anywhere in
-      // this view; the download simply won't start.
-    }
+    await exportPlugin(plugin.name);
   }
 
   function handleFilesChosen(event: React.ChangeEvent<HTMLInputElement>) {
@@ -55,8 +68,58 @@ export function PluginListView({
 
   return (
     <>
-      <DialogHeader className="flex-row items-center justify-between p-6 pb-0 space-y-0">
-        <DialogTitle>Manage Plugins</DialogTitle>
+      <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DialogTitle>Manage Plugins</DialogTitle>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="" title="Options">
+              <Ellipsis className="size-5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              side="bottom"
+              sideOffset={8}
+              className="w-56"
+            >
+              <DropdownMenuItem
+                key="Toggle all plugins"
+                closeOnClick={false}
+                onClick={() => onToggleAll(!allActive)}
+                disabled={plugins.length === 0}
+              >
+                <div className="flex items-center gap-2">
+                  {allActive ? (
+                    <ToggleRight size={12} />
+                  ) : (
+                    <ToggleLeft size={12} />
+                  )}
+
+                  <span className="text-sm font-mono truncate">
+                    Toggle all plugins
+                  </span>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                key="Run all tests"
+                onClick={() => onSelectPlugins(plugins)}
+                disabled={!hasModel}
+                title={
+                  hasModel ? undefined : "Select a model before running tests"
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <TestTube size={12} />
+                  <span className="text-sm font-mono truncate">
+                    Run all tests
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
         <Button
           variant="secondary"
           size="sm"
@@ -80,18 +143,6 @@ export function PluginListView({
           {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
         />
       </DialogHeader>
-
-      {importError && (
-        <div className="mx-6 mt-3 flex items-start justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <span>{importError}</span>
-          <button
-            onClick={onDismissImportError}
-            className="shrink-0 opacity-70 hover:opacity-100"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       <ScrollArea className="flex-1 p-6 pt-2">
         <div className="flex flex-col gap-3">
@@ -133,7 +184,13 @@ export function PluginListView({
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => onSelectPlugin(plugin.name)}
+                      onClick={() => onSelectPlugins([plugin])}
+                      disabled={!hasModel}
+                      title={
+                        hasModel
+                          ? undefined
+                          : "Select a model before running tests"
+                      }
                       className="h-8 gap-1 px-3"
                     >
                       <TestTube size={12} />

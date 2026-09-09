@@ -28,15 +28,6 @@ export interface Verdict {
   selectorModel?: string | null;
 }
 
-/**
- * Evalúa el resultado normalizado contra la consulta esperada.
- *
- * @param strictDefaults
- * Si es true: los campos que el modelo agregó por su cuenta deben respetar el
- * valor por defecto declarado en el schema.
- * Si es false: esos campos se ignoran.
- * En ambos casos, los campos presentes en expected_params deben coincidir.
- */
 export function evaluate(
   result: NormalizedResult,
   query: RoutingQuery,

@@ -18,7 +18,6 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   ssr: {
-    // Externalizamos las librerías del backend para que Vite no intente procesarlas (se resuelven por Deno)
     external: ["../backend/mod.ts", "@langchain/langgraph", "@langchain/core"],
   },
   server: {

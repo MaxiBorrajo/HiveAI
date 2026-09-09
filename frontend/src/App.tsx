@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
+import {
+  ToastProvider,
+  ToastPortal,
+  ToastViewport,
+  ToastList,
+} from "@/components/ui/toast";
 import { Chat } from "@/components/Chat";
 import { StyleGuide } from "@/components/StyleGuide";
+import { toastManager } from "@/lib/toastManager";
+import { ModelsProvider } from "@/context/ModelsContext";
 import {
   DraftEditorProvider,
   useDraftEditor,
@@ -41,12 +48,21 @@ function AppContent() {
 
 function App() {
   return (
-    <TooltipProvider>
-      <DraftEditorProvider>
-        <AppContent />
-      </DraftEditorProvider>
-      <Toaster position="bottom-right" />
-    </TooltipProvider>
+    <ToastProvider toastManager={toastManager}>
+      <TooltipProvider>
+        <ModelsProvider>
+          <DraftEditorProvider>
+            <AppContent />
+          </DraftEditorProvider>
+        </ModelsProvider>
+      </TooltipProvider>
+
+      <ToastPortal>
+        <ToastViewport>
+          <ToastList />
+        </ToastViewport>
+      </ToastPortal>
+    </ToastProvider>
   );
 }
 

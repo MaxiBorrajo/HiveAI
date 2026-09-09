@@ -1,83 +1,131 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, Square, Box, Clock, Coins } from "lucide-react";
-import type { Plugin } from "@/types/plugin";
-import { runPluginTest } from "@/lib/get-plugins";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { isAxiosError } from "axios";
+import type { Plugin, PluginTestItem, TestResult } from "@/types/plugin";
+import { runPluginTest } from "@/lib/plugins/runPluginTest";
+import { saveTestResults } from "@/lib/plugins/saveTestResults";
 import { TestCardItem } from "./TestCardItem";
 
-type TestStatus = "idle" | "running" | "success" | "error";
-interface TestResult {
-  status: TestStatus;
-  errors?: string[];
-  failureCategory?: string;
-  details?: {
-    selectedTool?: string | null;
-    extractedParams?: Record<string, unknown> | null;
-    output?: string | null;
-  };
-  metrics?: {
-    durationMs: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    tokensPerSecond?: number;
-  };
-}
-
 export function PluginTestsView({
-  plugin,
+  plugins,
   onBack,
 }: {
-  plugin: Plugin;
+  plugins: Plugin[];
   onBack: () => void;
 }) {
-  const allTests = [
-    ...(plugin.selectionTests || []).map((t, i) => ({
-      ...t,
-      type: "selection" as const,
-      originalIndex: i,
-      label: t.query,
-    })),
-    ...(plugin.executionTests || []).map((t, i) => ({
-      ...t,
-      type: "execution" as const,
-      originalIndex: i,
-      label: t.description,
-    })),
-  ];
+  const pluginsWithTests = useMemo(() => {
+    return plugins
+      .map((plugin) => {
+        const tests: PluginTestItem[] = [
+          ...(plugin.selectionTests || []).map((t, i) => ({
+            ...t,
+            type: "selection" as const,
+            originalIndex: i,
+            label: t.query,
+            id: `${plugin.name}-selection-${i}`,
+            pluginName: plugin.name,
+          })),
+          ...(plugin.executionTests || []).map((t, i) => ({
+            ...t,
+            type: "execution" as const,
+            originalIndex: i,
+            label: t.description,
+            id: `${plugin.name}-execution-${i}`,
+            pluginName: plugin.name,
+          })),
+        ];
+        return {
+          pluginName: plugin.name,
+          tests,
+        };
+      })
+      .filter((p) => p.tests.length > 0);
+  }, [plugins]);
+
+  const allTests = useMemo(
+    () => pluginsWithTests.flatMap((p) => p.tests),
+    [pluginsWithTests],
+  );
 
   const [selectedTestIds, setSelectedTestIds] = useState<Set<string>>(
-    new Set(allTests.map((t) => `${t.type}-${t.originalIndex}`)),
+    () => new Set(allTests.map((t) => t.id)),
   );
+
+  useEffect(() => {
+    setSelectedTestIds(new Set(allTests.map((t) => t.id)));
+  }, [allTests]);
+
   const [testResults, setTestResults] = useState<Record<string, TestResult>>(
     {},
   );
+  const [expandedResults, setExpandedResults] = useState<Set<string>>(
+    new Set(),
+  );
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [abortedByUser, setAbortedByUser] = useState(false);
 
-  const isRunning = abortController !== null;
+  useEffect(() => {
+    setIsRunning(abortController !== null);
+  }, [abortController]);
+
+  const handleToggleExpand = (id: string) => {
+    setExpandedResults((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleAllExpand = () => {
+    if (expandedResults.size > 0) {
+      setExpandedResults(new Set());
+    } else {
+      const idsWithResults = Object.keys(testResults).filter(
+        (id) => !!testResults[id]?.details,
+      );
+      setExpandedResults(new Set(idsWithResults));
+    }
+  };
+
   const allSelected =
     allTests.length > 0 && selectedTestIds.size === allTests.length;
-
-  const testsToRunCount = selectedTestIds.size;
   const testsCompletedCount = Object.entries(testResults).filter(
     ([id, res]) =>
       selectedTestIds.has(id) &&
       (res.status === "success" || res.status === "error"),
   ).length;
 
+  const testsToRunCount = abortedByUser
+    ? testsCompletedCount - 1
+    : selectedTestIds.size;
+
   const progressPercent =
     testsToRunCount > 0
       ? Math.round((testsCompletedCount / testsToRunCount) * 100)
       : 0;
 
-  const isFinished =
-    !isRunning &&
-    testsCompletedCount > 0 &&
-    testsCompletedCount === testsToRunCount;
+  useEffect(() => {
+    setIsFinished(
+      (!isRunning &&
+        testsCompletedCount > 0 &&
+        testsCompletedCount === testsToRunCount) ||
+        abortedByUser,
+    );
+  }, [testsCompletedCount, testsToRunCount, isRunning]);
 
-  // Compute Summary Metrics
   const summary = useMemo(() => {
     if (!isFinished) return null;
     let passed = 0;
@@ -92,7 +140,7 @@ export function PluginTestsView({
     let edgeNegativePassed = 0;
 
     allTests.forEach((t) => {
-      const id = `${t.type}-${t.originalIndex}`;
+      const id = t.id;
       if (!selectedTestIds.has(id)) return;
       const res = testResults[id];
       if (!res) return;
@@ -144,6 +192,36 @@ export function PluginTestsView({
     };
   }, [isFinished, testResults, selectedTestIds, allTests, testsToRunCount]);
 
+  const downloadResults = async () => {
+    const results = allTests
+      .filter((t) => selectedTestIds.has(t.id))
+      .map((t) => {
+        const res = testResults[t.id];
+        return {
+          pluginName: t.pluginName,
+          type: t.type,
+          kind: t.kind,
+          label: t.label,
+          status: res?.status || "idle",
+          errors: res?.errors || [],
+          failureCategory: res?.failureCategory || null,
+          details: res?.details || null,
+          metrics: res?.metrics || null,
+        };
+      });
+
+    try {
+      const { data } = await saveTestResults({ summary, results });
+      if (data?.path) {
+        alert(`Results saved to:\n${data.path}`);
+      }
+    } catch (err) {
+      alert(
+        `Failed to save results: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  };
+
   function toggleTest(id: string) {
     if (isRunning) return;
     setSelectedTestIds((prev) => {
@@ -159,18 +237,20 @@ export function PluginTestsView({
     if (allSelected) {
       setSelectedTestIds(new Set());
     } else {
-      setSelectedTestIds(
-        new Set(allTests.map((t) => `${t.type}-${t.originalIndex}`)),
-      );
+      setSelectedTestIds(new Set(allTests.map((t) => t.id)));
     }
   }
 
   async function runSelectedTests() {
     if (isRunning) {
-      abortController.abort();
+      abortController?.abort();
       setAbortController(null);
+      setIsRunning(false);
+      setAbortedByUser(true);
       return;
     }
+
+    setAbortedByUser(false);
 
     const controller = new AbortController();
     setAbortController(controller);
@@ -183,19 +263,17 @@ export function PluginTestsView({
       return next;
     });
 
-    const testsToRun = allTests.filter((t) =>
-      selectedTestIds.has(`${t.type}-${t.originalIndex}`),
-    );
+    const testsToRun = allTests.filter((t) => selectedTestIds.has(t.id));
 
     for (const test of testsToRun) {
       if (controller.signal.aborted) break;
 
-      const id = `${test.type}-${test.originalIndex}`;
+      const id = test.id;
       setTestResults((prev) => ({ ...prev, [id]: { status: "running" } }));
 
       try {
-        const res = await runPluginTest(
-          plugin.name,
+        const { success, errors, data } = await runPluginTest(
+          test.pluginName,
           test.type,
           test.originalIndex,
           controller.signal,
@@ -203,20 +281,40 @@ export function PluginTestsView({
         setTestResults((prev) => ({
           ...prev,
           [id]: {
-            status: res.success ? "success" : "error",
-            errors: res.errors,
-            failureCategory: res.failureCategory,
-            details: res.details,
-            metrics: res.metrics,
+            status: success ? "success" : "error",
+            errors: errors,
+            failureCategory: data?.failureCategory,
+            details: data?.details,
+            metrics: data?.metrics,
           },
         }));
-      } catch (err: any) {
-        if (err.name === "AbortError") break;
+      } catch (err) {
+        if (err instanceof Error && err.name === "CanceledError") {
+          setTestResults((prev) => {
+            const next = { ...prev };
+            if (next[id]?.status === "running") {
+              next[id] = {
+                status: "error",
+                errors: ["Test aborted by user."],
+                failureCategory: "Aborted",
+              };
+            }
+            return next;
+          });
+          break;
+        }
+        console.error("Test execution failed:", err);
+        const errorMessage = isAxiosError(err)
+          ? (err.response?.data as { message?: string } | undefined)?.message ||
+            err.message
+          : err instanceof Error
+            ? err.message
+            : "Unknown error";
         setTestResults((prev) => ({
           ...prev,
           [id]: {
             status: "error",
-            errors: [err.message],
+            errors: [errorMessage],
             failureCategory: "Exception",
           },
         }));
@@ -224,6 +322,8 @@ export function PluginTestsView({
     }
     setAbortController(null);
   }
+
+  const titleText = plugins.length === 1 ? plugins[0].name : "Test Results";
 
   return (
     <>
@@ -238,23 +338,46 @@ export function PluginTestsView({
           <ArrowLeft size={16} />
         </Button>
         <div className="flex-1 min-w-0">
-          <DialogTitle className="font-mono text-sm">{plugin.name}</DialogTitle>
+          <DialogTitle className="font-mono text-sm">{titleText}</DialogTitle>
         </div>
       </DialogHeader>
 
-      {/* Control Bar & Progress */}
       <div className="flex flex-col border-b border-border bg-muted/20">
         <div className="flex items-center justify-between px-6 pb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={toggleAll}
-              disabled={isRunning || allTests.length === 0}
-              className="size-4 accent-primary"
-            />
-            <span className="text-xs font-medium">Select all</span>
-          </label>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                disabled={isRunning || allTests.length === 0}
+                className="size-4 accent-primary"
+              />
+              <span className="text-xs font-medium">Select all</span>
+            </label>
+
+            {testsCompletedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleAllExpand}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {expandedResults.size > 0 ? "Hide Results" : "View Results"}
+              </button>
+            )}
+
+            {summary && (
+              <>
+                <button
+                  type="button"
+                  onClick={downloadResults}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Download Results
+                </button>
+              </>
+            )}
+          </div>
 
           <Button
             size="sm"
@@ -272,7 +395,6 @@ export function PluginTestsView({
           </Button>
         </div>
 
-        {/* Progress Bar */}
         {(isRunning || (testsCompletedCount > 0 && !isFinished)) && (
           <div className="flex items-center gap-3 px-6 py-2 bg-muted/10 border-t border-border text-xs font-medium">
             <div className="flex-1 h-2 bg-muted overflow-hidden rounded-full border border-border">
@@ -290,7 +412,6 @@ export function PluginTestsView({
 
       <ScrollArea className="flex-1 p-6 pt-4 bg-muted/10">
         <div className="flex flex-col gap-4">
-          {/* Summary Dashboard */}
           {summary && (
             <div className="mb-4 bg-card rounded-xl border border-border shadow-sm p-5 animate-in fade-in slide-in-from-top-4">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
@@ -303,7 +424,7 @@ export function PluginTestsView({
                   title="Percentage of successful tests across the current run (Passed / Total)"
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Pass Rate
                   </span>
                   <div className="flex items-end gap-2">
@@ -322,7 +443,7 @@ export function PluginTestsView({
                   title="Percentage of Edge, Negative, and Error tests that passed. Measures the plugin's robustness to invalid or tricky inputs."
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Resilience Score
                   </span>
                   <span
@@ -336,7 +457,7 @@ export function PluginTestsView({
                   title="Average execution time per test in seconds (Total duration / Number of tests)"
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Avg Latency
                   </span>
                   <div className="flex items-center gap-1.5 text-foreground">
@@ -354,7 +475,7 @@ export function PluginTestsView({
                   title="Total number of input and output tokens consumed across all Selection tests in this run"
                   className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border border-border/50 cursor-help"
                 >
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                  <span className="text-[0.625rem] font-bold uppercase text-muted-foreground tracking-wider">
                     Tokens Used
                   </span>
                   <div className="flex items-center gap-1.5 text-foreground">
@@ -389,24 +510,49 @@ export function PluginTestsView({
             </div>
           )}
 
-          {/* Test Cards */}
-          {allTests.map((test) => {
-            const id = `${test.type}-${test.originalIndex}`;
-            const isSelected = selectedTestIds.has(id);
-            const res = testResults[id];
+          <Accordion
+            multiple
+            defaultValue={pluginsWithTests.map((p) => p.pluginName)}
+            className="w-full space-y-4"
+          >
+            {pluginsWithTests.map((group) => (
+              <AccordionItem
+                key={group.pluginName}
+                value={group.pluginName}
+                className="border rounded-lg bg-card overflow-hidden"
+              >
+                <AccordionTrigger className="px-4 py-3 hover:no-underline bg-muted/30">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <span>{group.pluginName}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      ({group.tests.length} tests)
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-4 flex flex-col gap-4 border-t">
+                  {group.tests.map((test) => {
+                    const id = test.id;
+                    const isSelected = selectedTestIds.has(id);
+                    const res = testResults[id];
 
-            return (
-              <TestCardItem
-                key={id}
-                id={id}
-                test={test}
-                isSelected={isSelected}
-                res={res}
-                onToggle={toggleTest}
-                isRunning={isRunning}
-              />
-            );
-          })}
+                    return (
+                      <TestCardItem
+                        key={id}
+                        id={id}
+                        test={test}
+                        isSelected={isSelected}
+                        isExpanded={expandedResults.has(id)}
+                        onToggleExpand={handleToggleExpand}
+                        res={res}
+                        onToggle={toggleTest}
+                        isRunning={isRunning}
+                      />
+                    );
+                  })}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </ScrollArea>
     </>

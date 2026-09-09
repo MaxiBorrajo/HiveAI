@@ -1,4 +1,5 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 export function activatePlugin(hive: HiveMicrokernel, pluginName: string): Promise<boolean> {
   return hive.activate(pluginName);
@@ -10,9 +11,13 @@ export async function handleActivatePlugin(
   headers: Record<string, string>,
 ): Promise<Response> {
   const ok = await activatePlugin(hive, pluginName);
-  return Response.json(
-    { success: ok },
-    { headers, status: ok ? 200 : 404 },
-  );
+  if (ok) {
+    return ResponseBuilder.success("Plugin activated", { headers });
+  } else {
+    return ResponseBuilder.error(
+      [`Plugin ${pluginName} not found or could not be activated`],
+      undefined,
+      { headers, status: 404 },
+    );
+  }
 }
-
