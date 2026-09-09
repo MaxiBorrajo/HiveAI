@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -16,7 +18,11 @@ import { Switch } from "../ui/switch.tsx";
 import { Slider } from "../ui/slider.tsx";
 import { setMode } from "../../lib/modes/setMode.ts";
 
-export function ModesManager() {
+interface ModesManagerProps {
+  hasModel?: boolean;
+}
+
+export function ModesManager({ hasModel = true }: ModesManagerProps) {
   const [modes, setModes] = useState<ChatMode[]>([]);
 
   useEffect(() => {
@@ -34,14 +40,13 @@ export function ModesManager() {
             ) : (
               <User className="size-4" />
             ),
-          name: mode.name.charAt(0).toUpperCase() + mode.name.slice(1),
         })),
       );
     });
   }, []);
 
   const [currentMode, setCurrentMode] = useState<ChatMode>({
-    name: "Default",
+    name: "default",
     description: "Default mode with balanced performance",
     icon: <User className="size-4" />,
   });
@@ -67,8 +72,13 @@ export function ModesManager() {
   };
 
   const changeMode = async (mode: ChatMode) => {
-    setCurrentMode(mode);
-    await setMode(mode);
+    try {
+      await setMode(mode);
+      setCurrentMode(mode);
+    } catch {
+      // Validation failed (e.g. a parameter is out of range); keep the
+      // previous mode selected instead of applying it optimistically.
+    }
   };
 
   const onChange = (
@@ -101,58 +111,73 @@ export function ModesManager() {
         sideOffset={8}
         className="w-56"
       >
-        {modes.map((mode) => {
-          return (
-            <>
-              {mode.parameters ? (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <ModeOption mode={mode} />
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {mode.parameters.map((parameter) => (
-                      <div
-                        key={`${mode.name}-${parameter.name}`}
-                        className="px-1.5 py-1"
-                      >
-                        <ParameterOption
-                          parameter={parameter}
-                          mode={mode}
-                          onChange={onChange}
-                        />
+        <DropdownMenuGroup>
+          <div className="px-1.5 py-1">
+            <span className="text-sm font-medium">Mode</span>
+          </div>
+
+          <DropdownMenuSeparator />
+
+          {modes.map((mode) => {
+            return (
+              <>
+                {mode.parameters ? (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      disabled={!hasModel}
+                      title={
+                        hasModel
+                          ? undefined
+                          : "Select a model before switching modes"
+                      }
+                    >
+                      <ModeOption mode={mode} />
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent sideOffset={10}>
+                      {mode.parameters.map((parameter) => (
+                        <div
+                          key={`${mode.name}-${parameter.name}`}
+                          className="px-1.5 py-1"
+                        >
+                          <ParameterOption
+                            parameter={parameter}
+                            mode={mode}
+                            onChange={onChange}
+                          />
+                        </div>
+                      ))}
+                      <div className="flex flex-1 items-center justify-end gap-2 p-2">
+                        <Button
+                          onClick={reset(mode)}
+                          title="Reset to defaults"
+                          size="sm"
+                          variant="secondary"
+                        >
+                          Reset
+                        </Button>
+                        <Button
+                          onClick={() => changeMode(mode)}
+                          title="Apply the selected mode and its parameters"
+                          size="sm"
+                        >
+                          Apply
+                        </Button>
                       </div>
-                    ))}
-                    <div className="flex flex-1 items-center justify-end gap-2 p-2">
-                      <Button
-                        onClick={reset(mode)}
-                        title="Reset to defaults"
-                        size="sm"
-                        variant="secondary"
-                      >
-                        Reset
-                      </Button>
-                      <Button
-                        onClick={() => changeMode(mode)}
-                        title="Apply the selected mode and its parameters"
-                        size="sm"
-                      >
-                        Apply
-                      </Button>
-                    </div>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              ) : (
-                <DropdownMenuItem
-                  key={mode.name}
-                  closeOnClick
-                  onClick={() => setCurrentMode(mode)}
-                >
-                  <ModeOption mode={mode} />
-                </DropdownMenuItem>
-              )}
-            </>
-          );
-        })}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                ) : (
+                  <DropdownMenuItem
+                    key={mode.name}
+                    closeOnClick
+                    onClick={() => setCurrentMode(mode)}
+                  >
+                    <ModeOption mode={mode} />
+                  </DropdownMenuItem>
+                )}
+              </>
+            );
+          })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -281,7 +306,9 @@ export function ModeOption({ mode }: { mode: ChatMode }) {
       title={mode.description}
     >
       {mode.icon}
-      <span className="text-sm font-mono truncate">{mode.name}</span>
+      <span className="text-sm font-mono truncate capitalize">
+        {mode.name}
+      </span>
     </div>
   );
 }

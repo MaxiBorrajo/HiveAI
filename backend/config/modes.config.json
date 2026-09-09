@@ -122,23 +122,22 @@
         "requiresReload": false
       },
       {
-        "name": "num_predict",
-        "description": "Maximum number of tokens to generate in a single response.",
-        "type": "number",
-        "defaultValue": 512,
-        "currentValue": 512,
-        "minValue": 1,
-        "maxValue": null,
-        "note": "maxValue = n_ctx - current_prompt_tokens, calculated at runtime",
+        "name": "limit_output",
+        "description": "Dynamically limits maximum generation tokens based on available context and task type.",
+        "type": "boolean",
+        "defaultValue": true,
+        "currentValue": true,
+        "note": "if true, num_predict is calculated at runtime based on available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS)",
         "requiresReload": false
       },
       {
         "name": "spec_deco",
         "description": "Enables speculative decoding using a smaller draft model to accelerate token generation without sacrificing primary model accuracy.",
-        "type": "boolean",
-        "defaultValue": true,
-        "currentValue": true,
-        "note": "requires a compatible draft model loaded; ignored if none is available",
+        "type": "string",
+        "defaultValue": "",
+        "currentValue": "",
+        "options": [],
+        "note": "options populated at runtime with compatible models (same family/tokenizer as the main model) already downloaded by the user; empty string = disabled",
         "requiresReload": true
       }
     ]
@@ -266,22 +265,22 @@
         "requiresReload": false
       },
       {
-        "name": "num_predict",
-        "description": "Maximum number of tokens to generate in a single response.",
-        "type": "number",
-        "defaultValue": -1,
-        "currentValue": -1,
-        "minValue": -1,
-        "maxValue": null,
-        "note": "-1 = no explicit limit, terminates on EOS token or n_ctx",
+        "name": "limit_output",
+        "description": "Dynamically limits maximum generation tokens based on available context and task type.",
+        "type": "boolean",
+        "defaultValue": true,
+        "currentValue": true,
+        "note": "if true, num_predict is calculated at runtime based on available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS)",
         "requiresReload": false
       },
       {
         "name": "spec_deco",
         "description": "Enables speculative decoding using a smaller draft model to accelerate token generation without sacrificing primary model accuracy.",
-        "type": "boolean",
-        "defaultValue": false,
-        "currentValue": false,
+        "type": "string",
+        "defaultValue": "",
+        "currentValue": "",
+        "options": [],
+        "note": "options populated at runtime with compatible models (same family/tokenizer as the main model) already downloaded by the user; empty string = disabled",
         "requiresReload": true
       }
     ]
@@ -408,22 +407,22 @@
         "requiresReload": false
       },
       {
-        "name": "num_predict",
-        "description": "Maximum number of tokens to generate in a single response.",
-        "type": "number",
-        "defaultValue": 512,
-        "currentValue": 512,
-        "minValue": -1,
-        "maxValue": null,
-        "note": "-1 = no explicit limit; positive maxValue = n_ctx - current_prompt_tokens, calculated at runtime",
+        "name": "limit_output",
+        "description": "Dynamically limits maximum generation tokens based on available context and task type.",
+        "type": "boolean",
+        "defaultValue": true,
+        "currentValue": true,
+        "note": "if true, num_predict is calculated at runtime based on available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS)",
         "requiresReload": false
       },
       {
         "name": "spec_deco",
         "description": "Enables speculative decoding using a smaller draft model to accelerate token generation without sacrificing primary model accuracy.",
-        "type": "boolean",
-        "defaultValue": false,
-        "currentValue": false,
+        "type": "string",
+        "defaultValue": "",
+        "currentValue": "",
+        "options": [],
+        "note": "options populated at runtime with compatible models (same family/tokenizer as the main model) already downloaded by the user; empty string = disabled",
         "requiresReload": true
       }
     ]

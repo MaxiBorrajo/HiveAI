@@ -50,7 +50,13 @@ export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
   private activePlugins: Set<string> = new Set();
-  private config = new HiveConfig({ dataDir: "", model: "" });
+  private config = new HiveConfig({
+    dataDir: "",
+    configDir: "",
+    model: "",
+    selectorModel: "",
+    currentMode: "default",
+  });
 
   public static getInstance(): HiveMicrokernel {
     if (!this.instance) {

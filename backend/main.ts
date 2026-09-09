@@ -8,19 +8,16 @@ import { pluginsRouter } from "./modules/plugins/router.ts";
 import { chatsRouter } from "./modules/chats/router.ts";
 import { interactionsRouter } from "./modules/interactions/router.ts";
 import { modesRouter } from "./modules/modes/router.ts";
+import { modelsRouter } from "./modules/models/router.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const MODEL = "qwen3:1.7b";
-const SELECTOR_MODEL = "qwen3:1.7b";
-
-hive.configure({
-  dataDir: join(homeDir, ".hiveai", "storage"),
-  model: MODEL,
-});
+hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
+hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
+await hive.getConfig().load();
 
 async function loadPlugins() {
   const pluginsDir = join(__dirname, "plugins");
@@ -38,13 +35,11 @@ async function loadPlugins() {
 await loadPlugins();
 
 const app = new Hono<{
-  Variables: { hive: HiveMicrokernel; model: string; selectorModel: string };
+  Variables: { hive: HiveMicrokernel };
 }>();
 
 app.use("*", async (c, next) => {
   c.set("hive", hive);
-  c.set("model", MODEL);
-  c.set("selectorModel", SELECTOR_MODEL);
   await next();
 });
 
@@ -53,13 +48,14 @@ app.use(
   cors({
     origin: "*",
     allowHeaders: ["content-type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/chats", chatsRouter);
 app.route("/api/modes", modesRouter);
+app.route("/api/models", modelsRouter);
 app.route("/api/interactions", interactionsRouter);
 
 // Serves the built frontend directly (packaged desktop app / production).
