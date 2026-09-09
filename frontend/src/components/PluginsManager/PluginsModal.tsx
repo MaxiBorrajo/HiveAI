@@ -23,7 +23,6 @@ export function PluginsModal({
 }: PluginsModalProps) {
   const [selectedPlugins, setSelectedPlugins] = useState<Plugin[]>([]);
 
-  // Reset internal view when modal closes
   function handleOpenChange(open: boolean) {
     if (!open) setSelectedPlugins([]);
     onOpenChange(open);

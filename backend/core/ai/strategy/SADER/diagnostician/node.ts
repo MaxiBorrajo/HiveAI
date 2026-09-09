@@ -44,6 +44,7 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     model: state.model,
     think: true,
     format: z.toJSONSchema(DiagnosticianResponse),
+    ...state.modelOptions,
   });
 
   const response = await diagnosticianModel.invoke([

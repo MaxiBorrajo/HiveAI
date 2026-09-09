@@ -1,11 +1,9 @@
 function extractToolCall(response: AIMessage): { name: string; args: Record<string, unknown> } | null {
-  // caso 1: Ollama parseó correctamente
   if (response.tool_calls?.length) {
     const call = response.tool_calls[0];
     return { name: call.name, args: call.args };
   }
 
-  // caso 2: XML crudo en content
   const content = response.content as string;
   const nameMatch = content.match(/<function name="([^"]+)">/);
   if (!nameMatch) return null;

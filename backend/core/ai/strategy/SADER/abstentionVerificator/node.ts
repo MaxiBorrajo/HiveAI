@@ -32,6 +32,7 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     model: state.model,
     think: true,
     format: z.toJSONSchema(AbstentionVerificatorResponse),
+    ...state.modelOptions,
   });
 
   const response = await verificatorModel.invoke([

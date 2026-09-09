@@ -50,9 +50,6 @@ function validateParameter(
   }
 }
 
-// Validates the parameters of an incoming (user-submitted) mode against a
-// reference mode whose ranges/options already reflect runtime-calculated
-// hints (see calculateRuntimeModes) for the currently active model/machine.
 export function validateModeParameters(
   incoming: ChatMode,
   reference: ChatMode,

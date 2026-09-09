@@ -4,10 +4,6 @@ import { reportError } from "./toastManager";
 
 export const apiClient = axios.create({ baseURL: API_URL });
 
-// Some endpoints (running a plugin test) return success: false as a normal,
-// expected outcome — the caller already renders that failure inline, so the
-// shared toast would be redundant noise. Pass { silenceErrorToast: true } in
-// the request config to opt out.
 declare module "axios" {
   export interface AxiosRequestConfig {
     silenceErrorToast?: boolean;

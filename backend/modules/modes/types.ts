@@ -15,5 +15,5 @@ export interface ChatModeParameter {
     minValue?: number;
     maxValue?: number | null;
     note?: string;
-    requiresReload: boolean;
+    requiresServiceRestart: boolean;
   }

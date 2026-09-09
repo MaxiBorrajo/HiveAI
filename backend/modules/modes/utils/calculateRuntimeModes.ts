@@ -1,25 +1,9 @@
-import { ModelInfo } from "../../models/types.ts";
 import { fetchModelInfo } from "../../models/useCases/getModelInfo/index.ts";
-import { fetchAvailableModels } from "../../models/useCases/getModels/index.ts";
 import { ChatMode } from "../types.ts";
 import si from "npm:systeminformation";
 
-const MLOCK_SAFETY_MARGIN = 1.2; // 20% de RAM libre por encima del tamaño del modelo
+const MLOCK_SAFETY_MARGIN = 1.2;
 const BYTES_PER_MIB = 1024 * 1024;
-const MIN_DRAFT_SIZE_RATIO = 3;
-
-export async function findCompatibleDraftModels(
-  targetModel: ModelInfo,
-): Promise<ModelInfo[]> {
-  const candidates = await fetchAvailableModels({
-    family: targetModel.family,
-    maxParameterCount: targetModel.parameterCount / MIN_DRAFT_SIZE_RATIO,
-    minContextLength: targetModel.contextLength,
-    excludeName: targetModel.name,
-  });
-
-  return candidates;
-}
 
 async function getVRAM(): Promise<number | null> {
   try {
@@ -37,9 +21,6 @@ async function getVRAM(): Promise<number | null> {
   }
 }
 
-// Runtime-calculated hints for parameters whose valid range/options/default
-// depend on the currently loaded model and host machine, and therefore can't
-// live as static values in modes.config.json.
 export async function calculateRuntimeHints(activeModel: string) {
   const modelInfo = await fetchModelInfo(activeModel);
   if (!modelInfo) return null;
@@ -57,13 +38,10 @@ export async function calculateRuntimeHints(activeModel: string) {
 
   const mlockSafe = mem.available > modelInfo.sizeBytes * MLOCK_SAFETY_MARGIN;
 
-  const candidates = await findCompatibleDraftModels(modelInfo);
-
   return {
     maxGpuLayers,
     physicalCores: cpu.physicalCores,
     mlockSafe,
-    compatibleDraftModels: candidates.map((c) => c.name),
   };
 }
 
@@ -76,13 +54,6 @@ function applyRuntimeHints(mode: ChatMode, hints: RuntimeHints) {
   if (mode.name === "default") return;
 
   for (const parameter of mode.parameters ?? []) {
-    if (parameter.name === "spec_deco") {
-      parameter.options = hints.compatibleDraftModels;
-      if (!hints.compatibleDraftModels.includes(parameter.currentValue as string)) {
-        parameter.currentValue = "";
-      }
-    }
-
     if (parameter.name === "n_gpu_layers") {
       parameter.maxValue = hints.maxGpuLayers;
     }

@@ -1,22 +1,7 @@
-// In-memory pending-interaction queue shared between plugins and the HTTP layer
-// (main.ts). Any plugin that needs a human to look at something before it
-// proceeds — approve a shell command, pick among options, fill in a missing
-// value — requests an interaction here and awaits the result; it never talks
-// to the HTTP layer or the frontend directly. main.ts exposes a single set of
-// generic endpoints to list/resolve pending interactions, and the frontend
-// renders whichever UI fits the interaction's `kind`.
-//
-// Today only "approval" is implemented (yes/no on a piece of context), but the
-// queue itself doesn't know or care what kinds exist — adding "choice" or
-// "input" later means adding a new kind + payload shape, not touching this
-// file, main.ts's routing, or the polling mechanism.
-
 export interface ApprovalPayload {
   kind: "approval";
   title: string;
   description: string;
-  // Freeform details shown to the user (e.g. the exact command, a diff, a
-  // file path) — rendered as-is, kind-specific meaning is up to the caller.
   details?: Record<string, string>;
 }
 

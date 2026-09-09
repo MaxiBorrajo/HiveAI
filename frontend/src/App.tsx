@@ -18,17 +18,8 @@ function App() {
     <ToastProvider toastManager={toastManager}>
       <TooltipProvider>
         <ModelsProvider>
-          {showStyleGuide ? <StyleGuide /> : <Chat />}
+          <Chat />
         </ModelsProvider>
-
-        {/* Only for development; remove when the style guide is no longer needed */}
-        <button
-          type="button"
-          onClick={() => setShowStyleGuide((prev) => !prev)}
-          className="fixed bottom-4 right-4 text-xs font-mono text-muted-foreground hover:text-foreground"
-        >
-          {showStyleGuide ? "Show Chat" : "Show Style Guide"}
-        </button>
       </TooltipProvider>
 
       <ToastPortal>

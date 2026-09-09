@@ -66,8 +66,6 @@ export async function harness(
         ),
       );
     } catch (error) {
-      // Una repetición que revienta (modelo caído, stream cortado) no puede
-      // tirar abajo la corrida entera: la salteamos y seguimos.
       console.error(
         `Falló la repetición ${index + 1} de ${query.id}: ${
           error instanceof Error ? error.message : String(error)

@@ -80,9 +80,6 @@ export function Chat() {
           );
         },
         onError: (errorMessage) => {
-          // Errors from the SSE stream never touch axios (the HTTP response
-          // itself is a 200), so the shared interceptor never sees them —
-          // report it here instead, same as any other API failure.
           reportError([errorMessage]);
           throw new Error(errorMessage);
         },
@@ -223,7 +220,6 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: Message })
     );
   }
 
-  // User Message
   return (
     <div className="flex w-full justify-end">
       <div className="max-w-[75%] rounded-2xl bg-card border border-border px-5 py-3 text-sm text-foreground">
@@ -242,11 +238,6 @@ const ChatMessage = memo(function ChatMessage({ message }: { message: Message })
   );
 });
 
-// Defined once, outside the component: react-markdown re-parses the whole
-// content string on every render, and treats a new `components` object
-// identity as a signal to redo more work than necessary. An inline object
-// literal here would be recreated (new identity) on every token during
-// streaming, on top of the unavoidable re-parse.
 const markdownComponents: Components = {
   h1: ({ children }) => (
     <h1 className="mt-3 mb-1.5 text-lg font-semibold">{children}</h1>

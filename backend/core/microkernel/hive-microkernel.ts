@@ -56,6 +56,7 @@ export class HiveMicrokernel {
     model: "",
     selectorModel: "",
     currentMode: "default",
+    ollamaKvCacheType: "",
   });
 
   public static getInstance(): HiveMicrokernel {
@@ -173,8 +174,6 @@ export class HiveMicrokernel {
       counts[t.kind]++;
       const parsed = schema.safeParse(t.params);
 
-      // We expect 'error' tests to potentially fail schema validation.
-      // For 'happy' and 'edge', they must pass the schema.
       if (!parsed.success && t.kind !== "error") {
         issues.push(
           `case "${t.description}" has params that do not pass its own schema`,

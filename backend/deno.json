@@ -9,7 +9,7 @@
     "types": ["npm:@types/node"]
   },
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --allow-write --allow-read --allow-sys=homedir,cpus,systemMemoryInfo --allow-run=bash,cmd,powershell,/bin/sh,nvidia-smi main.ts",
+    "dev": "deno run --watch --allow-net --allow-env --allow-write --allow-read --allow-sys=homedir,cpus,systemMemoryInfo --allow-run=bash,cmd,powershell,/bin/sh,nvidia-smi,pkexec,osascript,launchctl main.ts",
     "experiment": "deno run -A experiments/routing/run.ts"
   },
   "imports": {

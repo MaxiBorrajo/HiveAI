@@ -58,15 +58,10 @@ app.route("/api/modes", modesRouter);
 app.route("/api/models", modelsRouter);
 app.route("/api/interactions", interactionsRouter);
 
-// Serves the built frontend directly (packaged desktop app / production).
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 
 app.get("/", (c) => c.json("Welcome to HiveAI"));
 
-// A random free port avoids clashing with anything already running (or a
-// previous instance that didn't shut down cleanly). Written to
-// frontend/.env.local so the separate Vite dev server (used in local
-// development, alongside this same backend) knows which port to call.
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
 Deno.writeTextFileSync(

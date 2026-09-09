@@ -19,7 +19,6 @@ interface ModelMenuProps {
   onChangeSelectorModel: (name: string) => void;
   onOpenManage: () => void;
   onOpen?: () => void;
-  // See PluginsMenu.forceOpenDownward for why this exists.
   forceOpenDownward?: boolean;
 }
 

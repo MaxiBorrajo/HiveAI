@@ -8,11 +8,6 @@ import type {
 
 const MAX_CONTENT_CHARS = 20_000;
 
-// Native, read-only filesystem inspection (list a folder's contents, read a text
-// file), implemented directly with Deno's fs APIs instead of spawning external
-// processes (ls/dir, cat/type). No shell interpreter is ever involved, so there
-// is no injection surface, and no OS-specific command needs to be picked.
-
 type Operation = "list" | "read";
 
 const schema = z.object({
@@ -36,7 +31,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
   schema = schema;
 
   selectionTests: SelectionTestCase<FileReadSchema>[] = [
-    // 3 Positive
     {
       query: "show me what's inside my Documents folder",
       kind: "positive",
@@ -52,7 +46,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       kind: "positive",
       shouldInvoke: true,
     },
-    // 3 Negative
     {
       query: "create a new file called notes.txt",
       kind: "negative",
@@ -68,7 +61,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       kind: "negative",
       shouldInvoke: false,
     },
-    // 3 Ambiguous
     {
       query: "find a file called invoice.pdf",
       kind: "ambiguous",
@@ -84,7 +76,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
   ];
 
   executionTests: ExecutionTestCase<FileReadSchema>[] = [
-    // 3 Happy
     {
       description: "List the current working directory",
       kind: "happy",
@@ -103,7 +94,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       params: { operation: "list", path: `${Deno.cwd()}/plugins` },
       expect: (output: string) => output.includes("Folders:"),
     },
-    // 3 Edge
     {
       description: "Reading a directory with 'read' fails clearly",
       kind: "edge",
@@ -122,7 +112,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       params: { operation: "read", path: `${Deno.cwd()}/deno.lock` },
       expect: (output: string) => output.length > 0,
     },
-    // 3 Error
     {
       description: "Reading a non-existent file fails clearly",
       kind: "error",
@@ -194,7 +183,6 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
         return `Contents of '${path}':\n${lines.join("\n")}`;
       }
 
-      // operation === "read"
       const stat = await Deno.stat(path);
       if (stat.isDirectory) {
         return `Error: '${path}' is a directory, not a file. Use 'list' to see its contents.`;

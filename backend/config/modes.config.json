@@ -5,22 +5,14 @@
     "description": "Prioritizes inference speed over output fidelity",
     "parameters": [
       {
-        "name": "k_cache_type",
-        "description": "Quantization type for the Key (K) cache in attention layers. Lower bit precision reduces VRAM and memory bandwidth usage at a minor cost to precision.",
+        "name": "kv_cache_type",
+        "description": "Quantization type applied to both the Key and Value attention caches. Lower bit precision reduces VRAM and memory bandwidth usage at a cost to precision. Ollama applies a single quantization to K and V together — it cannot be set independently.",
         "type": "string",
         "defaultValue": "q4_0",
         "currentValue": "q4_0",
         "options": ["q8_0", "q4_0"],
-        "requiresReload": true
-      },
-      {
-        "name": "v_cache_type",
-        "description": "Quantization type for the Value (V) cache in attention layers. Lower bit precision reduces memory footprint during token generation.",
-        "type": "string",
-        "defaultValue": "f16",
-        "currentValue": "f16",
-        "options": ["f16", "q8_0"],
-        "requiresReload": true
+        "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
+        "requiresServiceRestart": true
       },
       {
         "name": "n_ctx",
@@ -30,7 +22,7 @@
         "currentValue": 2048,
         "minValue": 512,
         "maxValue": 4096,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_gpu_layers",
@@ -41,7 +33,7 @@
         "minValue": -1,
         "maxValue": null,
         "note": "maxValue calculated at runtime based on the layers of the loaded model",
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_batch",
@@ -51,7 +43,7 @@
         "currentValue": 1024,
         "minValue": 1,
         "maxValue": 4096,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_threads",
@@ -62,7 +54,7 @@
         "note": "default = physical cores detected at runtime",
         "minValue": 1,
         "maxValue": null,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "mmap",
@@ -70,7 +62,7 @@
         "type": "boolean",
         "defaultValue": false,
         "currentValue": false,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "mlock",
@@ -79,7 +71,7 @@
         "defaultValue": true,
         "currentValue": true,
         "note": "true only if sufficient free RAM is available, validated at runtime",
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "temperature",
@@ -89,7 +81,7 @@
         "currentValue": 0.7,
         "minValue": 0.0,
         "maxValue": 2.0,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "top_k",
@@ -99,7 +91,7 @@
         "currentValue": 40,
         "minValue": 0,
         "maxValue": 100,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "top_p",
@@ -109,7 +101,7 @@
         "currentValue": 0.9,
         "minValue": 0.0,
         "maxValue": 1.0,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "repeat_penalty",
@@ -119,7 +111,7 @@
         "currentValue": 1.1,
         "minValue": 1.0,
         "maxValue": 1.5,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "limit_output",
@@ -128,17 +120,7 @@
         "defaultValue": true,
         "currentValue": true,
         "note": "if true, num_predict is calculated at runtime based on available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS)",
-        "requiresReload": false
-      },
-      {
-        "name": "spec_deco",
-        "description": "Enables speculative decoding using a smaller draft model to accelerate token generation without sacrificing primary model accuracy.",
-        "type": "string",
-        "defaultValue": "",
-        "currentValue": "",
-        "options": [],
-        "note": "options populated at runtime with compatible models (same family/tokenizer as the main model) already downloaded by the user; empty string = disabled",
-        "requiresReload": true
+        "requiresServiceRestart": false
       }
     ]
   },
@@ -148,22 +130,14 @@
     "description": "Prioritizes output fidelity over inference speed",
     "parameters": [
       {
-        "name": "k_cache_type",
-        "description": "Quantization type for the Key (K) cache in attention layers. Lower bit precision reduces VRAM and memory bandwidth usage at a minor cost to precision.",
+        "name": "kv_cache_type",
+        "description": "Quantization type applied to both the Key and Value attention caches. Lower bit precision reduces VRAM and memory bandwidth usage at a cost to precision. Ollama applies a single quantization to K and V together — it cannot be set independently.",
         "type": "string",
         "defaultValue": "f16",
         "currentValue": "f16",
         "options": ["f16", "q8_0"],
-        "requiresReload": true
-      },
-      {
-        "name": "v_cache_type",
-        "description": "Quantization type for the Value (V) cache in attention layers. Lower bit precision reduces memory footprint during token generation.",
-        "type": "string",
-        "defaultValue": "f16",
-        "currentValue": "f16",
-        "options": ["f16"],
-        "requiresReload": true
+        "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
+        "requiresServiceRestart": true
       },
       {
         "name": "n_ctx",
@@ -173,7 +147,7 @@
         "currentValue": 8192,
         "minValue": 4096,
         "maxValue": 131072,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_gpu_layers",
@@ -184,7 +158,7 @@
         "minValue": -1,
         "maxValue": null,
         "note": "maxValue calculated at runtime based on the layers of the loaded model",
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_batch",
@@ -194,7 +168,7 @@
         "currentValue": 256,
         "minValue": 1,
         "maxValue": 4096,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_threads",
@@ -205,7 +179,7 @@
         "note": "default = physical cores detected at runtime",
         "minValue": 1,
         "maxValue": null,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "mmap",
@@ -213,7 +187,7 @@
         "type": "boolean",
         "defaultValue": false,
         "currentValue": false,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "mlock",
@@ -222,7 +196,7 @@
         "defaultValue": true,
         "currentValue": true,
         "note": "true only if sufficient free RAM is available, validated at runtime",
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "temperature",
@@ -232,7 +206,7 @@
         "currentValue": 0.6,
         "minValue": 0.0,
         "maxValue": 2.0,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "top_k",
@@ -242,7 +216,7 @@
         "currentValue": 40,
         "minValue": 0,
         "maxValue": 100,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "top_p",
@@ -252,7 +226,7 @@
         "currentValue": 0.95,
         "minValue": 0.0,
         "maxValue": 1.0,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "repeat_penalty",
@@ -262,7 +236,7 @@
         "currentValue": 1.1,
         "minValue": 1.0,
         "maxValue": 1.5,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "limit_output",
@@ -271,17 +245,7 @@
         "defaultValue": true,
         "currentValue": true,
         "note": "if true, num_predict is calculated at runtime based on available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS)",
-        "requiresReload": false
-      },
-      {
-        "name": "spec_deco",
-        "description": "Enables speculative decoding using a smaller draft model to accelerate token generation without sacrificing primary model accuracy.",
-        "type": "string",
-        "defaultValue": "",
-        "currentValue": "",
-        "options": [],
-        "note": "options populated at runtime with compatible models (same family/tokenizer as the main model) already downloaded by the user; empty string = disabled",
-        "requiresReload": true
+        "requiresServiceRestart": false
       }
     ]
   },
@@ -291,22 +255,14 @@
     "description": "Full manual control over all inference and model parameters",
     "parameters": [
       {
-        "name": "k_cache_type",
-        "description": "Quantization type for the Key (K) cache in attention layers. Lower bit precision reduces VRAM and memory bandwidth usage at a minor cost to precision.",
+        "name": "kv_cache_type",
+        "description": "Quantization type applied to both the Key and Value attention caches. Lower bit precision reduces VRAM and memory bandwidth usage at a cost to precision. Ollama applies a single quantization to K and V together — it cannot be set independently.",
         "type": "string",
         "defaultValue": "q8_0",
         "currentValue": "q8_0",
         "options": ["f16", "q8_0", "q4_0"],
-        "requiresReload": true
-      },
-      {
-        "name": "v_cache_type",
-        "description": "Quantization type for the Value (V) cache in attention layers. Lower bit precision reduces memory footprint during token generation.",
-        "type": "string",
-        "defaultValue": "f16",
-        "currentValue": "f16",
-        "options": ["f16", "q8_0", "q4_0"],
-        "requiresReload": true
+        "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
+        "requiresServiceRestart": true
       },
       {
         "name": "n_ctx",
@@ -316,7 +272,7 @@
         "currentValue": 4096,
         "minValue": 512,
         "maxValue": 131072,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_gpu_layers",
@@ -327,7 +283,7 @@
         "minValue": -1,
         "maxValue": null,
         "note": "maxValue calculated at runtime based on the layers of the loaded model",
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_batch",
@@ -337,7 +293,7 @@
         "currentValue": 512,
         "minValue": 1,
         "maxValue": 4096,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "n_threads",
@@ -348,7 +304,7 @@
         "note": "default = physical cores detected at runtime, manually editable",
         "minValue": 1,
         "maxValue": null,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "mmap",
@@ -356,7 +312,7 @@
         "type": "boolean",
         "defaultValue": true,
         "currentValue": true,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "mlock",
@@ -364,7 +320,7 @@
         "type": "boolean",
         "defaultValue": false,
         "currentValue": false,
-        "requiresReload": true
+        "requiresServiceRestart": false
       },
       {
         "name": "temperature",
@@ -374,7 +330,7 @@
         "currentValue": 0.7,
         "minValue": 0.0,
         "maxValue": 2.0,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "top_k",
@@ -384,7 +340,7 @@
         "currentValue": 40,
         "minValue": 0,
         "maxValue": 100,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "top_p",
@@ -394,7 +350,7 @@
         "currentValue": 0.9,
         "minValue": 0.0,
         "maxValue": 1.0,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "repeat_penalty",
@@ -404,7 +360,7 @@
         "currentValue": 1.1,
         "minValue": 1.0,
         "maxValue": 1.5,
-        "requiresReload": false
+        "requiresServiceRestart": false
       },
       {
         "name": "limit_output",
@@ -413,17 +369,7 @@
         "defaultValue": true,
         "currentValue": true,
         "note": "if true, num_predict is calculated at runtime based on available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS)",
-        "requiresReload": false
-      },
-      {
-        "name": "spec_deco",
-        "description": "Enables speculative decoding using a smaller draft model to accelerate token generation without sacrificing primary model accuracy.",
-        "type": "string",
-        "defaultValue": "",
-        "currentValue": "",
-        "options": [],
-        "note": "options populated at runtime with compatible models (same family/tokenizer as the main model) already downloaded by the user; empty string = disabled",
-        "requiresReload": true
+        "requiresServiceRestart": false
       }
     ]
   },

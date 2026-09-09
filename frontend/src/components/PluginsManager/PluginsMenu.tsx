@@ -15,11 +15,6 @@ interface PluginsMenuProps {
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
   onOpenManage: () => void;
-  // The trigger sits mid-screen in the empty-chat welcome layout, where
-  // Base UI's automatic flip miscalculates and opens the menu upward even
-  // though there's real space below. Force it downward only in that layout;
-  // once there are messages the trigger sits at the bottom of the screen and
-  // needs the normal automatic flip (to open upward) to stay on-screen.
   forceOpenDownward?: boolean;
 }
 

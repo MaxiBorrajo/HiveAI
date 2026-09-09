@@ -10,7 +10,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
-import { Cog, Sparkles, User, Zap } from "lucide-react";
+import { Cog, Sparkles, TriangleAlert, User, Zap } from "lucide-react";
 import type { ChatMode, ChatModeParameter } from "../../types/chat.ts";
 import { getModes } from "../../lib/modes/getModes.ts";
 import { Button } from "../ui/button.tsx";
@@ -69,13 +69,16 @@ export function ModesManager() {
     });
   };
 
+  const [isApplying, setIsApplying] = useState(false);
+
   const changeMode = async (mode: ChatMode) => {
+    setIsApplying(true);
     try {
       await setMode(mode);
       setCurrentMode(mode);
     } catch {
-      // Validation failed (e.g. a parameter is out of range); keep the
-      // previous mode selected instead of applying it optimistically.
+    } finally {
+      setIsApplying(false);
     }
   };
 
@@ -155,10 +158,17 @@ export function ModesManager() {
                         </Button>
                         <Button
                           onClick={() => changeMode(mode)}
-                          title="Apply the selected mode and its parameters"
+                          disabled={isApplying}
+                          title={
+                            mode.parameters?.some(
+                              (p) => p.requiresServiceRestart,
+                            )
+                              ? "Applying may restart the Ollama service if a parameter like kv_cache_type changed — this affects every model, not just this one, and may prompt for your password."
+                              : "Apply the selected mode and its parameters"
+                          }
                           size="sm"
                         >
-                          Apply
+                          {isApplying ? "Applying..." : "Apply"}
                         </Button>
                       </div>
                     </DropdownMenuSubContent>
@@ -200,9 +210,16 @@ export function ParameterOption({
   return (
     <div
       className="flex flex-1 items-center gap-2 p-0.5"
-      title={parameter.description}
+      title={
+        parameter.requiresServiceRestart
+          ? `${parameter.description} Applying a change restarts the Ollama service, affecting every model.`
+          : parameter.description
+      }
     >
       <span className="text-sm font-mono truncate">{parameter.name}</span>
+      {parameter.requiresServiceRestart && (
+        <TriangleAlert className="size-3.5 shrink-0 text-amber-500" />
+      )}
       {parameter.type === "boolean" && (
         <ParameterOptionBoolean
           parameter={parameter}

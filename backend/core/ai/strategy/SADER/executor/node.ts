@@ -5,8 +5,6 @@ import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { captureSteps } from "../../../../microkernel/step-capture.ts";
 import type { HiveAIState, ChatStep } from "../graph.ts";
 
-// Truncates a plugin-reported step label to a single log-friendly line — a
-// misbehaving plugin could otherwise report unbounded text into the step log.
 function summarize(text: string, maxChars = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > maxChars

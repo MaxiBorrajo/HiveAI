@@ -17,15 +17,14 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   state,
 ) => {
   const start = performance.now();
+  const { temperature: _modeTemperature, numPredict: _modeNumPredict, ...resourceOptions } =
+    state.modelOptions;
   const responder = new ChatOllama({
     model: state.model,
     think: false,
     temperature: 0.0,
-    // Caps generation length as a hard safety net: a local/quantized model
-    // can occasionally fall into a repetition loop and never emit a natural
-    // stop token, which would otherwise stream forever with nothing to cut
-    // it off.
     numPredict: 1024,
+    ...resourceOptions,
   });
 
   const isNoToolNeeded =

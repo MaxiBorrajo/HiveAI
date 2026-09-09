@@ -7,12 +7,15 @@ export interface HiveSettings {
   model: string;
   selectorModel: string;
   currentMode: string;
+  ollamaKvCacheType: string;
 }
 
-// Settings persisted across sessions. dataDir/configDir are deliberately
-// excluded: they're boot-time locations always provided fresh by main.ts,
-// and never something to read back from disk.
-const PERSISTED_KEYS = ["model", "selectorModel", "currentMode"] as const;
+const PERSISTED_KEYS = [
+  "model",
+  "selectorModel",
+  "currentMode",
+  "ollamaKvCacheType",
+] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;
 
 const SETTINGS_FILE_NAME = "settings.json";
@@ -29,10 +32,6 @@ export class HiveConfig {
     this.persist();
   }
 
-  // Sets dataDir/configDir without persisting: they're the only settings
-  // that must never themselves be written to (or read from) the settings
-  // file, and are known before load() has a chance to hydrate the rest from
-  // disk.
   setDataDir(dataDir: string): void {
     this.settings.dataDir = dataDir;
   }

@@ -91,9 +91,8 @@ export function PluginTestsView({
 
   const handleToggleAllExpand = () => {
     if (expandedResults.size > 0) {
-      setExpandedResults(new Set()); // Hide all
+      setExpandedResults(new Set());
     } else {
-      // Expand all tests that have results
       const idsWithResults = Object.keys(testResults).filter(
         (id) => !!testResults[id]?.details,
       );
@@ -110,7 +109,7 @@ export function PluginTestsView({
   ).length;
 
   const testsToRunCount = abortedByUser
-    ? testsCompletedCount - 1 // If aborted, consider one test as not completed
+    ? testsCompletedCount - 1
     : selectedTestIds.size;
 
   const progressPercent =
@@ -127,7 +126,6 @@ export function PluginTestsView({
     );
   }, [testsCompletedCount, testsToRunCount, isRunning]);
 
-  // Compute Summary Metrics
   const summary = useMemo(() => {
     if (!isFinished) return null;
     let passed = 0;
@@ -344,7 +342,6 @@ export function PluginTestsView({
         </div>
       </DialogHeader>
 
-      {/* Control Bar & Progress */}
       <div className="flex flex-col border-b border-border bg-muted/20">
         <div className="flex items-center justify-between px-6 pb-3">
           <div className="flex items-center gap-6">
@@ -398,7 +395,6 @@ export function PluginTestsView({
           </Button>
         </div>
 
-        {/* Progress Bar */}
         {(isRunning || (testsCompletedCount > 0 && !isFinished)) && (
           <div className="flex items-center gap-3 px-6 py-2 bg-muted/10 border-t border-border text-xs font-medium">
             <div className="flex-1 h-2 bg-muted overflow-hidden rounded-full border border-border">
@@ -416,7 +412,6 @@ export function PluginTestsView({
 
       <ScrollArea className="flex-1 p-6 pt-4 bg-muted/10">
         <div className="flex flex-col gap-4">
-          {/* Summary Dashboard */}
           {summary && (
             <div className="mb-4 bg-card rounded-xl border border-border shadow-sm p-5 animate-in fade-in slide-in-from-top-4">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">

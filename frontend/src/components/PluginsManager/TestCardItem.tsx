@@ -92,7 +92,6 @@ export function TestCardItem({
                 {test.kind}
               </span>
 
-              {/* Performance Metrics */}
               <div className="flex items-center gap-2 ml-auto">
                 {res?.metrics?.inputTokens !== undefined &&
                   res?.metrics?.outputTokens !== undefined && (
@@ -136,7 +135,6 @@ export function TestCardItem({
               {test.label}
             </p>
 
-            {/* Failure Category Badge */}
             {res?.failureCategory && (
               <div className="mt-2 mb-1">
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-[0.625rem] font-bold uppercase tracking-wider rounded-md border border-red-200">
@@ -187,13 +185,12 @@ export function TestCardItem({
               </div>
             )}
 
-            {/* View Results Toggle Button */}
             {hasResults && (
               <div className="mt-4 pt-4 border-t border-border flex justify-center">
                 <button
                   type="button"
                   onClick={(e) => {
-                    e.preventDefault(); // prevent triggering the label checkbox
+                    e.preventDefault();
                     e.stopPropagation();
                     onToggleExpand(id);
                   }}
@@ -226,7 +223,6 @@ export function TestCardItem({
         </div>
       </label>
 
-      {/* Actual Results Accordion Panel */}
       {hasResults && isExpanded && res?.details && (
         <div
           title="The actual results returned during the test"

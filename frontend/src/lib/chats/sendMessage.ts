@@ -9,10 +9,6 @@ export interface StreamHandlers {
   onError: (message: string) => void;
 }
 
-// Parses the backend's SSE stream (event: <name>\ndata: <json>\n\n blocks) as
-// it arrives, instead of waiting for response.json(). fetch's ReadableStream
-// gives us raw bytes in arbitrary chunk boundaries, so events are buffered
-// until a full "\n\n"-terminated block is available.
 export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
