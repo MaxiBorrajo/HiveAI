@@ -1,9 +1,22 @@
+import { useRef } from "react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Ellipsis, TestTube, ToggleLeft, ToggleRight } from "lucide-react";
+import {
+  Ellipsis,
+  TestTube,
+  ToggleLeft,
+  ToggleRight,
+  Upload,
+  Trash2,
+  Download,
+  Pencil,
+  Loader2,
+} from "lucide-react";
 import type { Plugin } from "@/types/plugin";
+import { DraftListView } from "./DraftListView";
+import { exportPlugin } from "@/lib/plugins/exportPlugin";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +31,11 @@ interface PluginListViewProps {
   onToggleAll: (nextActive: boolean) => void;
   onSelectPlugins: (plugins: Plugin[]) => void;
   hasModel?: boolean;
+  onImportPlugin: (files: FileList) => void;
+  onRemovePlugin: (plugin: Plugin) => void;
+  onEditPlugin: (plugin: Plugin) => void;
+  isImporting: boolean;
+  onOpenDraft: (name: string) => void;
 }
 
 export function PluginListView({
@@ -26,60 +44,104 @@ export function PluginListView({
   onToggleAll,
   onSelectPlugins,
   hasModel = true,
+  onImportPlugin,
+  onRemovePlugin,
+  onEditPlugin,
+  isImporting,
+  onOpenDraft,
 }: PluginListViewProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const allActive = plugins.length > 0 && plugins.every((p) => p.active);
+
+  async function handleExport(plugin: Plugin) {
+    await exportPlugin(plugin.name);
+  }
+
+  function handleFilesChosen(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      onImportPlugin(files);
+    }
+    // Reset so picking the same folder again still fires a change event.
+    event.target.value = "";
+  }
 
   return (
     <>
-      <DialogHeader className="p-6 pb-0 flex flex-row items-center">
-        <DialogTitle>Manage Plugins</DialogTitle>
-        <DropdownMenu>
-          <DropdownMenuTrigger className="" title="Options">
-            <Ellipsis className="size-5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            side="bottom"
-            sideOffset={8}
-            className="w-56"
-          >
-            <DropdownMenuItem
-              key="Toggle all plugins"
-              closeOnClick={false}
-              onClick={() => onToggleAll(!allActive)}
-              disabled={plugins.length === 0}
+      <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DialogTitle>Manage Plugins</DialogTitle>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="" title="Options">
+              <Ellipsis className="size-5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              side="bottom"
+              sideOffset={8}
+              className="w-56"
             >
-              <div className="flex items-center gap-2">
-                {allActive ? (
-                  <ToggleRight size={12} />
-                ) : (
-                  <ToggleLeft size={12} />
-                )}
+              <DropdownMenuItem
+                key="Toggle all plugins"
+                closeOnClick={false}
+                onClick={() => onToggleAll(!allActive)}
+                disabled={plugins.length === 0}
+              >
+                <div className="flex items-center gap-2">
+                  {allActive ? (
+                    <ToggleRight size={12} />
+                  ) : (
+                    <ToggleLeft size={12} />
+                  )}
 
-                <span className="text-sm font-mono truncate">
-                  Toggle all plugins
-                </span>
-              </div>
-            </DropdownMenuItem>
+                  <span className="text-sm font-mono truncate">
+                    Toggle all plugins
+                  </span>
+                </div>
+              </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              key="Run all tests"
-              onClick={() => onSelectPlugins(plugins)}
-              disabled={!hasModel}
-              title={
-                hasModel ? undefined : "Select a model before running tests"
-              }
-            >
-              <div className="flex items-center gap-2">
-                <TestTube size={12} />
-                <span className="text-sm font-mono truncate">
-                  Run all tests
-                </span>
-              </div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                key="Run all tests"
+                onClick={() => onSelectPlugins(plugins)}
+                disabled={!hasModel}
+                title={
+                  hasModel ? undefined : "Select a model before running tests"
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <TestTube size={12} />
+                  <span className="text-sm font-mono truncate">
+                    Run all tests
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          className="gap-1.5"
+          disabled={isImporting}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {isImporting ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Upload size={14} />
+          )}
+          {isImporting ? "Importing..." : "Import Plugin"}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={handleFilesChosen}
+          {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+        />
       </DialogHeader>
 
       <ScrollArea className="flex-1 p-6 pt-2">
@@ -104,35 +166,78 @@ export function PluginListView({
                       className="mt-0.5"
                     />{" "}
                     {plugin.name}
+                    {plugin.isExternal && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                        imported
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {plugin.description}
                   </p>
                 </div>
 
-                {((plugin.selectionTests && plugin.selectionTests.length > 0) ||
-                  (plugin.executionTests &&
-                    plugin.executionTests.length > 0)) && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onSelectPlugins([plugin])}
-                    disabled={!hasModel}
-                    title={
-                      hasModel
-                        ? undefined
-                        : "Select a model before running tests"
-                    }
-                    className="shrink-0 h-8 gap-1 px-3"
-                  >
-                    <TestTube size={12} />
-                    <span>Tests</span>
-                  </Button>
-                )}
+                <div className="flex shrink-0 gap-2">
+                  {((plugin.selectionTests && plugin.selectionTests.length > 0) ||
+                    (plugin.executionTests &&
+                      plugin.executionTests.length > 0)) && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onSelectPlugins([plugin])}
+                      disabled={!hasModel}
+                      title={
+                        hasModel
+                          ? undefined
+                          : "Select a model before running tests"
+                      }
+                      className="h-8 gap-1 px-3"
+                    >
+                      <TestTube size={12} />
+                      <span>Tests</span>
+                    </Button>
+                  )}
+                  {plugin.isExternal && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEditPlugin(plugin)}
+                      className="h-8 gap-1 px-3"
+                      title="Edit"
+                    >
+                      <Pencil size={12} />
+                    </Button>
+                  )}
+                  {plugin.isExternal && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExport(plugin)}
+                      className="h-8 gap-1 px-3"
+                      title="Export as .zip"
+                    >
+                      <Download size={12} />
+                    </Button>
+                  )}
+                  {plugin.isExternal && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onRemovePlugin(plugin)}
+                      className="h-8 gap-1 px-3 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
+
+        <div className="my-4 border-t border-border" />
+
+        <DraftListView onOpenDraft={onOpenDraft} />
       </ScrollArea>
     </>
   );

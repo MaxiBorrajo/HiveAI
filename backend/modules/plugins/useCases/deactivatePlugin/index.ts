@@ -1,19 +1,16 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 
-export function deactivatePlugin(
-  hive: HiveMicrokernel,
-  pluginName: string,
-): boolean {
+export function deactivatePlugin(hive: HiveMicrokernel, pluginName: string): Promise<boolean> {
   return hive.deactivate(pluginName);
 }
 
-export function handleDeactivatePlugin(
+export async function handleDeactivatePlugin(
   hive: HiveMicrokernel,
   pluginName: string,
   headers: Record<string, string>,
-): Response {
-  const ok = deactivatePlugin(hive, pluginName);
+): Promise<Response> {
+  const ok = await deactivatePlugin(hive, pluginName);
   if (ok) {
     return ResponseBuilder.success(undefined, { headers });
   } else {

@@ -28,7 +28,7 @@ export async function handleTest(
 
   const wasActive = hive.isActive(pluginName);
 
-  if (!wasActive) hive.activate(pluginName);
+  if (!wasActive) await hive.activate(pluginName);
 
   const plugin = hive.getPlugin(pluginName);
 
