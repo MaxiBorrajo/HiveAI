@@ -40,12 +40,22 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
   console.log(`\n[SADER - Diagnostician] Starting diagnosis for plugin "${state.selectedTool}"`);
   console.log(`[SADER - Diagnostician] Plugin output to diagnose:`, state.toolResult.output);
 
-  const diagnosticianModel = new ChatOllama({
+  console.log(
+    `[SADER - Diagnostician] state.modelOptions:`,
+    state.modelOptions,
+  );
+  const diagnosticianOptions = {
     model: state.model,
     think: true,
     format: z.toJSONSchema(DiagnosticianResponse),
     ...state.modelOptions,
-  });
+  };
+  const diagnosticianModel = new ChatOllama(diagnosticianOptions);
+
+  console.log(
+    `[SADER - Diagnostician] Effective Ollama options:`,
+    diagnosticianOptions,
+  );
 
   const response = await diagnosticianModel.invoke([
     new SystemMessage(DIAGNOSTICIAN_SYSTEM_PROMPT),
