@@ -10,7 +10,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
-import { Cog, Info, Sparkles, TriangleAlert, User, Zap } from "lucide-react";
+import { BookOpen, Cog, Feather, Info, TriangleAlert, User } from "lucide-react";
 import type { ChatMode, ChatModeParameter } from "../../types/chat.ts";
 import { getModes } from "../../lib/modes/getModes.ts";
 import { Button } from "../ui/button.tsx";
@@ -20,10 +20,10 @@ import { setMode } from "../../lib/modes/setMode.ts";
 import { useModels } from "@/context/ModelsContext";
 
 const iconForMode = (name: string) =>
-  name === "fast" ? (
-    <Zap className="size-4" />
-  ) : name === "quality" ? (
-    <Sparkles className="size-4" />
+  name === "light" ? (
+    <Feather className="size-4" />
+  ) : name === "full" ? (
+    <BookOpen className="size-4" />
   ) : name === "custom" ? (
     <Cog className="size-4" />
   ) : (

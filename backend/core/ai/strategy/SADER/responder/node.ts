@@ -17,6 +17,7 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   state,
 ) => {
   const start = performance.now();
+  console.log(`[SADER - Responder] state.modelOptions:`, state.modelOptions);
   const responderOptions = {
     model: state.model,
     think: false,
