@@ -1,4 +1,3 @@
-import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 import {
@@ -7,8 +6,48 @@ import {
   type ChatStep,
 } from "../../../../core/ai/strategy/SADER/graph.ts";
 import { resolveModelOptions } from "../../../modes/utils/resolveModelOptions.ts";
+import { createChat, getChat, touchChat } from "../../../../core/memory/chatStore.ts";
+import { addMessage } from "../../../../core/memory/messageStore.ts";
+import { embedText, ensureEmbeddingModelReady } from "../../../../core/memory/embeddings.ts";
+import { buildTurnContext } from "../../../../core/memory/contextBuilder.ts";
 
-let chatHistory: BaseMessage[] = [];
+function deriveTitle(message: string): string {
+  const trimmed = message.trim();
+  return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
+}
+
+function persistUserMessageInBackground(
+  dataDir: string,
+  chatId: string,
+  userText: string,
+): void {
+  embedText(userText)
+    .then((vector) => addMessage(dataDir, chatId, "user", userText, vector))
+    .then(() => touchChat(dataDir, chatId))
+    .catch((error) => {
+      console.error("Failed to persist user message:", error);
+    });
+}
+
+function persistAgentMessageInBackground(
+  dataDir: string,
+  chatId: string,
+  fullContent: string,
+  usedTools: string[],
+  steps: ChatStep[],
+): void {
+  embedText(fullContent)
+    .then((vector) =>
+      addMessage(dataDir, chatId, "agent", fullContent, vector, {
+        usedTools,
+        steps,
+      }),
+    )
+    .then(() => touchChat(dataDir, chatId))
+    .catch((error) => {
+      console.error("Failed to persist agent message:", error);
+    });
+}
 
 export function handleChat(
   hive: HiveMicrokernel,
@@ -35,7 +74,23 @@ export function handleChat(
 
       try {
         const body = await req.json();
-        const userText = body.message;
+        const userText: string = body.message;
+        const dataDir = hive.getConfig().get("dataDir");
+
+        await ensureEmbeddingModelReady();
+
+        let chatId: string = body.chatId;
+        if (!chatId) {
+          const chat = await createChat(dataDir, deriveTitle(userText));
+          chatId = chat.id;
+          send("chat_created", { chatId });
+        } else {
+          const existingChat = await getChat(dataDir, chatId);
+          if (!existingChat) {
+            send("error", { message: `Chat '${chatId}' was not found.` });
+            return;
+          }
+        }
 
         console.log(
           `/chat received. Active bees right now: [${hive
@@ -45,7 +100,7 @@ export function handleChat(
             .join(", ")}]`,
         );
 
-        chatHistory.push(new HumanMessage(userText));
+        persistUserMessageInBackground(dataDir, chatId, userText);
 
         send("thinking", {});
 
@@ -53,12 +108,15 @@ export function handleChat(
           hive.getConfig().get("currentMode"),
         );
 
+        const contextMessages = await buildTurnContext(dataDir, chatId, userText);
+
         let fullContent = "";
         const steps: ChatStep[] = [];
 
         for await (const chunk of await HiveMind.stream(
           {
-            messages: chatHistory,
+            messages: contextMessages,
+            chatId,
             model,
             selectorModel,
             currentPrompt: userText,
@@ -100,8 +158,6 @@ export function handleChat(
           steps.push(...payload.steps);
         }
 
-        chatHistory.push(new AIMessage(fullContent));
-
         const usedTools = Array.from(
           new Set(
             steps
@@ -109,6 +165,8 @@ export function handleChat(
               .map((step) => step.label),
           ),
         );
+
+        persistAgentMessageInBackground(dataDir, chatId, fullContent, usedTools, steps);
 
         send("done", { content: fullContent, usedTools, steps });
       } catch (error) {

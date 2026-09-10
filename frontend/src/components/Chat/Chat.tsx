@@ -3,13 +3,16 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
 import { sendMessage } from "../../lib/chats/sendMessage.ts";
+import { getChatMessages } from "../../lib/chats/getChatMessages.ts";
 import { reportError } from "../../lib/toastManager.ts";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
 import { InteractionDialog } from "./InteractionDialog.tsx";
+import { useChats } from "../../context/ChatsContext.tsx";
 
 export function Chat() {
+  const { activeChatId, onChatCreated, refreshChats } = useChats();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
@@ -19,6 +22,27 @@ export function Chat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking, thinkingText]);
+
+  useEffect(() => {
+    if (!activeChatId) {
+      setMessages([]);
+      return;
+    }
+
+    getChatMessages(activeChatId).then(({ data }) => {
+      if (!data) return;
+      setMessages(
+        data.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+          usedTools: m.metadata?.usedTools,
+          steps: m.metadata?.steps,
+        })),
+      );
+    });
+  }, [activeChatId]);
 
   async function handleSend() {
     const content = input.trim();
@@ -40,7 +64,10 @@ export function Chat() {
     let streamStarted = false;
 
     try {
-      await sendMessage(content, {
+      await sendMessage(activeChatId, content, {
+        onChatCreated: (chatId) => {
+          onChatCreated(chatId);
+        },
         onThinking: () => {},
         onThinkingDelta: (delta) => {
           setThinkingText((prev) => prev + delta);
@@ -78,6 +105,7 @@ export function Chat() {
                 : message,
             ),
           );
+          refreshChats();
         },
         onError: (errorMessage) => {
           reportError([errorMessage]);
@@ -110,7 +138,7 @@ export function Chat() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
+    <div className="flex flex-1 min-w-0 h-screen bg-background text-foreground font-sans overflow-hidden">
       <div className="flex flex-1 flex-col min-w-0 min-h-0 relative w-full">
         {isEmpty ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6">

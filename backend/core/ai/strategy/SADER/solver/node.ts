@@ -5,6 +5,7 @@ import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { HiveAIState, type ChatStep } from "../graph.ts";
 import { buildSolverSystemPrompt } from "./prompt.ts";
 import { MAX_ATTEMPTS } from "../constants.ts";
+import { buildNativeTools, getNativeTool } from "../nativeTools.ts";
 
 export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
   const start = performance.now();
@@ -36,8 +37,10 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
     );
   }
 
+  const nativeTools = buildNativeTools(state.chatId);
+
   const response = await selectorModel
-    .bindTools(microkernel.getTools())
+    .bindTools([...microkernel.getTools(), ...nativeTools])
     .invoke([
       new SystemMessage(buildSolverSystemPrompt()),
       ...state.messages,
@@ -71,6 +74,24 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
   }
 
   const call = response.tool_calls[0];
+
+  if (getNativeTool(call.name, state.chatId)) {
+    return {
+      selectedTool: call.name,
+      args: { params: call.args as Record<string, unknown> },
+      correction: null,
+      messages: [response],
+      steps: [
+        {
+          node: "Solver" as const,
+          label: "Choosing tool",
+          durationMs,
+          summary: `Decided: ${call.name}`,
+        } satisfies ChatStep,
+      ],
+    };
+  }
+
   const selectedPlugin = microkernel.getPlugin(call.name);
 
   if (!selectedPlugin) {

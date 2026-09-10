@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 
 export interface ChatStep {
-  node: "Selector" | "Executor" | "HiveQueen" | "Plugin";
+  node: "Solver" | "AbstentionVerificator" | "Executor" | "Diagnostician" | "HiveQueenResponder" | "Plugin";
   label: string;
   durationMs: number;
   summary: string;
@@ -15,6 +15,23 @@ export interface Message {
   timestamp: number;
   usedTools?: string[];
   steps?: ChatStep[];
+}
+
+export interface ChatSummary {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+}
+
+export interface StoredMessage {
+  id: string;
+  chatId: string;
+  role: "user" | "agent";
+  content: string;
+  timestamp: number;
+  metadata: { usedTools: string[]; steps: ChatStep[] } | null;
 }
 
 export interface ChatMode {

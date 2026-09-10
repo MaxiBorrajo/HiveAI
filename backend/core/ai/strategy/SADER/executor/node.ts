@@ -4,6 +4,7 @@ import type { GraphNode } from "@langchain/langgraph/web";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { captureSteps } from "../../../../microkernel/step-capture.ts";
 import type { HiveAIState, ChatStep } from "../graph.ts";
+import { getNativeTool } from "../nativeTools.ts";
 
 function summarize(text: string, maxChars = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -42,7 +43,7 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
     };
   }
 
-  const tool = microkernel.getTool(toolCall.name);
+  const tool = getNativeTool(toolCall.name, state.chatId) ?? microkernel.getTool(toolCall.name);
 
   if (!tool) {
     return {

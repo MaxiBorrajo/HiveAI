@@ -2,6 +2,7 @@ import { apiClient } from "../apiClient";
 import type { ChatStep } from "@/types/chat";
 
 export interface StreamHandlers {
+  onChatCreated: (chatId: string) => void;
   onThinking: () => void;
   onThinkingDelta: (content: string) => void;
   onToken: (content: string) => void;
@@ -10,12 +11,13 @@ export interface StreamHandlers {
 }
 
 export async function sendMessage(
+  chatId: string | null,
   content: string,
   handlers: StreamHandlers,
 ): Promise<void> {
   const response = await apiClient.post(
     "/api/chats",
-    { message: content },
+    { chatId: chatId ?? undefined, message: content },
     {
       responseType: "stream",
       adapter: "fetch",
@@ -48,7 +50,9 @@ export async function sendMessage(
       const eventName = eventMatch[1];
       const payload = JSON.parse(dataMatch[1]);
 
-      if (eventName === "thinking") {
+      if (eventName === "chat_created") {
+        handlers.onChatCreated(payload.chatId);
+      } else if (eventName === "thinking") {
         handlers.onThinking();
       } else if (eventName === "thinking_delta") {
         handlers.onThinkingDelta(payload.content);
