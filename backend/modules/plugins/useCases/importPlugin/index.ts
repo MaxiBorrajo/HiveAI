@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ExternalPluginProcessError } from "../../../../core/microkernel/external-plugins/external-plugin-host.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 const REQUIRED_FILES = ["index.ts", "bee-plugin.ts"];
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5MB — a plugin is source code, not a payload for binary assets.
@@ -22,8 +23,9 @@ export async function handleImportPlugin(
   try {
     form = await req.formData();
   } catch {
-    return Response.json(
-      { error: "Invalid request: expected multipart/form-data." },
+    return ResponseBuilder.error(
+      ["Invalid request: expected multipart/form-data."],
+      undefined,
       { status: 400, headers },
     );
   }
@@ -33,8 +35,9 @@ export async function handleImportPlugin(
   );
 
   if (entries.length === 0) {
-    return Response.json(
-      { error: "No files were uploaded." },
+    return ResponseBuilder.error(
+      ["No files were uploaded."],
+      undefined,
       { status: 400, headers },
     );
   }
@@ -42,8 +45,9 @@ export async function handleImportPlugin(
   let totalBytes = 0;
   for (const [, file] of entries) totalBytes += file.size;
   if (totalBytes > MAX_TOTAL_BYTES) {
-    return Response.json(
-      { error: `Upload too large: ${(totalBytes / 1024 / 1024).toFixed(1)}MB exceeds the ${MAX_TOTAL_BYTES / 1024 / 1024}MB limit.` },
+    return ResponseBuilder.error(
+      [`Upload too large: ${(totalBytes / 1024 / 1024).toFixed(1)}MB exceeds the ${MAX_TOTAL_BYTES / 1024 / 1024}MB limit.`],
+      undefined,
       { status: 413, headers },
     );
   }
@@ -73,27 +77,30 @@ export async function handleImportPlugin(
 
     const missing = REQUIRED_FILES.filter((f) => !presentFiles.has(f));
     if (missing.length > 0) {
-      return Response.json(
-        { error: `Missing required file(s): ${missing.join(", ")}.` },
+      return ResponseBuilder.error(
+        [`Missing required file(s): ${missing.join(", ")}.`],
+        undefined,
         { status: 400, headers },
       );
     }
 
     const plugin = await hive.importExternalPlugin(tempDir);
-    return Response.json(
+    return ResponseBuilder.success(
       { name: plugin.name, description: plugin.description },
       { headers },
     );
   } catch (error) {
     if (error instanceof ExternalPluginProcessError) {
-      return Response.json(
-        { error: `Could not start the plugin: ${error.message}` },
+      return ResponseBuilder.error(
+        [`Could not start the plugin: ${error.message}`],
+        undefined,
         { status: 502, headers },
       );
     }
     const detail = error instanceof Error ? error.message : String(error);
-    return Response.json(
-      { error: `Could not import the plugin: ${detail}` },
+    return ResponseBuilder.error(
+      [`Could not import the plugin: ${detail}`],
+      undefined,
       { status: 400, headers },
     );
   } finally {

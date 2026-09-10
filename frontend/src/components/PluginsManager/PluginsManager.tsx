@@ -49,11 +49,15 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   async function handleImportPlugin(files: FileList) {
     setIsImporting(true);
     try {
-      const { data, success } = await importPlugin(files);
+      const { data, success, errors } = await importPlugin(files);
+      console.log("[PluginsManager] importPlugin response:", { success, data, errors });
       if (success && data) {
         await refreshPlugins();
         toastManager.add({ type: "success", title: `'${data.name}' imported successfully.` });
       }
+      // On failure the apiClient interceptor already shows an error toast.
+    } catch (error) {
+      console.error("[PluginsManager] importPlugin threw:", error);
     } finally {
       setIsImporting(false);
     }

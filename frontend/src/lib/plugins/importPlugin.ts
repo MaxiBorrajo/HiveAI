@@ -19,5 +19,6 @@ export async function importPlugin(files: FileList): Promise<ResponseEntity<Impo
   }
 
   const response = await apiClient.post("/api/plugins/import", form);
+  console.log("[importPlugin] raw response:", response.status, response.data);
   return response.data;
 }
