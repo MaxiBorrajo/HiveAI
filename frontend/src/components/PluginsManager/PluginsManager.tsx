@@ -64,21 +64,25 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   }
 
   async function handleRemovePlugin(plugin: Plugin) {
-    const { success } = await removePlugin(plugin.name);
+    const { success, errors } = await removePlugin(plugin.name);
+    console.log("[PluginsManager] removePlugin response:", { success, errors });
     if (success) {
       await refreshPlugins();
       toastManager.add({ type: "success", title: `'${plugin.name}' removed.` });
     }
+    // On failure the apiClient interceptor already shows an error toast.
   }
 
   async function handleEditPlugin(plugin: Plugin) {
-    const { success } = await editPlugin(plugin.name);
+    const { success, data, errors } = await editPlugin(plugin.name);
+    console.log("[PluginsManager] editPlugin response:", { success, data, errors });
     if (success) {
       await refreshPlugins();
       setIsModalOpen(false);
       openDraft(plugin.name);
       toastManager.add({ type: "success", title: `'${plugin.name}' moved to drafts for editing.` });
     }
+    // On failure the apiClient interceptor already shows an error toast.
   }
 
   async function toggleAllPlugins(nextActive: boolean) {

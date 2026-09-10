@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { rename } from "node:fs/promises";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { getDraftsDir, getDraftRepository } from "../../../drafts/draft-context.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 // Turns an already-imported external plugin back into an editable draft:
 // deactivates it (killing its subprocess if running), drops it from the
@@ -17,15 +18,20 @@ export async function handleEditPlugin(
   headers: Record<string, string>,
 ): Promise<Response> {
   if (!hive.isExternalPlugin(name)) {
-    return Response.json(
-      { error: `'${name}' is not an imported (external) plugin, or is not registered.` },
+    return ResponseBuilder.error(
+      [`'${name}' is not an imported (external) plugin, or is not registered.`],
+      undefined,
       { status: 404, headers },
     );
   }
 
   const sourceDir = await hive.detachExternalPluginForEdit(name);
   if (!sourceDir) {
-    return Response.json({ error: `Could not detach plugin '${name}'.` }, { status: 404, headers });
+    return ResponseBuilder.error(
+      [`Could not detach plugin '${name}'.`],
+      undefined,
+      { status: 404, headers },
+    );
   }
 
   const draftDir = join(getDraftsDir(hive), name);
@@ -34,5 +40,5 @@ export async function handleEditPlugin(
   const now = new Date().toISOString();
   await getDraftRepository(hive).save({ name, dir: draftDir, createdAt: now, updatedAt: now });
 
-  return Response.json({ name, dir: draftDir }, { headers });
+  return ResponseBuilder.success({ name, dir: draftDir }, { headers });
 }

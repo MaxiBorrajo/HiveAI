@@ -192,7 +192,7 @@
         "description": "Enables memory-mapping to load the model file directly from disk, reducing startup time and allowing the OS to page weights dynamically.",
         "type": "boolean",
         "defaultValue": false,
-        "currentValue": false,
+        "currentValue": true,
         "requiresServiceRestart": false
       },
       {
