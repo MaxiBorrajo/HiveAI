@@ -498,11 +498,23 @@ export class HiveMicrokernel {
     // Import turns the plugin on immediately (the user just picked it), so
     // launch it in the shared plugin host now rather than leaving it as a
     // placeholder.
-    const handle = await launchExternalPlugin(record.name, record.dir, callbackBaseUrl);
-    this.externalPluginNames.add(handle.plugin.name);
-    this.externalPluginHandles.set(handle.plugin.name, handle);
-    await this.register(handle.plugin);
-    return handle.plugin;
+    try {
+      const handle = await launchExternalPlugin(record.name, record.dir, callbackBaseUrl);
+      this.externalPluginNames.add(handle.plugin.name);
+      this.externalPluginHandles.set(handle.plugin.name, handle);
+      await this.register(handle.plugin);
+      return handle.plugin;
+    } catch (error) {
+      // register() (test suite quality, etc.) can still fail after the copy
+      // above already landed on disk and in the manifest — without this,
+      // a rejected import leaves an orphaned, unregistered copy behind that
+      // never shows up in the plugin list but blocks a clean re-import.
+      this.externalPluginRecords.delete(record.name);
+      this.externalPluginNames.delete(record.name);
+      this.externalPluginHandles.delete(record.name);
+      await this.externalPluginRegistry.remove(record.name);
+      throw error;
+    }
   }
 
   // Called once at startup (after configure() has set the real dataDir and

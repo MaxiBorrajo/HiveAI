@@ -28,10 +28,12 @@
     "npm:jsdom@25": "25.0.1",
     "npm:nanoid@5": "5.1.16",
     "npm:ollama@~0.6.3": "0.6.3",
+    "npm:postgres@3": "3.4.9",
     "npm:systeminformation@*": "5.33.9",
     "npm:systeminformation@^5.33.9": "5.33.9",
     "npm:turndown@7.2": "7.2.4",
     "npm:zod-to-json-schema@^3.25.2": "3.25.2_zod@4.4.3",
+    "npm:zod@4": "4.4.3",
     "npm:zod@^4.4.3": "4.4.3"
   },
   "jsr": {
@@ -503,6 +505,9 @@
       "dependencies": [
         "entities"
       ]
+    },
+    "postgres@3.4.9": {
+      "integrity": "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="
     },
     "punycode@2.3.1": {
       "integrity": "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg=="
