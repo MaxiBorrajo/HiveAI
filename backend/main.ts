@@ -58,7 +58,7 @@ app.get("/", (c) => c.json("Welcome to HiveAI"));
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
 Deno.writeTextFileSync(
-  join(__dirname, "../frontend/.env.local"),
+  join(__dirname, "../frontend/.env"),
   `VITE_API_URL=http://localhost:${port}`,
 );
 console.log(`\n🚀 Backend is running on http://localhost:${port}`);

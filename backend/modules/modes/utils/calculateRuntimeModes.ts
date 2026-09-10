@@ -57,9 +57,9 @@ export type RuntimeHints = Exclude<
 function applyRuntimeHints(mode: ChatMode, hints: RuntimeHints) {
   if (mode.name === "default") return;
 
-  if (mode.name === "fast" && hints.modelFitsComfortably) {
+  if (mode.name === "light" && hints.modelFitsComfortably) {
     mode.performanceNote =
-      "This model already fits comfortably in your available VRAM — Fast's smaller context/cache may not run noticeably quicker than Quality with it, and Quality could even respond faster in practice. Try both and compare.";
+      "This model already fits comfortably in your available VRAM, so Light's smaller context window mainly trades away context length, not speed — generation speed is usually about the same as Full. Use Light only if you want to save memory or expect short conversations.";
   }
 
   for (const parameter of mode.parameters ?? []) {
@@ -76,6 +76,11 @@ function applyRuntimeHints(mode: ChatMode, hints: RuntimeHints) {
     if (parameter.name === "mlock") {
       parameter.defaultValue = hints.mlockSafe;
       parameter.currentValue = hints.mlockSafe;
+    }
+
+    if (parameter.name === "mmap") {
+      parameter.defaultValue = !hints.mlockSafe;
+      parameter.currentValue = !hints.mlockSafe;
     }
   }
 }

@@ -26,6 +26,12 @@ function toNumber(value: ChatModeParameter["currentValue"]): number | undefined 
   return typeof value === "number" ? value : undefined;
 }
 
+function resolveNumGpu(value: ChatModeParameter["currentValue"]): number | undefined {
+  const numGpu = toNumber(value);
+  if (numGpu === -1) return undefined;
+  return numGpu;
+}
+
 function toBoolean(value: ChatModeParameter["currentValue"]): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
@@ -37,7 +43,7 @@ export function mapModeToOllamaOptions(
 
   const options: OllamaModelOptions = {
     numCtx: toNumber(byName.get("n_ctx")),
-    numGpu: toNumber(byName.get("n_gpu_layers")),
+    numGpu: resolveNumGpu(byName.get("n_gpu_layers")),
     numThread: toNumber(byName.get("n_threads")),
     numBatch: toNumber(byName.get("n_batch")),
     useMmap: toBoolean(byName.get("mmap")),
@@ -48,7 +54,7 @@ export function mapModeToOllamaOptions(
     repeatPenalty: toNumber(byName.get("repeat_penalty")),
     numPredict: resolveNumPredict(parameters),
   };
-  
+
   for (const key of Object.keys(options)) {
     if (options[key] === undefined) delete options[key];
   }

@@ -28,12 +28,22 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     .map((c) => `- ${c.name}: ${c.description}`)
     .join("\n");
 
-  const verificatorModel = new ChatOllama({
+  console.log(
+    `[SADER - AbstentionVerificator] state.modelOptions:`,
+    state.modelOptions,
+  );
+  const verificatorOptions = {
     model: state.model,
     think: true,
     format: z.toJSONSchema(AbstentionVerificatorResponse),
     ...state.modelOptions,
-  });
+  };
+  const verificatorModel = new ChatOllama(verificatorOptions);
+
+  console.log(
+    `[SADER - AbstentionVerificator] Effective Ollama options:`,
+    verificatorOptions,
+  );
 
   const response = await verificatorModel.invoke([
     new SystemMessage(buildAbstentionVerificatorSystemPrompt()),

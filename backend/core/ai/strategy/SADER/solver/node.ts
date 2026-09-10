@@ -10,10 +10,15 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
   const start = performance.now();
   const microkernel = HiveMicrokernel.getInstance();
 
-  const selectorModel = new ChatOllama({
+  console.log(`[SADER - Solver] state.modelOptions:`, state.modelOptions);
+  const selectorOptions = {
     model: state.selectorModel,
     think: false,
-  });
+    ...state.modelOptions,
+  };
+  const selectorModel = new ChatOllama(selectorOptions);
+
+  console.log(`[SADER - Solver] Effective Ollama options:`, selectorOptions);
 
   const correctionMessages = state.correction
     ? [
