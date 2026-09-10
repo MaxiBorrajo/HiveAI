@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   Plus,
-  MessageSquare,
   Trash2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -16,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog.tsx";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { useChats } from "../../context/ChatsContext.tsx";
 import type { ChatSummary } from "../../types/chat.ts";
 
@@ -51,66 +49,62 @@ export function ChatsSidebar() {
   if (isCollapsed) {
     return (
       <div className="flex h-screen w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button variant="ghost" size="icon-sm" onClick={() => setIsCollapsed(false)} />
-            }
-          >
-            <PanelLeftOpen className="size-4" />
-          </TooltipTrigger>
-          <TooltipContent side="right">Open sidebar</TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setIsCollapsed(false)}
+          title="Open sidebar"
+        >
+          <PanelLeftOpen className="size-4" />
+        </Button>
 
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="ghost" size="icon-sm" onClick={startNewChat} />}
-          >
-            <Plus className="size-4" />
-          </TooltipTrigger>
-          <TooltipContent side="right">New chat</TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={startNewChat}
+          title="New chat"
+        >
+          <Plus className="size-4" />
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card">
-      <div className="flex items-center justify-between px-3 pt-3">
+    <div className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card p-3">
+      <div className="flex items-center justify-between px-2">
         <span className="text-sm font-medium text-foreground">Chats</span>
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger
-              render={<Button variant="ghost" size="icon-sm" onClick={startNewChat} />}
-            >
-              <Plus className="size-4" />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">New chat</TooltipContent>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={startNewChat}
+            title="New chat"
+          >
+            <Plus className="size-4" />
+          </Button>
 
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button variant="ghost" size="icon-sm" onClick={() => setIsCollapsed(true)} />
-              }
-            >
-              <PanelLeftClose className="size-4" />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Close sidebar</TooltipContent>
-          </Tooltip>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setIsCollapsed(true)}
+            title="Close sidebar"
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
         </div>
       </div>
 
       <ScrollArea className="flex-1 min-h-0 mt-2">
-        <div className="flex flex-col gap-0.5 px-2 pb-3">
+        <div className="flex flex-col gap-0.5">
           {isLoadingChats && chats.length === 0 && (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            <p className="p-2 text-xs text-muted-foreground">
               Loading chats...
             </p>
           )}
 
           {!isLoadingChats && chats.length === 0 && (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            <p className="p-2 text-xs text-muted-foreground">
               No chats yet
             </p>
           )}
@@ -118,14 +112,13 @@ export function ChatsSidebar() {
           {chats.map((chat) => (
             <div
               key={chat.id}
-              className={`group flex items-center gap-2 rounded-lg px-2 py-2 text-sm cursor-pointer transition-colors ${
+              className={`p-2 group flex items-center gap-2 rounded-lg text-sm cursor-pointer transition-colors ${
                 chat.id === activeChatId
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
               onClick={() => selectChat(chat.id)}
             >
-              <MessageSquare className="size-4 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="truncate">{chat.title || "New chat"}</p>
                 <p className="text-[10px] opacity-60">

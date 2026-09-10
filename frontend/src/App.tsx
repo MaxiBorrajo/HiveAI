@@ -1,5 +1,4 @@
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   ToastProvider,
   ToastPortal,
@@ -16,16 +15,14 @@ function App() {
 
   return (
     <ToastProvider toastManager={toastManager}>
-      <TooltipProvider>
-        <ModelsProvider>
-          <ChatsProvider>
-            <div className="flex h-screen">
-              <ChatsSidebar />
-              <Chat />
-            </div>
-          </ChatsProvider>
-        </ModelsProvider>
-      </TooltipProvider>
+      <ModelsProvider>
+        <ChatsProvider>
+          <div className="flex h-screen">
+            <ChatsSidebar />
+            <Chat />
+          </div>
+        </ChatsProvider>
+      </ModelsProvider>
 
       <ToastPortal>
         <ToastViewport>

@@ -72,8 +72,19 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
     `[SADER - Responder] State: noTool=${isNoToolNeeded}, giveUp=${isUnrecoverableFailure}, outOfAttempts=${outOfAttempts}`,
   );
 
+  // state.messages also carries this turn's tool-selection scratchpad
+  // (Solver's tool-call AIMessages, Executor's ToolMessages) — keep only
+  // the plain conversation turns so the final answer has access to prior
+  // chat history without that noise.
+  const conversationHistory = state.messages.filter(
+    (message) =>
+      message instanceof HumanMessage ||
+      (message instanceof AIMessage && !message.tool_calls?.length),
+  );
+
   const response = await responder.invoke([
     new SystemMessage(prompts.systemPrompt),
+    ...conversationHistory,
     new HumanMessage(prompts.humanPrompt),
   ]);
 

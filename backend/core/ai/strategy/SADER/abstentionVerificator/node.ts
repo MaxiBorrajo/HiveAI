@@ -10,6 +10,7 @@ import {
   buildAbstentionVerificatorSystemPrompt,
 } from "./prompt.ts";
 import { MAX_ATTEMPTS } from "../constants.ts";
+import { buildNativeTools, getNativeTool } from "../nativeTools.ts";
 
 export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
   state,
@@ -23,10 +24,14 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     suggestedTool: z.string().optional(),
   });
 
-  const catalogSummary = microkernel
-    .getRegisteredPlugins()
-    .map((c) => `- ${c.name}: ${c.description}`)
-    .join("\n");
+  const nativeTools = buildNativeTools(state.chatId);
+  const catalogSummary = [
+    ...microkernel
+      .getRegisteredPlugins()
+      .filter((c) => microkernel.isActive(c.name))
+      .map((c) => `- ${c.name}: ${c.description}`),
+    ...nativeTools.map((t) => `- ${t.name}: ${t.description}`),
+  ].join("\n");
 
   console.log(
     `[SADER - AbstentionVerificator] state.modelOptions:`,
@@ -88,11 +93,12 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     };
   }
 
-  const suggestedPlugin = parsed.suggestedTool
-    ? microkernel.getPlugin(parsed.suggestedTool)
+  const suggestedTool = parsed.suggestedTool
+    ? (microkernel.getPlugin(parsed.suggestedTool) ??
+      getNativeTool(parsed.suggestedTool, state.chatId))
     : undefined;
 
-  if (!suggestedPlugin) {
+  if (!suggestedTool) {
     return {
       abstentionVerified: true,
       abstentionChallenged: false,
@@ -101,7 +107,9 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
           node: "AbstentionVerificator" as const,
           label: "Confirming abstention",
           durationMs,
-          summary: `Challenge rejected: suggested tool "${parsed.suggestedTool ?? "none"}" is not in the catalog`,
+          summary: parsed.suggestedTool
+            ? `Challenge rejected: suggested tool "${parsed.suggestedTool}" is not in the catalog`
+            : "Challenge rejected: verificator did not name a tool to switch to",
         },
       ],
     };

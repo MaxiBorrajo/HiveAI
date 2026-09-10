@@ -11,28 +11,65 @@ import { Logo } from "../Logo.tsx";
 import { InteractionDialog } from "./InteractionDialog.tsx";
 import { useChats } from "../../context/ChatsContext.tsx";
 
+// Slot for a chat that hasn't been assigned a real id yet (the "new chat"
+// screen, before the first message's chat_created event arrives). Scoped by
+// ChatsContext's newChatToken — which changes every time a fresh blank
+// screen is shown — so starting a second new chat while a first one is
+// still awaiting its chat_created event can't collide with it on one slot.
+function newChatKey(token: string): string {
+  return `__new__:${token}`;
+}
+
+interface ThinkingState {
+  isThinking: boolean;
+  thinkingText: string;
+}
+
+const IDLE_THINKING: ThinkingState = { isThinking: false, thinkingText: "" };
+
 export function Chat() {
-  const { activeChatId, onChatCreated, refreshChats } = useChats();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { activeChatId, newChatToken, onChatCreated, refreshChats, touchChat } =
+    useChats();
   const [input, setInput] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const [thinkingText, setThinkingText] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Messages and "thinking" state are kept in maps keyed by chat id, so
+  // each chat's state is fully isolated — switching chats or a background
+  // response finishing can never write into the wrong chat's view.
+  const [messagesByChat, setMessagesByChat] = useState<
+    Record<string, Message[]>
+  >({});
+  const [thinkingByChat, setThinkingByChat] = useState<
+    Record<string, ThinkingState>
+  >({});
+
+  // Set right when a chat is created mid-send (chat_created event), so the
+  // fetch-on-select effect below doesn't immediately race the still-streaming
+  // response with a server fetch that may not have the message persisted yet.
+  const justCreatedChatIdRef = useRef<string | null>(null);
+
+  const displayKey = activeChatId ?? newChatKey(newChatToken);
+  const messages = messagesByChat[displayKey] ?? [];
+  const { isThinking, thinkingText } = thinkingByChat[displayKey] ?? IDLE_THINKING;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking, thinkingText]);
 
   useEffect(() => {
-    if (!activeChatId) {
-      setMessages([]);
+    if (!activeChatId) return;
+
+    if (justCreatedChatIdRef.current === activeChatId) {
+      justCreatedChatIdRef.current = null;
       return;
     }
 
+    let cancelled = false;
     getChatMessages(activeChatId).then(({ data }) => {
-      if (!data) return;
-      setMessages(
-        data.messages.map((m) => ({
+      if (cancelled || !data) return;
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [activeChatId]: data.messages.map((m) => ({
           id: m.id,
           role: m.role,
           content: m.content,
@@ -40,13 +77,23 @@ export function Chat() {
           usedTools: m.metadata?.usedTools,
           steps: m.metadata?.steps,
         })),
-      );
+      }));
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeChatId]);
 
   async function handleSend() {
     const content = input.trim();
     if (!content || isThinking) return;
+
+    // The slot this send writes into. Starts as this new-chat screen's own
+    // draft key (or the existing chat's id) and gets migrated to the real
+    // chat id once chat_created arrives.
+    const startKey = activeChatId ?? newChatKey(newChatToken);
+    let key = startKey;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -55,56 +102,88 @@ export function Chat() {
       timestamp: Date.now(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [key]: [...(prev[key] ?? []), userMessage],
+    }));
     setInput("");
-    setIsThinking(true);
-    setThinkingText("");
+    setThinkingByChat((prev) => ({
+      ...prev,
+      [key]: { isThinking: true, thinkingText: "" },
+    }));
+
+    if (activeChatId) {
+      touchChat(activeChatId);
+    }
 
     const agentMessageId = crypto.randomUUID();
     let streamStarted = false;
 
+    function appendAgentMessage(k: string, message: Message) {
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [k]: [...(prev[k] ?? []), message],
+      }));
+    }
+
+    function updateAgentMessage(k: string, patch: Partial<Message>) {
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [k]: (prev[k] ?? []).map((message) =>
+          message.id === agentMessageId ? { ...message, ...patch } : message,
+        ),
+      }));
+    }
+
     try {
       await sendMessage(activeChatId, content, {
         onChatCreated: (chatId) => {
+          justCreatedChatIdRef.current = chatId;
+          setMessagesByChat((prev) => {
+            const { [startKey]: draft, ...rest } = prev;
+            return { ...rest, [chatId]: draft ?? [] };
+          });
+          setThinkingByChat((prev) => {
+            const { [startKey]: draft, ...rest } = prev;
+            return { ...rest, [chatId]: draft ?? { isThinking: true, thinkingText: "" } };
+          });
+          key = chatId;
           onChatCreated(chatId);
         },
         onThinking: () => {},
         onThinkingDelta: (delta) => {
-          setThinkingText((prev) => prev + delta);
+          setThinkingByChat((prev) => ({
+            ...prev,
+            [key]: {
+              isThinking: prev[key]?.isThinking ?? true,
+              thinkingText: (prev[key]?.thinkingText ?? "") + delta,
+            },
+          }));
         },
         onToken: (token) => {
           if (!streamStarted) {
             streamStarted = true;
-            setIsThinking(false);
-            setThinkingText("");
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: agentMessageId,
-                role: "agent",
-                content: token,
-                timestamp: Date.now(),
-              },
-            ]);
+            setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
+            appendAgentMessage(key, {
+              id: agentMessageId,
+              role: "agent",
+              content: token,
+              timestamp: Date.now(),
+            });
             return;
           }
 
-          setMessages((prev) =>
-            prev.map((message) =>
+          setMessagesByChat((prev) => ({
+            ...prev,
+            [key]: (prev[key] ?? []).map((message) =>
               message.id === agentMessageId
                 ? { ...message, content: message.content + token }
                 : message,
             ),
-          );
+          }));
         },
         onDone: (finalContent, usedTools, steps) => {
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === agentMessageId
-                ? { ...message, content: finalContent, usedTools, steps }
-                : message,
-            ),
-          );
+          updateAgentMessage(key, { content: finalContent, usedTools, steps });
           refreshChats();
         },
         onError: (errorMessage) => {
@@ -113,25 +192,29 @@ export function Chat() {
         },
       });
     } catch (error) {
-      setMessages((prev) => {
-        const withoutPartial = prev.filter((m) => m.id !== agentMessageId);
-        return [
-          ...withoutPartial,
-          {
-            id: crypto.randomUUID(),
-            role: "agent",
-            content:
-              error instanceof Error
-                ? `Could not get a response: ${error.message}`
-                : "Could not get a response from the agent.",
-            isError: true,
-            timestamp: Date.now(),
-          },
-        ];
+      setMessagesByChat((prev) => {
+        const withoutPartial = (prev[key] ?? []).filter(
+          (m) => m.id !== agentMessageId,
+        );
+        return {
+          ...prev,
+          [key]: [
+            ...withoutPartial,
+            {
+              id: crypto.randomUUID(),
+              role: "agent",
+              content:
+                error instanceof Error
+                  ? `Could not get a response: ${error.message}`
+                  : "Could not get a response from the agent.",
+              isError: true,
+              timestamp: Date.now(),
+            },
+          ],
+        };
       });
     } finally {
-      setIsThinking(false);
-      setThinkingText("");
+      setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
     }
   }
 
