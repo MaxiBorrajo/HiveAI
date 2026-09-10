@@ -1,8 +1,8 @@
 [
   {
-    "name": "fast",
+    "name": "light",
     "isCurrent": false,
-    "description": "Prioritizes inference speed over output fidelity.",
+    "description": "Uses less memory and a smaller context window. Best for constrained hardware or short conversations — long conversations or large pasted text may get truncated.",
     "parameters": [
       {
         "name": "kv_cache_type",
@@ -10,7 +10,10 @@
         "type": "string",
         "defaultValue": "q4_0",
         "currentValue": "q4_0",
-        "options": ["q8_0", "q4_0"],
+        "options": [
+          "q8_0",
+          "q4_0"
+        ],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -60,8 +63,9 @@
         "name": "mmap",
         "description": "Enables memory-mapping to load the model file directly from disk, reducing startup time and allowing the OS to page weights dynamically.",
         "type": "boolean",
-        "defaultValue": false,
+        "defaultValue": true,
         "currentValue": false,
+        "note": "Calculated at runtime based on available RAM relative to the loaded model's size. Disabling mmap forces the full model into non-mapped process memory — on systems without enough free RAM to hold it, this causes heavy swapping and can collapse throughput by an order of magnitude.",
         "requiresServiceRestart": false
       },
       {
@@ -125,9 +129,9 @@
     ]
   },
   {
-    "name": "quality",
+    "name": "full",
     "isCurrent": false,
-    "description": "Prioritizes output fidelity over inference speed.",
+    "description": "Uses more memory and a larger context window, so long conversations or large pasted text are processed without truncation.",
     "parameters": [
       {
         "name": "kv_cache_type",
@@ -135,7 +139,10 @@
         "type": "string",
         "defaultValue": "f16",
         "currentValue": "f16",
-        "options": ["f16", "q8_0"],
+        "options": [
+          "f16",
+          "q8_0"
+        ],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -185,8 +192,9 @@
         "name": "mmap",
         "description": "Enables memory-mapping to load the model file directly from disk, reducing startup time and allowing the OS to page weights dynamically.",
         "type": "boolean",
-        "defaultValue": false,
+        "defaultValue": true,
         "currentValue": false,
+        "note": "Calculated at runtime based on available RAM relative to the loaded model's size. Disabling mmap forces the full model into non-mapped process memory — on systems without enough free RAM to hold it, this causes heavy swapping and can collapse throughput by an order of magnitude.",
         "requiresServiceRestart": false
       },
       {
@@ -194,7 +202,7 @@
         "description": "Locks model weights in physical RAM, preventing the operating system from paging them to the swap disk and ensuring consistent latency.",
         "type": "boolean",
         "defaultValue": true,
-        "currentValue": false,
+        "currentValue": true,
         "note": "Only effective when sufficient free RAM is available; validated at runtime.",
         "requiresServiceRestart": false
       },
@@ -259,8 +267,12 @@
         "description": "Quantization type applied to both the Key and Value attention caches. Lower bit precision reduces VRAM and memory bandwidth usage at a cost to precision. Ollama applies a single quantization to K and V together — it cannot be set independently.",
         "type": "string",
         "defaultValue": "q8_0",
-        "currentValue": "q8_0",
-        "options": ["f16", "q8_0", "q4_0"],
+        "currentValue": "q4_0",
+        "options": [
+          "f16",
+          "q8_0",
+          "q4_0"
+        ],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -311,7 +323,8 @@
         "description": "Enables memory-mapping to load the model file directly from disk, reducing startup time and allowing the OS to page weights dynamically.",
         "type": "boolean",
         "defaultValue": true,
-        "currentValue": true,
+        "currentValue": false,
+        "note": "Calculated at runtime based on available RAM relative to the loaded model's size. Disabling mmap forces the full model into non-mapped process memory — on systems without enough free RAM to hold it, this causes heavy swapping and can collapse throughput by an order of magnitude.",
         "requiresServiceRestart": false
       },
       {
@@ -319,7 +332,7 @@
         "description": "Locks model weights in physical RAM, preventing the operating system from paging them to the swap disk and ensuring consistent latency.",
         "type": "boolean",
         "defaultValue": false,
-        "currentValue": false,
+        "currentValue": true,
         "requiresServiceRestart": false
       },
       {
@@ -376,6 +389,6 @@
   {
     "name": "default",
     "isCurrent": true,
-    "description": "Balanced profile offering a trade-off between inference speed and output quality."
+    "description": "Balanced profile using Ollama's own defaults for context size and memory usage."
   }
 ]
