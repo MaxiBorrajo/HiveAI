@@ -50,10 +50,17 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
     setIsImporting(true);
     try {
       const { data, success, errors } = await importPlugin(files);
-      console.log("[PluginsManager] importPlugin response:", { success, data, errors });
+      console.log("[PluginsManager] importPlugin response:", {
+        success,
+        data,
+        errors,
+      });
       if (success && data) {
         await refreshPlugins();
-        toastManager.add({ type: "success", title: `'${data.name}' imported successfully.` });
+        toastManager.add({
+          type: "success",
+          title: `'${data.name}' imported successfully.`,
+        });
       }
       // On failure the apiClient interceptor already shows an error toast.
     } catch (error) {
@@ -75,12 +82,19 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
 
   async function handleEditPlugin(plugin: Plugin) {
     const { success, data, errors } = await editPlugin(plugin.name);
-    console.log("[PluginsManager] editPlugin response:", { success, data, errors });
+    console.log("[PluginsManager] editPlugin response:", {
+      success,
+      data,
+      errors,
+    });
     if (success) {
       await refreshPlugins();
       setIsModalOpen(false);
       openDraft(plugin.name);
-      toastManager.add({ type: "success", title: `'${plugin.name}' moved to drafts for editing.` });
+      toastManager.add({
+        type: "success",
+        title: `'${plugin.name}' moved to drafts for editing.`,
+      });
     }
     // On failure the apiClient interceptor already shows an error toast.
   }
@@ -96,6 +110,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         pluginsToChange.map((p) => setPluginActive(p.name, nextActive)),
       );
     } catch {
+      getPlugins().then(({ data }) => setPlugins(data ?? []));
       getPlugins().then(({ data }) => setPlugins(data ?? []));
     }
   }

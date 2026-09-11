@@ -3,6 +3,8 @@ import { getModelInfo } from "./useCases/getModelInfo/index.ts";
 import { getModels } from "./useCases/getModels/index.ts";
 import { getCurrentModels } from "./useCases/getCurrentModels/index.ts";
 import { setModels } from "./useCases/setModels/index.ts";
+import { getEmbeddingModelStatus } from "./useCases/getEmbeddingModelStatus/index.ts";
+import { handlePullEmbeddingModel } from "./useCases/pullEmbeddingModel/index.ts";
 import { ModelFilters } from "./types.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 
@@ -14,6 +16,14 @@ modelsRouter.get("/current", (c) => {
   return getCurrentModels(c.get("hive"), {
     "content-type": "application/json",
   });
+});
+
+modelsRouter.get("/embedding-status", (c) => {
+  return getEmbeddingModelStatus({ "content-type": "application/json" });
+});
+
+modelsRouter.post("/embedding-model/pull", (c) => {
+  return handlePullEmbeddingModel({ "content-type": "application/json" });
 });
 
 modelsRouter.put("/current", async (c) => {

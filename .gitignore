@@ -6,7 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
+*.config.json
 node_modules
 dist
 dist-ssr
@@ -14,7 +14,6 @@ dist-ssr
 
 # Environment variables
 .env
-modes.config.json
 
 # Editor directories and files
 .vscode/*
@@ -26,3 +25,4 @@ modes.config.json
 *.njsproj
 *.sln
 *.sw?
+

@@ -7,7 +7,6 @@ import {
   ReducedValue,
 } from "@langchain/langgraph";
 import z from "zod";
-import { HiveMicrokernel } from "../../../microkernel/hive-microkernel.ts";
 import {
   AbstentionVerificator,
   shouldConfirmAbstention,
@@ -38,6 +37,7 @@ const StepsValue = new ReducedValue(z.array(ChatStepSchema).default([]), {
 
 export const HiveAIState = new StateSchema({
   messages: MessagesValue,
+  chatId: z.string(),
   currentPrompt: z.string(),
   selectorModel: z.string(),
   model: z.string(),
@@ -76,25 +76,13 @@ export const HiveAIState = new StateSchema({
   giveUp: z.boolean().default(false),
 });
 
-const NoToolNeeded = () => ({
-  selectedTool: "NONE",
-  abstentionVerified: true,
-});
-
-const hasActivePlugins = () =>
-  HiveMicrokernel.getInstance().getTools().length > 0
-    ? "Solver"
-    : "NoToolNeeded";
-
 export const HiveMind = new StateGraph(HiveAIState)
   .addNode("Solver", Solver)
-  .addNode("NoToolNeeded", NoToolNeeded)
   .addNode("AbstentionVerificator", AbstentionVerificator)
   .addNode("Executor", Executor)
   .addNode("Diagnostician", Diagnostician)
   .addNode("HiveQueenResponder", HiveQueenResponder)
-  .addConditionalEdges(START, hasActivePlugins, ["Solver", "NoToolNeeded"])
-  .addEdge("NoToolNeeded", "HiveQueenResponder")
+  .addEdge(START, "Solver")
   .addConditionalEdges("Solver", shouldRespond, [
     "HiveQueenResponder",
     "AbstentionVerificator",

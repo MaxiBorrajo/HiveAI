@@ -3,26 +3,132 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
 import { sendMessage } from "../../lib/chats/sendMessage.ts";
+import { getChatMessages } from "../../lib/chats/getChatMessages.ts";
 import { reportError } from "../../lib/toastManager.ts";
 import type { Message } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
 import { InteractionDialog } from "./InteractionDialog.tsx";
+import { useChats } from "../../context/ChatsContext.tsx";
+import { useModels } from "../../context/ModelsContext.tsx";
+import {
+  isWindowFocused,
+  notifyChatResponse,
+  requestNotificationPermission,
+} from "../../lib/notify.ts";
+
+// Slot for a chat that hasn't been assigned a real id yet (the "new chat"
+// screen, before the first message's chat_created event arrives). Scoped by
+// ChatsContext's newChatToken — which changes every time a fresh blank
+// screen is shown — so starting a second new chat while a first one is
+// still awaiting its chat_created event can't collide with it on one slot.
+function newChatKey(token: string): string {
+  return `__new__:${token}`;
+}
+
+interface ThinkingState {
+  isThinking: boolean;
+  thinkingText: string;
+}
+
+const IDLE_THINKING: ThinkingState = { isThinking: false, thinkingText: "" };
 
 export function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const {
+    chats,
+    activeChatId,
+    newChatToken,
+    onChatCreated,
+    refreshChats,
+    touchChat,
+    markChatUnread,
+  } = useChats();
+  const { hasModel, embeddingModelStatus } = useModels();
   const [input, setInput] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const [thinkingText, setThinkingText] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Messages and "thinking" state are kept in maps keyed by chat id, so
+  // each chat's state is fully isolated — switching chats or a background
+  // response finishing can never write into the wrong chat's view.
+  const [messagesByChat, setMessagesByChat] = useState<
+    Record<string, Message[]>
+  >({});
+  const [thinkingByChat, setThinkingByChat] = useState<
+    Record<string, ThinkingState>
+  >({});
+
+  // Set right when a chat is created mid-send (chat_created event), so the
+  // fetch-on-select effect below doesn't immediately race the still-streaming
+  // response with a server fetch that may not have the message persisted yet.
+  const justCreatedChatIdRef = useRef<string | null>(null);
+
+  // Tracks the currently-viewed chat/draft key live, so a response that
+  // finishes after the user has switched chats can tell it's no longer
+  // being watched — reading activeChatId/newChatToken directly here would
+  // only ever see the value captured when handleSend started.
+  const displayKeyRef = useRef<string>(activeChatId ?? newChatKey(newChatToken));
+
+  const displayKey = activeChatId ?? newChatKey(newChatToken);
+  useEffect(() => {
+    displayKeyRef.current = displayKey;
+  }, [displayKey]);
+
+  const chatsRef = useRef(chats);
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+  const messages = messagesByChat[displayKey] ?? [];
+  const { isThinking, thinkingText } = thinkingByChat[displayKey] ?? IDLE_THINKING;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking, thinkingText]);
 
+  useEffect(() => {
+    if (!activeChatId) return;
+
+    if (justCreatedChatIdRef.current === activeChatId) {
+      justCreatedChatIdRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    getChatMessages(activeChatId).then(({ data }) => {
+      if (cancelled || !data) return;
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [activeChatId]: data.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+          usedTools: m.metadata?.usedTools,
+          steps: m.metadata?.steps,
+        })),
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChatId]);
+
   async function handleSend() {
     const content = input.trim();
     if (!content || isThinking) return;
+    if (!hasModel) return;
+    if (embeddingModelStatus !== null && !embeddingModelStatus.available) return;
+
+    // Fired from this click/submit gesture so the browser/webview is willing
+    // to show the OS permission prompt — requesting it later from onDone
+    // (an async stream callback, not a user gesture) gets silently ignored.
+    requestNotificationPermission();
+
+    // The slot this send writes into. Starts as this new-chat screen's own
+    // draft key (or the existing chat's id) and gets migrated to the real
+    // chat id once chat_created arrives.
+    const startKey = activeChatId ?? newChatKey(newChatToken);
+    let key = startKey;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -31,53 +137,101 @@ export function Chat() {
       timestamp: Date.now(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [key]: [...(prev[key] ?? []), userMessage],
+    }));
     setInput("");
-    setIsThinking(true);
-    setThinkingText("");
+    setThinkingByChat((prev) => ({
+      ...prev,
+      [key]: { isThinking: true, thinkingText: "" },
+    }));
+
+    if (activeChatId) {
+      touchChat(activeChatId);
+    }
 
     const agentMessageId = crypto.randomUUID();
     let streamStarted = false;
 
+    function appendAgentMessage(k: string, message: Message) {
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [k]: [...(prev[k] ?? []), message],
+      }));
+    }
+
+    function updateAgentMessage(k: string, patch: Partial<Message>) {
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [k]: (prev[k] ?? []).map((message) =>
+          message.id === agentMessageId ? { ...message, ...patch } : message,
+        ),
+      }));
+    }
+
     try {
-      await sendMessage(content, {
+      await sendMessage(activeChatId, content, {
+        onChatCreated: (chatId) => {
+          justCreatedChatIdRef.current = chatId;
+          setMessagesByChat((prev) => {
+            const { [startKey]: draft, ...rest } = prev;
+            return { ...rest, [chatId]: draft ?? [] };
+          });
+          setThinkingByChat((prev) => {
+            const { [startKey]: draft, ...rest } = prev;
+            return { ...rest, [chatId]: draft ?? { isThinking: true, thinkingText: "" } };
+          });
+          key = chatId;
+          onChatCreated(chatId);
+        },
         onThinking: () => {},
         onThinkingDelta: (delta) => {
-          setThinkingText((prev) => prev + delta);
+          setThinkingByChat((prev) => ({
+            ...prev,
+            [key]: {
+              isThinking: prev[key]?.isThinking ?? true,
+              thinkingText: (prev[key]?.thinkingText ?? "") + delta,
+            },
+          }));
         },
         onToken: (token) => {
           if (!streamStarted) {
             streamStarted = true;
-            setIsThinking(false);
-            setThinkingText("");
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: agentMessageId,
-                role: "agent",
-                content: token,
-                timestamp: Date.now(),
-              },
-            ]);
+            setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
+            appendAgentMessage(key, {
+              id: agentMessageId,
+              role: "agent",
+              content: token,
+              timestamp: Date.now(),
+            });
             return;
           }
 
-          setMessages((prev) =>
-            prev.map((message) =>
+          setMessagesByChat((prev) => ({
+            ...prev,
+            [key]: (prev[key] ?? []).map((message) =>
               message.id === agentMessageId
                 ? { ...message, content: message.content + token }
                 : message,
             ),
-          );
+          }));
         },
         onDone: (finalContent, usedTools, steps) => {
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === agentMessageId
-                ? { ...message, content: finalContent, usedTools, steps }
-                : message,
-            ),
-          );
+          updateAgentMessage(key, { content: finalContent, usedTools, steps });
+          refreshChats();
+
+          const isBeingViewed =
+            displayKeyRef.current === key && isWindowFocused();
+          if (!isBeingViewed) {
+            markChatUnread(key);
+            const chatTitle =
+              chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
+            notifyChatResponse(
+              chatTitle,
+              finalContent.slice(0, 120) || "Nueva respuesta disponible",
+            );
+          }
         },
         onError: (errorMessage) => {
           reportError([errorMessage]);
@@ -85,32 +239,36 @@ export function Chat() {
         },
       });
     } catch (error) {
-      setMessages((prev) => {
-        const withoutPartial = prev.filter((m) => m.id !== agentMessageId);
-        return [
-          ...withoutPartial,
-          {
-            id: crypto.randomUUID(),
-            role: "agent",
-            content:
-              error instanceof Error
-                ? `Could not get a response: ${error.message}`
-                : "Could not get a response from the agent.",
-            isError: true,
-            timestamp: Date.now(),
-          },
-        ];
+      setMessagesByChat((prev) => {
+        const withoutPartial = (prev[key] ?? []).filter(
+          (m) => m.id !== agentMessageId,
+        );
+        return {
+          ...prev,
+          [key]: [
+            ...withoutPartial,
+            {
+              id: crypto.randomUUID(),
+              role: "agent",
+              content:
+                error instanceof Error
+                  ? `Could not get a response: ${error.message}`
+                  : "Could not get a response from the agent.",
+              isError: true,
+              timestamp: Date.now(),
+            },
+          ],
+        };
       });
     } finally {
-      setIsThinking(false);
-      setThinkingText("");
+      setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
     }
   }
 
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
+    <div className="flex flex-1 min-w-0 h-screen bg-background text-foreground font-sans overflow-hidden">
       <div className="flex flex-1 flex-col min-w-0 min-h-0 relative w-full">
         {isEmpty ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6">

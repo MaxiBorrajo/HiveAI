@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   ToastProvider,
   ToastPortal,
@@ -7,9 +5,10 @@ import {
   ToastList,
 } from "@/components/ui/toast";
 import { Chat } from "@/components/Chat";
-import { StyleGuide } from "@/components/StyleGuide";
+import { ChatsSidebar } from "@/components/ChatsSidebar";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/context/ModelsContext";
+import { ChatsProvider } from "@/context/ChatsContext";
 import {
   DraftEditorProvider,
   useDraftEditor,
@@ -17,7 +16,6 @@ import {
 import { DraftEditorPage } from "@/components/PluginsManager/DraftEditorPage";
 
 function AppContent() {
-  const [showStyleGuide, setShowStyleGuide] = useState(false);
   const { openDraftName, closeDraft, notifyPluginImported } = useDraftEditor();
 
   if (openDraftName) {
@@ -31,31 +29,23 @@ function AppContent() {
   }
 
   return (
-    <>
-      {showStyleGuide ? <StyleGuide /> : <Chat />}
-
-      {/* Only for development; remove when the style guide is no longer needed */}
-      <button
-        type="button"
-        onClick={() => setShowStyleGuide((prev) => !prev)}
-        className="fixed bottom-4 right-4 text-xs font-mono text-muted-foreground hover:text-foreground"
-      >
-        {showStyleGuide ? "Show Chat" : "Show Style Guide"}
-      </button>
-    </>
+    <div className="flex h-screen">
+      <ChatsSidebar />
+      <Chat />
+    </div>
   );
 }
 
 function App() {
   return (
     <ToastProvider toastManager={toastManager}>
-      <TooltipProvider>
-        <ModelsProvider>
+      <ModelsProvider>
+        <ChatsProvider>
           <DraftEditorProvider>
             <AppContent />
           </DraftEditorProvider>
-        </ModelsProvider>
-      </TooltipProvider>
+        </ChatsProvider>
+      </ModelsProvider>
 
       <ToastPortal>
         <ToastViewport>
