@@ -1,12 +1,12 @@
-import { memo, useEffect, useRef, useState } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { useEffect, useRef, useState } from "react";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Skeleton } from "../ui/skeleton.tsx";
 import { sendMessage } from "../../lib/chats/sendMessage.ts";
 import { getChatMessages } from "../../lib/chats/getChatMessages.ts";
 import { reportError } from "../../lib/toastManager.ts";
-import type { Message } from "../../types/chat.ts";
+import type { Message, ThinkingRun } from "../../types/chat.ts";
 import { ChatInput } from "./ChatInput.tsx";
+import { ChatMessage } from "./ChatMessage.tsx";
 import { Logo } from "../Logo.tsx";
 import { InteractionDialog } from "./InteractionDialog.tsx";
 import { useChats } from "../../context/ChatsContext.tsx";
@@ -29,9 +29,31 @@ function newChatKey(token: string): string {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
+  thinkingRuns: ThinkingRun[];
 }
 
-const IDLE_THINKING: ThinkingState = { isThinking: false, thinkingText: "" };
+const IDLE_THINKING: ThinkingState = {
+  isThinking: false,
+  thinkingText: "",
+  thinkingRuns: [],
+};
+
+// Appends a delta to the run list, opening a new run whenever the
+// producing node changes (or on the very first delta) so a node that
+// executes more than once in a turn ends up as separate runs instead of
+// one merged blob — mirrors how the backend's `steps` array accumulates
+// one entry per node execution rather than collapsing repeats.
+function appendThinkingDelta(
+  runs: ThinkingRun[],
+  content: string,
+  node: string | undefined,
+): ThinkingRun[] {
+  const last = runs[runs.length - 1];
+  if (last && last.node === node) {
+    return [...runs.slice(0, -1), { node, text: last.text + content }];
+  }
+  return [...runs, { node, text: content }];
+}
 
 export function Chat() {
   const {
@@ -144,7 +166,7 @@ export function Chat() {
     setInput("");
     setThinkingByChat((prev) => ({
       ...prev,
-      [key]: { isThinking: true, thinkingText: "" },
+      [key]: { isThinking: true, thinkingText: "", thinkingRuns: [] },
     }));
 
     if (activeChatId) {
@@ -153,6 +175,7 @@ export function Chat() {
 
     const agentMessageId = crypto.randomUUID();
     let streamStarted = false;
+    let capturedThinkingRuns: ThinkingRun[] = [];
 
     function appendAgentMessage(k: string, message: Message) {
       setMessagesByChat((prev) => ({
@@ -180,20 +203,30 @@ export function Chat() {
           });
           setThinkingByChat((prev) => {
             const { [startKey]: draft, ...rest } = prev;
-            return { ...rest, [chatId]: draft ?? { isThinking: true, thinkingText: "" } };
+            return { ...rest, [chatId]: draft ?? IDLE_THINKING };
           });
           key = chatId;
           onChatCreated(chatId);
         },
         onThinking: () => {},
-        onThinkingDelta: (delta) => {
-          setThinkingByChat((prev) => ({
-            ...prev,
-            [key]: {
-              isThinking: prev[key]?.isThinking ?? true,
-              thinkingText: (prev[key]?.thinkingText ?? "") + delta,
-            },
-          }));
+        onThinkingDelta: (delta, node) => {
+          setThinkingByChat((prev) => {
+            const current = prev[key] ?? IDLE_THINKING;
+            const thinkingRuns = appendThinkingDelta(
+              current.thinkingRuns,
+              delta,
+              node,
+            );
+            capturedThinkingRuns = thinkingRuns;
+            return {
+              ...prev,
+              [key]: {
+                isThinking: current.isThinking,
+                thinkingText: current.thinkingText + delta,
+                thinkingRuns,
+              },
+            };
+          });
         },
         onToken: (token) => {
           if (!streamStarted) {
@@ -218,7 +251,12 @@ export function Chat() {
           }));
         },
         onDone: (finalContent, usedTools, steps) => {
-          updateAgentMessage(key, { content: finalContent, usedTools, steps });
+          updateAgentMessage(key, {
+            content: finalContent,
+            usedTools,
+            steps,
+            thinkingRuns: capturedThinkingRuns,
+          });
           refreshChats();
 
           const isBeingViewed =
@@ -339,143 +377,5 @@ export function Chat() {
       </div>
       <InteractionDialog />
     </div>
-  );
-}
-
-const ChatMessage = memo(function ChatMessage({ message }: { message: Message }) {
-  const isAgent = message.role === "agent";
-
-  if (isAgent) {
-    return (
-      <div className="w-full">
-        <div
-          className={`text-sm ${
-            message.isError
-              ? "text-destructive font-mono"
-              : "text-foreground leading-relaxed"
-          }`}
-        >
-          {message.isError ? (
-            message.content
-          ) : (
-            <MessageMarkdown content={message.content} />
-          )}
-        </div>
-        <div className="mt-1 flex items-center gap-1.5 text-[10px] opacity-50 justify-start">
-          <span>
-            {new Date(message.timestamp).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
-          </span>
-          {!!message.usedTools?.length && (
-            <span>· se usó {message.usedTools.join(", ")}</span>
-          )}
-        </div>
-        {!!message.steps?.length && <StepsDisclosure steps={message.steps} />}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex w-full justify-end">
-      <div className="max-w-[75%] rounded-2xl bg-card border border-border px-5 py-3 text-sm text-foreground">
-        {message.content}
-        <div className="mt-1 flex items-center gap-1.5 text-[10px] opacity-40 justify-end">
-          <span>
-            {new Date(message.timestamp).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const markdownComponents: Components = {
-  h1: ({ children }) => (
-    <h1 className="mt-3 mb-1.5 text-lg font-semibold">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="mt-3 mb-1.5 text-base font-semibold">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="mt-2 mb-1 text-sm font-semibold">{children}</h3>
-  ),
-  h4: ({ children }) => (
-    <h4 className="mt-2 mb-1 text-sm font-semibold">{children}</h4>
-  ),
-  h5: ({ children }) => (
-    <h5 className="mt-2 mb-1 text-sm font-semibold">{children}</h5>
-  ),
-  h6: ({ children }) => (
-    <h6 className="mt-2 mb-1 text-sm font-semibold">{children}</h6>
-  ),
-  p: ({ children }) => <p className="my-1.5 leading-relaxed">{children}</p>,
-  ul: ({ children }) => <ul className="my-1.5 list-disc space-y-0.5 pl-5">{children}</ul>,
-  ol: ({ children }) => (
-    <ol className="my-1.5 list-decimal space-y-0.5 pl-5">{children}</ol>
-  ),
-  li: ({ children }) => <li>{children}</li>,
-  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-  em: ({ children }) => <em className="italic">{children}</em>,
-  code: ({ children, className }) =>
-    className ? (
-      <code className="font-mono text-xs">{children}</code>
-    ) : (
-      <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{children}</code>
-    ),
-  pre: ({ children }) => (
-    <pre className="my-1.5 overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs">
-      {children}
-    </pre>
-  ),
-  a: ({ children, href }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline underline-offset-2 hover:opacity-80"
-    >
-      {children}
-    </a>
-  ),
-};
-
-const MessageMarkdown = memo(function MessageMarkdown({
-  content,
-}: {
-  content: string;
-}) {
-  return (
-    <div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-      <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
-    </div>
-  );
-});
-
-function StepsDisclosure({ steps }: { steps: NonNullable<Message["steps"]> }) {
-  const totalMs = steps.reduce((sum, step) => sum + step.durationMs, 0);
-
-  return (
-    <details className="mt-1.5 text-[10px] opacity-60">
-      <summary className="cursor-pointer select-none hover:opacity-100">
-        Ver pasos ({totalMs < 1000 ? `${totalMs.toFixed(0)}ms` : `${(totalMs / 1000).toFixed(1)}s`})
-      </summary>
-      <ul className="mt-1.5 space-y-1 border-l border-border pl-2">
-        {steps.map((step, index) => (
-          <li key={index}>
-            <span className="font-medium">{step.node}</span>
-            {step.label !== step.node && <span> · {step.label}</span>}
-            <span> · {step.durationMs.toFixed(0)}ms</span>
-            <div className="opacity-80">{step.summary}</div>
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }

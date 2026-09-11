@@ -159,7 +159,10 @@ export function handleChat(
 
             const reasoningChunk = message.additional_kwargs?.reasoning_content;
             if (reasoningChunk) {
-              send("thinking_delta", { content: reasoningChunk });
+              send("thinking_delta", {
+                content: reasoningChunk,
+                node: metadata.langgraph_node,
+              });
             }
 
             if (metadata.langgraph_node !== "HiveQueenResponder") continue;

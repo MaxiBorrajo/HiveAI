@@ -7,6 +7,16 @@ export interface ChatStep {
   summary: string;
 }
 
+// One contiguous burst of "thinking" text from a single node. A node that
+// runs more than once in the same turn (e.g. Executor retried after
+// Diagnostician) produces multiple runs, one per occurrence — matched to
+// `steps` by order of appearance, the same way `steps` itself accumulates
+// one entry per node execution rather than merging repeats.
+export interface ThinkingRun {
+  node: string | undefined;
+  text: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "agent";
@@ -15,6 +25,7 @@ export interface Message {
   timestamp: number;
   usedTools?: string[];
   steps?: ChatStep[];
+  thinkingRuns?: ThinkingRun[];
 }
 
 export interface ChatSummary {
