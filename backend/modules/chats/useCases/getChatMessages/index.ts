@@ -9,18 +9,27 @@ export async function getChatMessages(
   chatId: string,
   headers: Record<string, string>,
 ): Promise<Response> {
-  const dataDir = hive.getConfig().get("dataDir");
+  try {
+    const dataDir = hive.getConfig().get("dataDir");
 
-  const chat = await getChat(dataDir, chatId);
-  if (!chat) {
-    return ResponseBuilder.error([`Chat '${chatId}' was not found.`], undefined, {
-      headers,
-      status: 404,
-    });
+    const chat = await getChat(dataDir, chatId);
+    if (!chat) {
+      return ResponseBuilder.error([`Chat '${chatId}' was not found.`], undefined, {
+        headers,
+        status: 404,
+      });
+    }
+
+    const messages = await getAllMessages(dataDir, chatId);
+
+    const response: GetChatMessagesResponse = { chat, messages };
+    return ResponseBuilder.success(response, { headers });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return ResponseBuilder.error(
+      [`Failed to load chat messages: ${detail}`],
+      undefined,
+      { headers, status: 500 },
+    );
   }
-
-  const messages = await getAllMessages(dataDir, chatId);
-
-  const response: GetChatMessagesResponse = { chat, messages };
-  return ResponseBuilder.success(response, { headers });
 }

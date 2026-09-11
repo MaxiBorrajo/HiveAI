@@ -1,14 +1,28 @@
-import { dirname, fromFileUrl, join } from "@std/path";
+import { join } from "@std/path";
 import { ChatMode } from "../types.ts";
+import { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
+import defaultModesConfig from "../../../config/modes.config.json" with { type: "text" };
 
-const MODULE_DIR = dirname(fromFileUrl(import.meta.url));
-const CONFIG_PATH = join(MODULE_DIR, "..", "..", "..", "config", "modes.config.json");
+const CONFIG_FILE_NAME = "modes.config.json";
+
+function getConfigPath(): string {
+  const configDir = HiveMicrokernel.getInstance().getConfig().get("configDir");
+  return join(configDir, CONFIG_FILE_NAME);
+}
 
 export async function readModesConfig(): Promise<ChatMode[]> {
-  const raw = await Deno.readTextFile(CONFIG_PATH);
-  return JSON.parse(raw) as ChatMode[];
+  const path = getConfigPath();
+
+  try {
+    const raw = await Deno.readTextFile(path);
+    return JSON.parse(raw) as ChatMode[];
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await Deno.writeTextFile(path, defaultModesConfig);
+    return JSON.parse(defaultModesConfig) as ChatMode[];
+  }
 }
 
 export async function writeModesConfig(modes: ChatMode[]): Promise<void> {
-  await Deno.writeTextFile(CONFIG_PATH, JSON.stringify(modes, null, 2) + "\n");
+  await Deno.writeTextFile(getConfigPath(), JSON.stringify(modes, null, 2) + "\n");
 }

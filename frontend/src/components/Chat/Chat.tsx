@@ -10,6 +10,12 @@ import { ChatInput } from "./ChatInput.tsx";
 import { Logo } from "../Logo.tsx";
 import { InteractionDialog } from "./InteractionDialog.tsx";
 import { useChats } from "../../context/ChatsContext.tsx";
+import { useModels } from "../../context/ModelsContext.tsx";
+import {
+  isWindowFocused,
+  notifyChatResponse,
+  requestNotificationPermission,
+} from "../../lib/notify.ts";
 
 // Slot for a chat that hasn't been assigned a real id yet (the "new chat"
 // screen, before the first message's chat_created event arrives). Scoped by
@@ -28,8 +34,16 @@ interface ThinkingState {
 const IDLE_THINKING: ThinkingState = { isThinking: false, thinkingText: "" };
 
 export function Chat() {
-  const { activeChatId, newChatToken, onChatCreated, refreshChats, touchChat } =
-    useChats();
+  const {
+    chats,
+    activeChatId,
+    newChatToken,
+    onChatCreated,
+    refreshChats,
+    touchChat,
+    markChatUnread,
+  } = useChats();
+  const { hasModel, embeddingModelStatus } = useModels();
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +62,21 @@ export function Chat() {
   // response with a server fetch that may not have the message persisted yet.
   const justCreatedChatIdRef = useRef<string | null>(null);
 
+  // Tracks the currently-viewed chat/draft key live, so a response that
+  // finishes after the user has switched chats can tell it's no longer
+  // being watched — reading activeChatId/newChatToken directly here would
+  // only ever see the value captured when handleSend started.
+  const displayKeyRef = useRef<string>(activeChatId ?? newChatKey(newChatToken));
+
   const displayKey = activeChatId ?? newChatKey(newChatToken);
+  useEffect(() => {
+    displayKeyRef.current = displayKey;
+  }, [displayKey]);
+
+  const chatsRef = useRef(chats);
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
   const messages = messagesByChat[displayKey] ?? [];
   const { isThinking, thinkingText } = thinkingByChat[displayKey] ?? IDLE_THINKING;
 
@@ -88,6 +116,13 @@ export function Chat() {
   async function handleSend() {
     const content = input.trim();
     if (!content || isThinking) return;
+    if (!hasModel) return;
+    if (embeddingModelStatus !== null && !embeddingModelStatus.available) return;
+
+    // Fired from this click/submit gesture so the browser/webview is willing
+    // to show the OS permission prompt — requesting it later from onDone
+    // (an async stream callback, not a user gesture) gets silently ignored.
+    requestNotificationPermission();
 
     // The slot this send writes into. Starts as this new-chat screen's own
     // draft key (or the existing chat's id) and gets migrated to the real
@@ -185,6 +220,18 @@ export function Chat() {
         onDone: (finalContent, usedTools, steps) => {
           updateAgentMessage(key, { content: finalContent, usedTools, steps });
           refreshChats();
+
+          const isBeingViewed =
+            displayKeyRef.current === key && isWindowFocused();
+          if (!isBeingViewed) {
+            markChatUnread(key);
+            const chatTitle =
+              chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
+            notifyChatResponse(
+              chatTitle,
+              finalContent.slice(0, 120) || "Nueva respuesta disponible",
+            );
+          }
         },
         onError: (errorMessage) => {
           reportError([errorMessage]);

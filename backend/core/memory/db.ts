@@ -1,71 +1,38 @@
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
-import * as lancedb from "@lancedb/lancedb";
-import { EMBEDDING_DIMENSIONS } from "./embeddings.ts";
+import { mkdirSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 
-const CHATS_TABLE = "chats";
-const MESSAGES_TABLE = "messages";
+let db: DatabaseSync | null = null;
 
-let connection: lancedb.Connection | null = null;
-let chatsTable: lancedb.Table | null = null;
-let messagesTable: lancedb.Table | null = null;
+export function getDb(dataDir: string): DatabaseSync {
+  if (db) return db;
 
-async function getConnection(dataDir: string): Promise<lancedb.Connection> {
-  if (!connection) {
-    const dbDir = join(dataDir, "memory", "lancedb");
-    await mkdir(dbDir, { recursive: true });
-    connection = await lancedb.connect(dbDir);
-  }
-  return connection;
-}
+  const dbDir = join(dataDir, "memory");
+  mkdirSync(dbDir, { recursive: true });
+  db = new DatabaseSync(join(dbDir, "hiveai.db"));
 
-export async function getChatsTable(dataDir: string): Promise<lancedb.Table> {
-  if (chatsTable) return chatsTable;
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chats (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      messageCount INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      chatId TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      vector TEXT NOT NULL,
+      metadata TEXT NOT NULL
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+      content, id UNINDEXED
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_chatId ON messages(chatId);
+  `);
 
-  const db = await getConnection(dataDir);
-  const existingTables = await db.tableNames();
-
-  if (existingTables.includes(CHATS_TABLE)) {
-    chatsTable = await db.openTable(CHATS_TABLE);
-    return chatsTable;
-  }
-
-  chatsTable = await db.createTable(CHATS_TABLE, [
-    {
-      id: "__seed__",
-      title: "",
-      createdAt: 0,
-      updatedAt: 0,
-      messageCount: 0,
-    },
-  ]);
-  await chatsTable.delete("id = '__seed__'");
-  return chatsTable;
-}
-
-export async function getMessagesTable(dataDir: string): Promise<lancedb.Table> {
-  if (messagesTable) return messagesTable;
-
-  const db = await getConnection(dataDir);
-  const existingTables = await db.tableNames();
-
-  if (existingTables.includes(MESSAGES_TABLE)) {
-    messagesTable = await db.openTable(MESSAGES_TABLE);
-    return messagesTable;
-  }
-
-  messagesTable = await db.createTable(MESSAGES_TABLE, [
-    {
-      id: "__seed__",
-      chatId: "__seed__",
-      role: "user",
-      content: "seed",
-      timestamp: 0,
-      vector: Array(EMBEDDING_DIMENSIONS).fill(0),
-      metadata: "",
-    },
-  ]);
-  await messagesTable.delete("id = '__seed__'");
-  await messagesTable.createIndex("content", { config: lancedb.Index.fts() });
-  return messagesTable;
+  return db;
 }

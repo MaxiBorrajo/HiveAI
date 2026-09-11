@@ -25,6 +25,8 @@ interface ChatsContextValue {
   deleteChat: (chatId: string) => Promise<void>;
   onChatCreated: (chatId: string) => void;
   touchChat: (chatId: string) => void;
+  unreadChatIds: Set<string>;
+  markChatUnread: (chatId: string) => void;
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
@@ -34,6 +36,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [newChatToken, setNewChatToken] = useState(() => crypto.randomUUID());
   const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [unreadChatIds, setUnreadChatIds] = useState<Set<string>>(new Set());
 
   function refreshChats() {
     setIsLoadingChats(true);
@@ -46,6 +49,25 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
   function selectChat(chatId: string) {
     setActiveChatId(chatId);
+    markChatRead(chatId);
+  }
+
+  function markChatRead(chatId: string) {
+    setUnreadChatIds((prev) => {
+      if (!prev.has(chatId)) return prev;
+      const next = new Set(prev);
+      next.delete(chatId);
+      return next;
+    });
+  }
+
+  function markChatUnread(chatId: string) {
+    setUnreadChatIds((prev) => {
+      if (prev.has(chatId)) return prev;
+      const next = new Set(prev);
+      next.add(chatId);
+      return next;
+    });
   }
 
   function startNewChat() {
@@ -89,6 +111,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     deleteChat,
     onChatCreated,
     touchChat,
+    unreadChatIds,
+    markChatUnread,
   };
 
   return (

@@ -77,7 +77,8 @@ await hive.getConfig().load();
 // only if load() above didn't already restore persisted values.
 hive.configure({
   model: hive.getConfig().get("model") || DEFAULT_MODEL,
-  selectorModel: hive.getConfig().get("selectorModel") || DEFAULT_SELECTOR_MODEL,
+  selectorModel:
+    hive.getConfig().get("selectorModel") || DEFAULT_SELECTOR_MODEL,
   callbackBaseUrl: `http://localhost:${port}/api/external-plugin-callbacks`,
 });
 

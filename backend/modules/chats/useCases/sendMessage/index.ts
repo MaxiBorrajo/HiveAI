@@ -8,8 +8,14 @@ import {
 import { resolveModelOptions } from "../../../modes/utils/resolveModelOptions.ts";
 import { createChat, getChat, touchChat } from "../../../../core/memory/chatStore.ts";
 import { addMessage } from "../../../../core/memory/messageStore.ts";
-import { embedText, ensureEmbeddingModelReady } from "../../../../core/memory/embeddings.ts";
+import { embedText } from "../../../../core/memory/embeddings.ts";
 import { buildTurnContext } from "../../../../core/memory/contextBuilder.ts";
+
+// A sanity cap, not a token-accurate limit (that depends on the model's
+// tokenizer and the user's configured context window) — it exists to fail
+// fast on pathological input instead of only finding out ~3 minutes later,
+// when Ollama itself rejects a message that overflows its context length.
+const MAX_MESSAGE_LENGTH = 20_000;
 
 function deriveTitle(message: string): string {
   const trimmed = message.trim();
@@ -75,9 +81,20 @@ export function handleChat(
       try {
         const body = await req.json();
         const userText: string = body.message;
-        const dataDir = hive.getConfig().get("dataDir");
 
-        await ensureEmbeddingModelReady();
+        if (typeof userText !== "string" || userText.trim().length === 0) {
+          send("error", { message: "The 'message' field is required and must be a non-empty string." });
+          return;
+        }
+
+        if (userText.length > MAX_MESSAGE_LENGTH) {
+          send("error", {
+            message: `The message is too long (${userText.length} characters, max ${MAX_MESSAGE_LENGTH}).`,
+          });
+          return;
+        }
+
+        const dataDir = hive.getConfig().get("dataDir");
 
         let chatId: string = body.chatId;
         if (!chatId) {

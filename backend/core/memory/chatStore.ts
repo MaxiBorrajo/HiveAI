@@ -1,11 +1,8 @@
-import { getChatsTable, getMessagesTable } from "./db.ts";
+import { getDb } from "./db.ts";
 import type { ChatRecord } from "./types.ts";
 
-export async function createChat(
-  dataDir: string,
-  title: string,
-): Promise<ChatRecord> {
-  const table = await getChatsTable(dataDir);
+export function createChat(dataDir: string, title: string): ChatRecord {
+  const db = getDb(dataDir);
   const now = Date.now();
 
   const chat: ChatRecord = {
@@ -16,54 +13,48 @@ export async function createChat(
     messageCount: 0,
   };
 
-  await table.add([{ ...chat }]);
+  db.prepare(
+    `INSERT INTO chats (id, title, createdAt, updatedAt, messageCount) VALUES (?, ?, ?, ?, ?)`,
+  ).run(chat.id, chat.title, chat.createdAt, chat.updatedAt, chat.messageCount);
+
   return chat;
 }
 
-export async function listChats(dataDir: string): Promise<ChatRecord[]> {
-  const table = await getChatsTable(dataDir);
-  const rows = (await table.query().toArray()) as ChatRecord[];
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt);
+export function listChats(dataDir: string): ChatRecord[] {
+  const db = getDb(dataDir);
+  const rows = db
+    .prepare(`SELECT * FROM chats ORDER BY updatedAt DESC`)
+    .all() as unknown as ChatRecord[];
+
+  return rows;
 }
 
-export async function getChat(
-  dataDir: string,
-  chatId: string,
-): Promise<ChatRecord | null> {
-  const table = await getChatsTable(dataDir);
-  const rows = (await table
-    .query()
-    .where(`id = '${chatId}'`)
-    .limit(1)
-    .toArray()) as ChatRecord[];
+export function getChat(dataDir: string, chatId: string): ChatRecord | null {
+  const db = getDb(dataDir);
+  const row = db
+    .prepare(`SELECT * FROM chats WHERE id = ?`)
+    .get(chatId) as unknown as ChatRecord | undefined;
 
-  return rows[0] ?? null;
+  return row ?? null;
 }
 
-export async function touchChat(
-  dataDir: string,
-  chatId: string,
-): Promise<void> {
-  const table = await getChatsTable(dataDir);
-  const chat = await getChat(dataDir, chatId);
+export function touchChat(dataDir: string, chatId: string): void {
+  const db = getDb(dataDir);
+  const chat = getChat(dataDir, chatId);
   if (!chat) return;
 
-  await table.update({
-    where: `id = '${chatId}'`,
-    values: {
-      updatedAt: Date.now(),
-      messageCount: chat.messageCount + 1,
-    },
-  });
+  db.prepare(`UPDATE chats SET updatedAt = ?, messageCount = ? WHERE id = ?`).run(
+    Date.now(),
+    chat.messageCount + 1,
+    chatId,
+  );
 }
 
-export async function deleteChat(
-  dataDir: string,
-  chatId: string,
-): Promise<void> {
-  const chatsTable = await getChatsTable(dataDir);
-  const messagesTable = await getMessagesTable(dataDir);
-
-  await chatsTable.delete(`id = '${chatId}'`);
-  await messagesTable.delete(`chatId = '${chatId}'`);
+export function deleteChat(dataDir: string, chatId: string): void {
+  const db = getDb(dataDir);
+  db.prepare(`DELETE FROM chats WHERE id = ?`).run(chatId);
+  db.prepare(`DELETE FROM messages_fts WHERE id IN (SELECT id FROM messages WHERE chatId = ?)`).run(
+    chatId,
+  );
+  db.prepare(`DELETE FROM messages WHERE chatId = ?`).run(chatId);
 }

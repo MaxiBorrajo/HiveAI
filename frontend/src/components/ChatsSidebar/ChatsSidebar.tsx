@@ -35,8 +35,15 @@ function formatRelativeDate(timestamp: number): string {
 }
 
 export function ChatsSidebar() {
-  const { chats, activeChatId, isLoadingChats, selectChat, startNewChat, deleteChat } =
-    useChats();
+  const {
+    chats,
+    activeChatId,
+    isLoadingChats,
+    selectChat,
+    startNewChat,
+    deleteChat,
+    unreadChatIds,
+  } = useChats();
   const [chatPendingDelete, setChatPendingDelete] = useState<ChatSummary | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -120,7 +127,15 @@ export function ChatsSidebar() {
               onClick={() => selectChat(chat.id)}
             >
               <div className="flex-1 min-w-0">
-                <p className="truncate">{chat.title || "New chat"}</p>
+                <div className="flex items-center gap-1.5">
+                  {unreadChatIds.has(chat.id) && chat.id !== activeChatId && (
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-primary"
+                      title="Unread response"
+                    />
+                  )}
+                  <p className="truncate">{chat.title || "New chat"}</p>
+                </div>
                 <p className="text-[10px] opacity-60">
                   {formatRelativeDate(chat.updatedAt)}
                 </p>

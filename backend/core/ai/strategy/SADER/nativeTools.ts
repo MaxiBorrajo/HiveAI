@@ -8,7 +8,7 @@ const RECALL_TOOL_NAME = "recall_past_conversations";
 
 const RecallSchema = z.object({
   query: z.string().describe("What to search for in past conversations"),
-  limit: z.number().int().min(1).max(20).default(5).optional(),
+  limit: z.number().int().min(1).max(20).default(10).optional(),
 });
 
 type NativeTool = DynamicStructuredTool<
@@ -29,7 +29,7 @@ function buildRecallTool(chatId: string): NativeTool {
         dataDir,
         query,
         vector,
-        limit ?? 5,
+        limit ?? 10,
         chatId,
       );
 
@@ -47,7 +47,7 @@ function buildRecallTool(chatId: string): NativeTool {
     {
       name: RECALL_TOOL_NAME,
       description:
-        "Search across ALL previous chat conversations (not just the current one) for relevant information the user has mentioned before — facts, preferences, past decisions, or context from earlier sessions. Use this when the user references something that isn't in the current conversation, or asks you to remember something from before.",
+        "Search across OTHER past chat conversations, excluding the current one — facts, preferences, past decisions, or context from earlier sessions. Do NOT use this for information already present in the current conversation's messages (check those first); this tool cannot see the current chat and will return nothing for facts mentioned here. Use it only when the user references something from a previous, different chat.",
       schema: RecallSchema,
     },
   );

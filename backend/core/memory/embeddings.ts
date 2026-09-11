@@ -1,32 +1,37 @@
-import { Ollama } from "ollama";
+import { Ollama, type ProgressResponse } from "ollama";
 import { OllamaEmbeddings } from "@langchain/ollama";
 
 export const EMBEDDING_MODEL = "nomic-embed-text";
 export const EMBEDDING_DIMENSIONS = 768;
 
-let readyPromise: Promise<void> | null = null;
-
-export async function ensureEmbeddingModelReady(): Promise<void> {
-  if (!readyPromise) {
-    readyPromise = provisionEmbeddingModel().catch((error) => {
-      readyPromise = null;
-      throw error;
-    });
-  }
-  return readyPromise;
+// Never auto-pulls: nomic-embed-text is a few hundred MB, and downloading it
+// inline would block the chat (or memory persistence) for minutes on a
+// clean install. The user is expected to trigger the download themselves
+// (see pullEmbeddingModel(), exposed through the UI's banner) — see
+// isEmbeddingModelAvailable(), used to surface that as an upfront warning
+// instead of a silent multi-minute freeze.
+export async function isEmbeddingModelAvailable(): Promise<boolean> {
+  const ollama = new Ollama();
+  const { models } = await ollama.list();
+  return models.some((m) => m.name.startsWith(EMBEDDING_MODEL));
 }
 
-async function provisionEmbeddingModel(): Promise<void> {
+export async function* pullEmbeddingModel(): AsyncGenerator<ProgressResponse> {
   const ollama = new Ollama();
+  const stream = await ollama.pull({ model: EMBEDDING_MODEL, stream: true });
 
-  const { models } = await ollama.list();
-  const isDownloaded = models.some((m) => m.name.startsWith(EMBEDDING_MODEL));
+  for await (const progress of stream) {
+    yield progress;
+  }
+}
 
-  if (isDownloaded) return;
-
-  console.log(`[Memory] Pulling embedding model '${EMBEDDING_MODEL}'...`);
-  await ollama.pull({ model: EMBEDDING_MODEL });
-  console.log(`[Memory] Embedding model '${EMBEDDING_MODEL}' ready.`);
+export async function ensureEmbeddingModelReady(): Promise<void> {
+  const available = await isEmbeddingModelAvailable();
+  if (!available) {
+    throw new Error(
+      `Embedding model '${EMBEDDING_MODEL}' is not installed. Run 'ollama pull ${EMBEDDING_MODEL}' to enable conversation memory.`,
+    );
+  }
 }
 
 let embedder: OllamaEmbeddings | null = null;

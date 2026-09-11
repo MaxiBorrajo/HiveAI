@@ -9,6 +9,10 @@ import { Loader2 } from "lucide-react";
 import { getModels } from "@/lib/models/getModels";
 import { getCurrentModels } from "@/lib/models/getCurrentModels";
 import { setModels as setModelsRequest } from "@/lib/models/setModels";
+import {
+  getEmbeddingModelStatus,
+  type EmbeddingModelStatus,
+} from "@/lib/models/getEmbeddingModelStatus";
 import type { CurrentModels, ModelInfo } from "@/types/model";
 
 interface ModelsContextValue {
@@ -16,6 +20,7 @@ interface ModelsContextValue {
   current: CurrentModels;
   hasModel: boolean;
   hasAvailableModels: boolean;
+  embeddingModelStatus: EmbeddingModelStatus | null;
   isManageOpen: boolean;
   openManage: () => void;
   closeManage: () => void;
@@ -37,6 +42,8 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [modeResetSignal, setModeResetSignal] = useState(0);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [embeddingModelStatus, setEmbeddingModelStatus] =
+    useState<EmbeddingModelStatus | null>(null);
 
   async function runBusy<T>(message: string, task: () => Promise<T>): Promise<T> {
     setBusyMessage(message);
@@ -51,6 +58,9 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     getModels().then(({ data }) => setModels(data ?? []));
     getCurrentModels().then(({ data }) => {
       if (data) setCurrent(data);
+    });
+    getEmbeddingModelStatus().then(({ data }) => {
+      if (data) setEmbeddingModelStatus(data);
     });
   }
 
@@ -95,6 +105,7 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     current,
     hasModel: !!current.model && !!current.selectorModel,
     hasAvailableModels: models.length > 0,
+    embeddingModelStatus,
     isManageOpen,
     openManage: () => setIsManageOpen(true),
     closeManage: () => setIsManageOpen(false),

@@ -7,16 +7,24 @@ export async function deleteChat(
   chatId: string,
   headers: Record<string, string>,
 ): Promise<Response> {
-  const dataDir = hive.getConfig().get("dataDir");
+  try {
+    const dataDir = hive.getConfig().get("dataDir");
 
-  const chat = await getChat(dataDir, chatId);
-  if (!chat) {
-    return ResponseBuilder.error([`Chat '${chatId}' was not found.`], undefined, {
+    const chat = await getChat(dataDir, chatId);
+    if (!chat) {
+      return ResponseBuilder.error([`Chat '${chatId}' was not found.`], undefined, {
+        headers,
+        status: 404,
+      });
+    }
+
+    await deleteChatFromMemory(dataDir, chatId);
+    return ResponseBuilder.success({ success: true }, { headers });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return ResponseBuilder.error([`Failed to delete chat: ${detail}`], undefined, {
       headers,
-      status: 404,
+      status: 500,
     });
   }
-
-  await deleteChatFromMemory(dataDir, chatId);
-  return ResponseBuilder.success({ success: true }, { headers });
 }
