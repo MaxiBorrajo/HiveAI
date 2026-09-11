@@ -5,6 +5,7 @@ import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { captureSteps } from "../../../../microkernel/step-capture.ts";
 import type { HiveAIState, ChatStep } from "../graph.ts";
 import { getNativeTool } from "../nativeTools.ts";
+import { MAX_TOOL_CHAIN } from "../constants.ts";
 
 function summarize(text: string, maxChars = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -113,6 +114,15 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
         ok: true,
         output: toolResult.content as string,
       },
+      toolCallHistory: [
+        {
+          tool: toolCall.name,
+          args: toolCall.args as Record<string, unknown>,
+          output: toolResult.content as string,
+        },
+      ],
+      chainAttempts: 1,
+      hasChainedToolResult: true,
       steps,
     };
   } catch (error) {
@@ -150,5 +160,7 @@ export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
 };
 
 export const shouldDiagnose = (state: typeof HiveAIState.State) => {
-  return state.toolResult.ok ? "HiveQueenResponder" : "Diagnostician";
+  if (!state.toolResult.ok) return "Diagnostician";
+  if (state.chainAttempts < MAX_TOOL_CHAIN) return "Solver";
+  return "HiveQueenResponder";
 };

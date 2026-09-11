@@ -26,6 +26,7 @@ chatsRouter.post("/", async (c) => {
     hive,
     config.get("model"),
     config.get("selectorModel"),
+    config.get("currentStrategy"),
     c.req.raw,
     headers,
   );

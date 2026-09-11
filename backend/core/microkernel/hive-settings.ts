@@ -7,6 +7,7 @@ export interface HiveSettings {
   model: string;
   selectorModel: string;
   currentMode: string;
+  currentStrategy: string;
   ollamaKvCacheType: string;
   // Base URL external plugin subprocesses call back to for
   // requestApproval/reportStep (see core/microkernel/external-plugins/ and
@@ -19,6 +20,7 @@ const PERSISTED_KEYS = [
   "model",
   "selectorModel",
   "currentMode",
+  "currentStrategy",
   "ollamaKvCacheType",
 ] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;

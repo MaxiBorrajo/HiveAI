@@ -1,6 +1,6 @@
 import { type AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { z } from "zod";
-import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
+import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type {
   BeePlugin,
   ExecutionTestCase,
@@ -8,6 +8,7 @@ import type {
 } from "../../../../core/microkernel/bee-plugin.ts";
 import type { ExecutionTestResult, SelectionTestResult, TestKind } from "./types.ts";
 import { HiveMind } from "../../../../core/ai/strategy/SADER/graph.ts";
+import { Scout } from "../../../../core/ai/strategy/SCOUT/graph.ts";
 import { homeDir } from "hive-ai";
 import { join } from "node:path";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
@@ -16,6 +17,7 @@ export async function handleTest(
   hive: HiveMicrokernel,
   model: string,
   selectorModel: string,
+  strategy: string,
   pluginName: string,
   index: number,
   type: TestKind = "selection",
@@ -61,6 +63,7 @@ export async function handleTest(
       selectorModel,
       pluginName,
       req.signal,
+      strategy,
     );
   } else {
     return await executeExecutionTest(
@@ -71,12 +74,39 @@ export async function handleTest(
   }
 }
 
+// SCOUT can request more than one tool per turn, and can loop through
+// several turns before answering — so "was this plugin selected" has to
+// scan every tool call across the whole run, not just the first one of the
+// first AI message. Falls back to the very first tool call seen anywhere
+// (if the plugin under test was never chosen) so callers can still report
+// what was picked instead.
+function extractScoutToolCall(
+  messages: unknown[],
+  pluginName: string,
+): { name: string; args: Record<string, unknown> } | undefined {
+  let firstCall: { name: string; args: Record<string, unknown> } | undefined;
+
+  for (const msg of messages) {
+    const aiMsg = msg as AIMessage;
+    if (aiMsg.type !== "ai" || !aiMsg.tool_calls?.length) continue;
+
+    for (const call of aiMsg.tool_calls) {
+      const parsed = { name: call.name, args: call.args as Record<string, unknown> };
+      firstCall ??= parsed;
+      if (call.name === pluginName) return parsed;
+    }
+  }
+
+  return firstCall;
+}
+
 export async function executeSelectionTest(
   testCase: SelectionTestCase,
   model: string,
   selectorModel: string,
   pluginName: string,
   signal: AbortSignal,
+  strategy: string,
 ) {
   const start = performance.now();
   let success = false;
@@ -89,66 +119,113 @@ export async function executeSelectionTest(
   let inputTokens = 0;
   let outputTokens = 0;
 
+  // A selection test only wants to know whether the model would pick THIS
+  // plugin for this query. Both strategies bind every active plugin to the
+  // model and can run more than one real tool call before finishing (SCOUT
+  // natively, SADER via its chaining), so leaving other plugins active here
+  // risks a "negative" test (shouldInvoke: false) triggering a real,
+  // unrelated tool along the way — e.g. run_shell — as a side effect of just
+  // running a selection test. Deactivate every other plugin for the
+  // duration of the call so only the one under test can be invoked at all.
+  const microkernel = HiveMicrokernel.getInstance();
+  const otherActivePlugins = microkernel
+    .getRegisteredPlugins()
+    .filter((p) => p.name !== pluginName && microkernel.isActive(p.name))
+    .map((p) => p.name);
+
+  for (const name of otherActivePlugins) {
+    await microkernel.deactivate(name);
+  }
+
   try {
-    const result = await HiveMind.invoke(
-      {
-        messages: [new HumanMessage(testCase.query)],
-        currentPrompt: testCase.query,
-        model,
-        selectorModel,
-      },
-      { signal },
-    );
+    try {
+      let selectedTool: string | undefined;
+      let params: Record<string, unknown> | undefined;
+      let resultMessages: unknown[] = [];
 
-    details = {
-      selectedTool: result.selectedTool,
-      extractedParams: result.args?.params,
-    };
-
-    if (result.messages && Array.isArray(result.messages)) {
-      for (const msg of result.messages) {
-        if (msg.type === "ai" && msg.response_metadata) {
-          inputTokens += (msg as AIMessage).usage_metadata?.input_tokens ?? 0;
-          outputTokens += (msg as AIMessage).usage_metadata?.output_tokens ?? 0;
-        }
+      if (strategy === "SCOUT") {
+        const result = await Scout.invoke(
+          {
+            messages: [new HumanMessage(testCase.query)],
+            chatId: "plugin-selection-test",
+            model,
+            modelOptions: {},
+          },
+          { signal },
+        );
+        resultMessages = result.messages ?? [];
+        const call = extractScoutToolCall(resultMessages, pluginName);
+        selectedTool = call?.name;
+        params = call?.args;
+      } else {
+        const result = await HiveMind.invoke(
+          {
+            messages: [new HumanMessage(testCase.query)],
+            currentPrompt: testCase.query,
+            model,
+            selectorModel,
+          },
+          { signal },
+        );
+        resultMessages = result.messages ?? [];
+        selectedTool = result.selectedTool;
+        params = result.args?.params;
       }
-    }
 
-    const selected = result.selectedTool;
-    const didInvoke = selected === pluginName;
+      details = {
+        selectedTool,
+        extractedParams: params,
+      };
 
-    if (testCase.shouldInvoke && !didInvoke) {
-      failureCategory = "Misrouting";
-      errors.push(
-        `Expected plugin '${pluginName}' to be selected, but '${selected || "none"}' was selected instead.`,
-      );
-    } else if (!testCase.shouldInvoke && didInvoke) {
-      failureCategory = "Misrouting";
-      errors.push(
-        `Expected plugin '${pluginName}' NOT to be selected, but it was.`,
-      );
-    } else {
-      if (testCase.shouldInvoke && didInvoke && testCase.expectedParams) {
-        const actualParams = result.args?.params || {};
-        for (const [key, expectedValue] of Object.entries(
-          testCase.expectedParams,
-        )) {
-          const actualValue = actualParams[key];
-          if (JSON.stringify(actualValue) !== JSON.stringify(expectedValue)) {
-            failureCategory = "Hallucination";
-            errors.push(
-              `Parameter '${key}' mismatch. Expected: ${JSON.stringify(expectedValue)}, but got: ${JSON.stringify(actualValue)}`,
-            );
+      if (Array.isArray(resultMessages)) {
+        for (const msg of resultMessages) {
+          const aiMsg = msg as AIMessage;
+          if (aiMsg.type === "ai" && aiMsg.response_metadata) {
+            inputTokens += aiMsg.usage_metadata?.input_tokens ?? 0;
+            outputTokens += aiMsg.usage_metadata?.output_tokens ?? 0;
           }
         }
       }
-      if (errors.length === 0) {
-        success = true;
+
+      const didInvoke = selectedTool === pluginName;
+
+      if (testCase.shouldInvoke && !didInvoke) {
+        failureCategory = "Misrouting";
+        errors.push(
+          `Expected plugin '${pluginName}' to be selected, but '${selectedTool || "none"}' was selected instead.`,
+        );
+      } else if (!testCase.shouldInvoke && didInvoke) {
+        failureCategory = "Misrouting";
+        errors.push(
+          `Expected plugin '${pluginName}' NOT to be selected, but it was.`,
+        );
+      } else {
+        if (testCase.shouldInvoke && didInvoke && testCase.expectedParams) {
+          const actualParams = params || {};
+          for (const [key, expectedValue] of Object.entries(
+            testCase.expectedParams,
+          )) {
+            const actualValue = actualParams[key];
+            if (JSON.stringify(actualValue) !== JSON.stringify(expectedValue)) {
+              failureCategory = "Hallucination";
+              errors.push(
+                `Parameter '${key}' mismatch. Expected: ${JSON.stringify(expectedValue)}, but got: ${JSON.stringify(actualValue)}`,
+              );
+            }
+          }
+        }
+        if (errors.length === 0) {
+          success = true;
+        }
       }
+    } catch (err) {
+      failureCategory = "Error";
+      errors.push(String(err));
     }
-  } catch (err) {
-    failureCategory = "Error";
-    errors.push(String(err));
+  } finally {
+    for (const name of otherActivePlugins) {
+      await microkernel.activate(name);
+    }
   }
   const end = performance.now();
   const durationMs = Math.round(end - start);

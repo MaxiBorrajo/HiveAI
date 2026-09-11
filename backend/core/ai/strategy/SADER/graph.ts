@@ -16,7 +16,7 @@ import { Executor, shouldDiagnose } from "./executor/node.ts";
 import { HiveQueenResponder } from "./responder/node.ts";
 import { shouldRespond, Solver } from "./solver/node.ts";
 
-const ChatStepSchema = z.object({
+export const ChatStepSchema = z.object({
   node: z.enum([
     "Solver",
     "AbstentionVerificator",
@@ -24,6 +24,7 @@ const ChatStepSchema = z.object({
     "Diagnostician",
     "HiveQueenResponder",
     "Plugin",
+    "Agent",
   ]),
   label: z.string(),
   durationMs: z.number(),
@@ -74,6 +75,22 @@ export const HiveAIState = new StateSchema({
     params: z.record(z.string(), z.unknown()),
   }),
   giveUp: z.boolean().default(false),
+  chainAttempts: new ReducedValue(z.number().default(0), {
+    reducer: (x: number, y: number) => x + y,
+  }),
+  hasChainedToolResult: z.boolean().default(false),
+  toolCallHistory: new ReducedValue(
+    z
+      .array(
+        z.object({
+          tool: z.string(),
+          args: z.record(z.string(), z.unknown()),
+          output: z.string(),
+        }),
+      )
+      .default([]),
+    { reducer: (current, next) => [...current, ...next] },
+  ),
 });
 
 export const HiveMind = new StateGraph(HiveAIState)
@@ -96,6 +113,7 @@ export const HiveMind = new StateGraph(HiveAIState)
   .addConditionalEdges("Executor", shouldDiagnose, [
     "HiveQueenResponder",
     "Diagnostician",
+    "Solver",
   ])
   .addConditionalEdges("Diagnostician", shouldRetry, [
     "HiveQueenResponder",

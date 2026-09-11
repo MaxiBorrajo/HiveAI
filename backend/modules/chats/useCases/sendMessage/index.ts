@@ -2,9 +2,9 @@ import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microker
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 import {
   HiveMind,
-  HiveAIState,
   type ChatStep,
 } from "../../../../core/ai/strategy/SADER/graph.ts";
+import { Scout } from "../../../../core/ai/strategy/SCOUT/graph.ts";
 import { resolveModelOptions } from "../../../modes/utils/resolveModelOptions.ts";
 import { createChat, getChat, touchChat } from "../../../../core/memory/chatStore.ts";
 import { addMessage } from "../../../../core/memory/messageStore.ts";
@@ -75,10 +75,65 @@ function appendThinkingDelta(
   }
 }
 
+// Consumes a compiled LangGraph strategy's stream, regardless of which
+// strategy produced it — the only thing that differs between strategies is
+// which node's tokens count as the final answer to show the user.
+async function consumeStream(
+  streamIterable: AsyncIterable<unknown>,
+  finalNodeName: string,
+  send: (event: string, data: unknown) => void,
+): Promise<{ fullContent: string; steps: ChatStep[]; thinkingRuns: ThinkingRun[] }> {
+  let fullContent = "";
+  const steps: ChatStep[] = [];
+  const thinkingRuns: ThinkingRun[] = [];
+
+  for await (const chunk of streamIterable) {
+    const [mode, payload] = chunk as
+      | [
+          "messages",
+          [
+            {
+              content?: unknown;
+              additional_kwargs?: { reasoning_content?: string };
+            },
+            { langgraph_node?: string },
+          ],
+        ]
+      | ["values", { steps: ChatStep[] }];
+
+    if (mode === "messages") {
+      const [message, metadata] = payload;
+
+      const reasoningChunk = message.additional_kwargs?.reasoning_content;
+      if (reasoningChunk) {
+        appendThinkingDelta(thinkingRuns, reasoningChunk, metadata.langgraph_node);
+        send("thinking_delta", {
+          content: reasoningChunk,
+          node: metadata.langgraph_node,
+        });
+      }
+
+      if (metadata.langgraph_node !== finalNodeName) continue;
+
+      const chunkText = String(message.content ?? "");
+      if (!chunkText) continue;
+      fullContent += chunkText;
+      send("token", { content: chunkText });
+      continue;
+    }
+
+    steps.length = 0;
+    steps.push(...payload.steps);
+  }
+
+  return { fullContent, steps, thinkingRuns };
+}
+
 export function handleChat(
   hive: HiveMicrokernel,
   model: string,
   selectorModel: string,
+  strategy: string,
   req: Request,
   headers: Record<string, string>,
 ): Response {
@@ -147,58 +202,30 @@ export function handleChat(
 
         const contextMessages = await buildTurnContext(dataDir, chatId, userText);
 
-        let fullContent = "";
-        const steps: ChatStep[] = [];
-        const thinkingRuns: ThinkingRun[] = [];
+        const isScout = strategy === "SCOUT";
 
-        for await (const chunk of await HiveMind.stream(
-          {
-            messages: contextMessages,
-            chatId,
-            model,
-            selectorModel,
-            currentPrompt: userText,
-            modelOptions,
-          },
-          { streamMode: ["messages", "values"] },
-        )) {
-          const [mode, payload] = chunk as
-            | [
-                "messages",
-                [
-                  {
-                    content?: unknown;
-                    additional_kwargs?: { reasoning_content?: string };
-                  },
-                  { langgraph_node?: string },
-                ],
-              ]
-            | ["values", typeof HiveAIState.State];
+        const streamIterable = isScout
+          ? await Scout.stream(
+              { messages: contextMessages, chatId, model, modelOptions },
+              { streamMode: ["messages", "values"] },
+            )
+          : await HiveMind.stream(
+              {
+                messages: contextMessages,
+                chatId,
+                model,
+                selectorModel,
+                currentPrompt: userText,
+                modelOptions,
+              },
+              { streamMode: ["messages", "values"] },
+            );
 
-          if (mode === "messages") {
-            const [message, metadata] = payload;
-
-            const reasoningChunk = message.additional_kwargs?.reasoning_content;
-            if (reasoningChunk) {
-              appendThinkingDelta(thinkingRuns, reasoningChunk, metadata.langgraph_node);
-              send("thinking_delta", {
-                content: reasoningChunk,
-                node: metadata.langgraph_node,
-              });
-            }
-
-            if (metadata.langgraph_node !== "HiveQueenResponder") continue;
-
-            const chunkText = String(message.content ?? "");
-            if (!chunkText) continue;
-            fullContent += chunkText;
-            send("token", { content: chunkText });
-            continue;
-          }
-
-          steps.length = 0;
-          steps.push(...payload.steps);
-        }
+        const { fullContent, steps, thinkingRuns } = await consumeStream(
+          streamIterable,
+          isScout ? "Agent" : "HiveQueenResponder",
+          send,
+        );
 
         const usedTools = Array.from(
           new Set(

@@ -8,24 +8,11 @@ import type {
 
 const MAX_OUTPUT_CHARS = 4000;
 
-const SHELL_LAUNCHERS: Record<
-  string,
-  (command: string) => { bin: string; args: string[] }
-> = {
-  bash: (command) => ({ bin: "bash", args: ["-c", command] }),
-  cmd: (command) => ({ bin: "cmd", args: ["/d", "/c", command] }),
-  powershell: (command) => ({
-    bin: "powershell",
-    args: ["-NoProfile", "-NonInteractive", "-Command", command],
-  }),
-};
+function launchBash(command: string): { bin: string; args: string[] } {
+  return { bin: "bash", args: ["-c", command] };
+}
 
 const schema = z.object({
-  shell: z
-    .enum(["bash", "cmd", "powershell"])
-    .describe(
-      "Which shell interpreter to run the command with. Pick one available on the current OS (bash/cmd on most systems, powershell on Windows).",
-    ),
   command: z
     .string()
     .describe(
@@ -44,7 +31,7 @@ type RunShellSchema = typeof schema;
 export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   name = "run_shell";
   description =
-    "Executes raw shell commands (bash/cmd/powershell) with full pipeline and redirection support. USE CASES: Use this as a fallback for complex system administration tasks that native plugins cannot handle, such as checking memory usage, killing processes, installing packages, or running external CLI tools like git, npm, or python. A human must approve the command, so prefer native plugins (like file_read or file_ops) when possible.";
+    "Executes raw shell commands via bash, with full pipeline and redirection support. USE CASES: the general-purpose fallback for system administration tasks and any external CLI tool (git, npm, python, docker, etc.) — checking memory usage, killing processes, installing packages, version control status/diffs, and anything else a native plugin doesn't cover. A human must approve the command before it runs. Prefer a native plugin only when it fully covers what's being asked; if no native plugin can produce the specific information or action requested, use this tool instead of forcing a native plugin to approximate it.";
 
   schema = schema;
 
@@ -60,8 +47,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       shouldInvoke: true,
     },
     {
-      query:
-        "run a powershell command to list running processes sorted by memory",
+      query: "run a command to list running processes sorted by memory",
       kind: "positive",
       shouldInvoke: true,
     },
@@ -98,46 +84,45 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     {
       description: "Run a simple echo command via bash",
       kind: "happy",
-      params: { shell: "bash", command: "echo hello" },
+      params: { command: "echo hello" },
       expect: (output: string) => output.includes("hello"),
     },
     {
       description: "Run a piped command via bash",
       kind: "happy",
-      params: { shell: "bash", command: "echo hello world | wc -w" },
+      params: { command: "echo hello world | wc -w" },
       expect: (output: string) => output.trim().length > 0,
     },
     {
       description: "Run a command with an explicit valid cwd",
       kind: "happy",
-      params: { shell: "bash", command: "pwd", cwd: Deno.cwd() },
+      params: { command: "pwd", cwd: Deno.cwd() },
       expect: (output: string) => output.includes(Deno.cwd()),
     },
     {
       description: "Command producing no output still returns a message",
       kind: "edge",
-      params: { shell: "bash", command: "true" },
+      params: { command: "true" },
       expect: (output: string) =>
         output.includes("the command produced no output"),
     },
     {
       description: "Command writing to stderr on success is still reported",
       kind: "edge",
-      params: { shell: "bash", command: "echo warning 1>&2; echo ok" },
+      params: { command: "echo warning 1>&2; echo ok" },
       expect: (output: string) =>
         output.includes("ok") && output.includes("stderr: warning"),
     },
     {
       description: "Non-zero exit code is reported with detail",
       kind: "edge",
-      params: { shell: "bash", command: "exit 3" },
+      params: { command: "exit 3" },
       expect: (output: string) => output.includes("exit code 3"),
     },
     {
       description: "Invalid, non-existent cwd fails clearly",
       kind: "error",
       params: {
-        shell: "bash",
         command: "pwd",
         cwd: "/non/existent/directory/path/12345",
       },
@@ -147,13 +132,13 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     {
       description: "cwd pointing to a file, not a directory, fails clearly",
       kind: "error",
-      params: { shell: "bash", command: "pwd", cwd: `${Deno.cwd()}/deno.json` },
+      params: { command: "pwd", cwd: `${Deno.cwd()}/deno.json` },
       expect: (output: string) => output.includes("is a file, not a directory"),
     },
     {
       description: "Missing required command property",
       kind: "error",
-      params: { shell: "bash", command: undefined as unknown as string },
+      params: { command: undefined as unknown as string },
       expect: (output: string) => output.toLowerCase().includes("invalid"),
     },
   ];
@@ -174,7 +159,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { shell, command, cwd } = parsed.data;
+    const { command, cwd } = parsed.data;
 
     if (cwd) {
       try {
@@ -188,26 +173,26 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     }
 
     console.log(
-      `[run-shell] 🐝 Requesting human approval for [${shell}]: ${command} (cwd: ${cwd || "default"})`,
+      `[run-shell] 🐝 Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
     );
 
     const approved = await this.context.requestApproval(
       "El agente quiere ejecutar un comando",
-      `Esta acción usa una shell real (${shell}), sin restricciones de comandos. Revisá el comando antes de aprobarlo.`,
-      { shell, command, ...(cwd ? { cwd } : {}) },
+      `Esta acción usa una shell real (bash), sin restricciones de comandos. Revisá el comando antes de aprobarlo.`,
+      { command, ...(cwd ? { cwd } : {}) },
     );
 
     if (!approved) {
       console.warn(`[run-shell] 🚫 Command was rejected or timed out.`);
-      return `The command was NOT executed: it was rejected by the user, or no response was received in time. Do not silently retry — ask the user if they want to proceed differently.`;
+      throw new Error(
+        "The command was not executed: it was rejected by the user, or no approval response was received in time.",
+      );
     }
 
     console.log(`[run-shell] ✅ Command approved. Executing...`);
 
-    const launcher = SHELL_LAUNCHERS[shell];
-
     try {
-      const resolved = launcher(command);
+      const resolved = launchBash(command);
       const proc = new Deno.Command(resolved.bin, {
         args: resolved.args,
         cwd: cwd || undefined,
@@ -236,7 +221,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       return errorOutput ? `${result}\n\n(stderr: ${errorOutput})` : result;
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return `The shell '${shell}' is not available on this system.`;
+        return `The shell 'bash' is not available on this system.`;
       }
       const detail = error instanceof Error ? error.message : String(error);
       return `An error occurred while executing the command: ${detail}`;

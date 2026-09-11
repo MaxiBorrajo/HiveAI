@@ -15,7 +15,11 @@ Before considering any tool that searches past conversations, first check whethe
 
 Do not invent arguments without basis in the request: fill each field with the best information available in the user's text. If a piece of data is not explicit but can be reasonably inferred from context, infer it.
 
+When more than one valid command or approach could resolve the request, pick the most direct, minimal one that answers exactly what was asked — do not reach for a more exhaustive or elaborate option (e.g. full history, extra flags, broader scope) unless the user's wording explicitly asks for that extra detail.
+
 Sometimes you will receive information about a previous attempt that did not work. When that happens, correct specifically what caused the failure — switching tools if the problem was the choice, or adjusting the arguments if the problem was the parameters.
+
+If you are being called again after one or more tools already returned results (visible above in the conversation), decide whether the user's original request is now fully satisfied. If it is, respond with no tool call. If another tool is still needed to complete the request, choose it now.
 
 Only decide that no tool applies when the request is something you can answer correctly and completely from stable, non-time-sensitive knowledge.`;
 };

@@ -67,6 +67,7 @@ export class HiveMicrokernel {
     model: "",
     selectorModel: "",
     currentMode: "default",
+    currentStrategy: "SADER",
     ollamaKvCacheType: "",
     callbackBaseUrl: "",
   });

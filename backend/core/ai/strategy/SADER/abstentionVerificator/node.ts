@@ -69,7 +69,7 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     action: "confirm" | "challenge";
     reason: string;
     suggestedTool?: string;
-  }>(response.content as string);
+  }>(response.content as string, "AbstentionVerificator");
 
   console.log(
     `[SADER - AbstentionVerificator] Parsed verification result:`,

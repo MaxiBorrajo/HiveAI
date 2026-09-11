@@ -90,6 +90,13 @@ async function loadPlugins() {
     }
   }
 
+  // Built-in plugins are active by default — the model should be able to
+  // use any of them out of the box, without the user having to visit the
+  // Plugins settings first.
+  for (const plugin of hive.getRegisteredPlugins()) {
+    await hive.activate(plugin.name);
+  }
+
   // Relaunches every plugin the user imported in a previous session as its
   // own subprocess — see core/microkernel/external-plugins/ for why they run
   // out-of-process instead of being import()'d directly.

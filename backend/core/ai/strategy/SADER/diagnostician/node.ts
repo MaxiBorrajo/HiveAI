@@ -74,7 +74,7 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
   const parsed = parseModelJSON<{
     action: "retry" | "giveUp";
     reason: string;
-  }>(response.content as string);
+  }>(response.content as string, "Diagnostician");
 
   console.log(`[SADER - Diagnostician] Parsed diagnosis result:`, parsed);
 

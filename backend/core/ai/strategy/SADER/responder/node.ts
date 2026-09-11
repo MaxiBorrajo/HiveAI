@@ -60,9 +60,7 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
         : {
             humanPrompt: responderSuccessHumanPrompt(
               state.currentPrompt,
-              state.selectedTool,
-              state.args.params,
-              state.toolResult.output,
+              state.toolCallHistory,
             ),
             systemPrompt: RESPONDER_SUCCESS_SYSTEM_PROMPT,
           };

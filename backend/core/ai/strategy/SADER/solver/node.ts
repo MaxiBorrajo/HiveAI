@@ -14,7 +14,7 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
   console.log(`[SADER - Solver] state.modelOptions:`, state.modelOptions);
   const selectorOptions = {
     model: state.selectorModel,
-    think: false,
+    think: true,
     ...state.modelOptions,
   };
   const selectorModel = new ChatOllama(selectorOptions);
@@ -158,6 +158,7 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
 
 export const shouldRespond = (state: typeof HiveAIState.State) => {
   if (state.selectedTool === "NONE") {
+    if (state.hasChainedToolResult) return "HiveQueenResponder";
     if (state.abstentionVerified) return "HiveQueenResponder";
     return "AbstentionVerificator";
   }

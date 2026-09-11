@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 
 export interface ChatStep {
-  node: "Solver" | "AbstentionVerificator" | "Executor" | "Diagnostician" | "HiveQueenResponder" | "Plugin";
+  node: "Solver" | "AbstentionVerificator" | "Executor" | "Diagnostician" | "HiveQueenResponder" | "Plugin" | "Agent";
   label: string;
   durationMs: number;
   summary: string;
