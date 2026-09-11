@@ -22,6 +22,7 @@ export interface Plugin {
   active: boolean;
   selectionTests?: SelectionTestCase[];
   executionTests?: ExecutionTestCase[];
+  isExternal?: boolean;
 }
 
 export interface PluginSelectionTestItem extends SelectionTestCase {

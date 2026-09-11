@@ -15,6 +15,17 @@ import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
 import { type DynamicStructuredTool, tool } from "@langchain/core/tools";
 import type { RunnableConfig } from "@langchain/core/runnables";
+import {
+  launchExternalPlugin,
+  stopSharedHostIfIdle,
+  type ExternalPluginHandle,
+} from "./external-plugins/external-plugin-host.ts";
+import {
+  ExternalPluginRegistry,
+  externalPluginNameFromSourceDir,
+  type ExternalPluginMetadata,
+  type ExternalPluginRecord,
+} from "./external-plugins/external-plugin-registry.ts";
 
 const REQUIRED_FIELDS = [
   "name",
@@ -57,6 +68,7 @@ export class HiveMicrokernel {
     selectorModel: "",
     currentMode: "default",
     ollamaKvCacheType: "",
+    callbackBaseUrl: "",
   });
 
   public static getInstance(): HiveMicrokernel {
@@ -73,6 +85,44 @@ export class HiveMicrokernel {
 
   getConfig() {
     return this.config;
+  }
+
+  private externalPluginNames = new Set<string>();
+  // Only holds an entry while the plugin's subprocess is actually running
+  // (i.e. while it's active). Used by deactivate() to kill it.
+  private externalPluginHandles = new Map<string, ExternalPluginHandle>();
+  // Metadata for external plugins that are registered but not yet activated
+  // (no subprocess running). Consulted by activate() to know which real
+  // source dir to launch when the placeholder gets turned on.
+  private externalPluginRecords = new Map<string, ExternalPluginRecord>();
+
+  private get externalPluginRegistry(): ExternalPluginRegistry {
+    return new ExternalPluginRegistry(
+      join(this.config.get("dataDir"), "external-plugins"),
+    );
+  }
+
+  // A registered-but-not-running external plugin. Its process() rejects
+  // since it should never actually be invoked: getTools() only offers active
+  // plugins, and activate() replaces this placeholder with the real,
+  // subprocess-backed BeePlugin before the plugin can be marked active.
+  private buildUnloadedExternalPlugin(record: ExternalPluginRecord): BeePlugin {
+    return {
+      name: record.name,
+      description: record.metadata.description,
+      schema: z.unknown(),
+      selectionTests: record.metadata.selectionTests,
+      executionTests: record.metadata.executionTests.map((t) => ({
+        ...t,
+        expect: () => true,
+      })) as ExecutionTestCase[],
+      initialize: async () => {},
+      process: async () => {
+        throw new Error(
+          `ERROR: External bee '${record.name}' has no running subprocess. It must be activated first.`,
+        );
+      },
+    };
   }
 
   private buildContext(pluginName: string): BeeContext {
@@ -250,12 +300,27 @@ export class HiveMicrokernel {
     this.activePlugins.delete(name);
   }
 
-  activate(name: string): boolean {
+  async activate(name: string): Promise<boolean> {
     if (!this.plugins.has(name)) {
       console.warn(
         `WARNING: Tried to activate '${name}' but it is not registered. Registered bees: [${Array.from(this.plugins.keys()).join(", ")}]`,
       );
       return false;
+    }
+
+    // External plugins are registered with a lightweight placeholder (no
+    // subprocess running). Launch the real thing now, on activation, so a
+    // plugin the user imported but never turns on never costs a process.
+    if (this.externalPluginNames.has(name) && !this.externalPluginHandles.has(name)) {
+      const record = this.externalPluginRecords.get(name);
+      if (!record) {
+        console.warn(`WARNING: No persisted record for external bee '${name}', cannot launch it.`);
+        return false;
+      }
+      const callbackBaseUrl = this.config.get("callbackBaseUrl");
+      const handle = await launchExternalPlugin(name, record.dir, callbackBaseUrl);
+      this.externalPluginHandles.set(name, handle);
+      await this.register(handle.plugin);
     }
 
     this.activePlugins.add(name);
@@ -265,11 +330,35 @@ export class HiveMicrokernel {
     return true;
   }
 
-  deactivate(name: string): boolean {
+  private hasActiveExternalPlugins(): boolean {
+    for (const name of this.activePlugins) {
+      if (this.externalPluginHandles.has(name)) return true;
+    }
+    return false;
+  }
+
+  async deactivate(name: string): Promise<boolean> {
     const removed = this.activePlugins.delete(name);
     console.log(
       `Bee '${name}' deactivated (was active: ${removed}). Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
     );
+
+    // Unload the plugin from the shared plugin-host subprocess and swap the
+    // registered plugin back for the lightweight placeholder, so an
+    // inactive imported plugin holds no loaded state — the whole point of
+    // lazy launch. The subprocess itself only gets killed once nothing else
+    // external is still active (see stopSharedHostIfIdle below).
+    const handle = this.externalPluginHandles.get(name);
+    if (handle) {
+      await handle.stop();
+      this.externalPluginHandles.delete(name);
+      const record = this.externalPluginRecords.get(name);
+      if (record) {
+        this.plugins.set(name, this.buildUnloadedExternalPlugin(record));
+      }
+      stopSharedHostIfIdle(this.hasActiveExternalPlugins());
+    }
+
     return removed;
   }
 
@@ -360,6 +449,153 @@ export class HiveMicrokernel {
 
     await this.register(pluginInstance);
     return true;
+  }
+
+  // Imports a plugin from an arbitrary folder the user picked at runtime.
+  // Unlike loadAndRegister (used only for built-in plugins bundled at build
+  // time, which the compiled app CAN import() directly), this never imports
+  // the plugin's code into this process — see
+  // core/microkernel/external-plugins/external-plugin-host.ts for why. The
+  // folder is copied into our own external-plugins directory (surviving even
+  // if the original is later moved/deleted) and launched as a subprocess.
+  async importExternalPlugin(sourceDir: string): Promise<BeePlugin> {
+    const callbackBaseUrl = this.config.get("callbackBaseUrl");
+
+    // Peek at the plugin's declared name and metadata before persisting, so
+    // the copied folder is stored under the name the plugin identifies
+    // itself with (not whatever the source folder happened to be called),
+    // and so its tests can be saved for future restarts without needing to
+    // relaunch the subprocess just to ask for them. Uses the source folder's
+    // own basename as a temporary handle since the plugin's real name isn't
+    // known until after this load.
+    const probeName = externalPluginNameFromSourceDir(sourceDir);
+    const probe = await launchExternalPlugin(probeName, sourceDir, callbackBaseUrl);
+    const metadata: ExternalPluginMetadata = {
+      description: probe.plugin.description,
+      selectionTests: probe.plugin.selectionTests,
+      executionTests: probe.plugin.executionTests.map(
+        ({ expect: _expect, ...rest }) => rest,
+      ),
+    };
+    await probe.stop();
+    // Deliberately does NOT call stopSharedHostIfIdle here: the real load
+    // a few lines down needs the shared host again immediately, and killing
+    // it in between (a) is wasted work — respawning it is the slow part of
+    // this whole flow — and (b) is a real race if another activate/import
+    // is running concurrently and still relying on the same host process.
+    // hasActiveExternalPlugins() also wouldn't even see this import's own
+    // handle yet, since it isn't registered until below. The host is only
+    // ever torn down from activate/deactivate/removeExternalPlugin, once
+    // the full picture of what's still active is settled.
+
+    const record = await this.externalPluginRegistry.importFrom(
+      sourceDir,
+      probe.plugin.name,
+      metadata,
+    );
+    this.externalPluginRecords.set(record.name, record);
+
+    // Import turns the plugin on immediately (the user just picked it), so
+    // launch it in the shared plugin host now rather than leaving it as a
+    // placeholder.
+    try {
+      const handle = await launchExternalPlugin(record.name, record.dir, callbackBaseUrl);
+      this.externalPluginNames.add(handle.plugin.name);
+      this.externalPluginHandles.set(handle.plugin.name, handle);
+      await this.register(handle.plugin);
+      return handle.plugin;
+    } catch (error) {
+      // register() (test suite quality, etc.) can still fail after the copy
+      // above already landed on disk and in the manifest — without this,
+      // a rejected import leaves an orphaned, unregistered copy behind that
+      // never shows up in the plugin list but blocks a clean re-import.
+      this.externalPluginRecords.delete(record.name);
+      this.externalPluginNames.delete(record.name);
+      this.externalPluginHandles.delete(record.name);
+      await this.externalPluginRegistry.remove(record.name);
+      throw error;
+    }
+  }
+
+  // Called once at startup (after configure() has set the real dataDir and
+  // callbackBaseUrl) to register every previously-imported external plugin
+  // using its persisted metadata, WITHOUT launching a subprocess for it —
+  // subprocesses are only spawned lazily, on activate(), so an imported but
+  // inactive plugin costs no RAM. Imports survive an app restart without the
+  // user having to re-import them.
+  async loadPersistedExternalPlugins(): Promise<void> {
+    const records = await this.externalPluginRegistry.list();
+    for (const record of records) {
+      try {
+        this.externalPluginRecords.set(record.name, record);
+        this.externalPluginNames.add(record.name);
+        await this.register(this.buildUnloadedExternalPlugin(record));
+      } catch (error) {
+        console.error(
+          `ERROR: Could not register external plugin '${record.name}':`,
+          error,
+        );
+      }
+    }
+  }
+
+  isExternalPlugin(name: string): boolean {
+    return this.externalPluginNames.has(name);
+  }
+
+  // Where an already-imported external plugin's code lives on disk, so it
+  // can be re-exported as a .zip (e.g. to share with someone else) without
+  // needing its subprocess to be running.
+  async getExternalPluginDir(name: string): Promise<string | undefined> {
+    if (!this.externalPluginNames.has(name)) return undefined;
+    const record = this.externalPluginRecords.get(name) ??
+      (await this.externalPluginRegistry.get(name));
+    return record?.dir;
+  }
+
+  // Deactivates and unregisters an external plugin (killing its subprocess
+  // if it was running) WITHOUT touching its files or manifest entry on
+  // disk — shared by removeExternalPlugin (which deletes those right after)
+  // and convertExternalPluginToDraft (which instead moves them into the
+  // drafts directory for editing). Returns its on-disk dir so the caller
+  // can decide what to do with it.
+  private async detachExternalPlugin(name: string): Promise<string | undefined> {
+    if (!this.externalPluginNames.has(name)) return undefined;
+    const dir = await this.getExternalPluginDir(name);
+
+    const handle = this.externalPluginHandles.get(name);
+    if (handle) {
+      await handle.stop();
+      this.externalPluginHandles.delete(name);
+    }
+    // unregister() below also calls plugin.dispose?.() on the still-registered
+    // handle.plugin, which issues a second, now-redundant DELETE to the
+    // plugin host — harmless (the host just replies success on an
+    // already-unloaded name) and not worth special-casing unregister() for,
+    // since it's shared with built-in plugins that DO need their dispose().
+    await this.unregister(name);
+    this.externalPluginNames.delete(name);
+    this.externalPluginRecords.delete(name);
+    stopSharedHostIfIdle(this.hasActiveExternalPlugins());
+    return dir;
+  }
+
+  async removeExternalPlugin(name: string): Promise<boolean> {
+    if (!this.externalPluginNames.has(name)) return false;
+    await this.detachExternalPlugin(name);
+    return this.externalPluginRegistry.remove(name);
+  }
+
+  // Used by the "Edit" flow: detaches an already-imported plugin from the
+  // hive (deactivating it and killing its subprocess if needed) and drops
+  // its manifest entry, but leaves its code on disk — the caller is
+  // expected to move that folder into the drafts directory right after, so
+  // no plugin code is ever deleted by editing it.
+  async detachExternalPluginForEdit(name: string): Promise<string | undefined> {
+    const dir = await this.detachExternalPlugin(name);
+    if (dir === undefined) return undefined;
+    await this.externalPluginRegistry.forget(name);
+    return dir;
   }
 
   async execute(

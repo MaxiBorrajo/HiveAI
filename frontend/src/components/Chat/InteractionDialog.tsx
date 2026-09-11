@@ -27,7 +27,7 @@ export function InteractionDialog() {
       try {
         const { data } = await listPendingInteractions();
         if (!cancelled) {
-          setPending((current) => current ?? data[0] ?? null);
+          setPending((current) => current ?? data?.[0] ?? null);
         }
       } catch {
       }

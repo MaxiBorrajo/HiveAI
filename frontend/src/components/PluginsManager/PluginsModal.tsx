@@ -11,6 +11,11 @@ interface PluginsModalProps {
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
   hasModel?: boolean;
+  onImportPlugin: (files: FileList) => void;
+  onRemovePlugin: (plugin: Plugin) => void;
+  onEditPlugin: (plugin: Plugin) => void;
+  isImporting: boolean;
+  onOpenDraft: (name: string) => void;
 }
 
 export function PluginsModal({
@@ -20,6 +25,11 @@ export function PluginsModal({
   onToggle,
   onToggleAll,
   hasModel = true,
+  onImportPlugin,
+  onRemovePlugin,
+  onEditPlugin,
+  isImporting,
+  onOpenDraft,
 }: PluginsModalProps) {
   const [selectedPlugins, setSelectedPlugins] = useState<Plugin[]>([]);
 
@@ -46,6 +56,11 @@ export function PluginsModal({
             onToggleAll={onToggleAll}
             onSelectPlugins={setSelectedPlugins}
             hasModel={hasModel}
+            onImportPlugin={onImportPlugin}
+            onRemovePlugin={onRemovePlugin}
+            onEditPlugin={onEditPlugin}
+            isImporting={isImporting}
+            onOpenDraft={onOpenDraft}
           />
         )}
       </DialogContent>

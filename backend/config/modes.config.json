@@ -10,10 +10,8 @@
         "type": "string",
         "defaultValue": "q4_0",
         "currentValue": "q4_0",
-        "options": [
-          "q8_0",
-          "q4_0"
-        ],
+        "options": ["q8_0", "q4_0"],
+        "options": ["q8_0", "q4_0"],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -53,7 +51,7 @@
         "description": "Number of CPU threads to allocate for computation during inference.",
         "type": "number",
         "defaultValue": null,
-        "currentValue": 8,
+        "currentValue": 6,
         "note": "default = physical cores detected at runtime",
         "minValue": 1,
         "maxValue": null,
@@ -73,7 +71,7 @@
         "description": "Locks model weights in physical RAM, preventing the operating system from paging them to the swap disk and ensuring consistent latency.",
         "type": "boolean",
         "defaultValue": true,
-        "currentValue": true,
+        "currentValue": false,
         "note": "Only effective when sufficient free RAM is available; validated at runtime.",
         "requiresServiceRestart": false
       },
@@ -139,10 +137,8 @@
         "type": "string",
         "defaultValue": "f16",
         "currentValue": "f16",
-        "options": [
-          "f16",
-          "q8_0"
-        ],
+        "options": ["f16", "q8_0"],
+        "options": ["f16", "q8_0"],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -182,7 +178,7 @@
         "description": "Number of CPU threads to allocate for computation during inference.",
         "type": "number",
         "defaultValue": null,
-        "currentValue": 8,
+        "currentValue": 6,
         "note": "default = physical cores detected at runtime",
         "minValue": 1,
         "maxValue": null,
@@ -268,11 +264,7 @@
         "type": "string",
         "defaultValue": "q8_0",
         "currentValue": "q4_0",
-        "options": [
-          "f16",
-          "q8_0",
-          "q4_0"
-        ],
+        "options": ["f16", "q8_0", "q4_0"],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
