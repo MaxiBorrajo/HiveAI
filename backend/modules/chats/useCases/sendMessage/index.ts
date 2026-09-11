@@ -10,6 +10,7 @@ import { createChat, getChat, touchChat } from "../../../../core/memory/chatStor
 import { addMessage } from "../../../../core/memory/messageStore.ts";
 import { embedText } from "../../../../core/memory/embeddings.ts";
 import { buildTurnContext } from "../../../../core/memory/contextBuilder.ts";
+import type { ThinkingRun } from "../../../../core/memory/types.ts";
 
 // A sanity cap, not a token-accurate limit (that depends on the model's
 // tokenizer and the user's configured context window) — it exists to fail
@@ -41,18 +42,37 @@ function persistAgentMessageInBackground(
   fullContent: string,
   usedTools: string[],
   steps: ChatStep[],
+  thinkingRuns: ThinkingRun[],
 ): void {
   embedText(fullContent)
     .then((vector) =>
       addMessage(dataDir, chatId, "agent", fullContent, vector, {
         usedTools,
         steps,
+        thinkingRuns,
       }),
     )
     .then(() => touchChat(dataDir, chatId))
     .catch((error) => {
       console.error("Failed to persist agent message:", error);
     });
+}
+
+// Opens a new run whenever the producing node changes (or on the very first
+// delta) so a node that executes more than once in a turn ends up as
+// separate runs instead of one merged blob — mirrors how `steps` accumulates
+// one entry per node execution rather than collapsing repeats.
+function appendThinkingDelta(
+  runs: ThinkingRun[],
+  content: string,
+  node: string | undefined,
+): void {
+  const last = runs[runs.length - 1];
+  if (last && last.node === node) {
+    last.text += content;
+  } else {
+    runs.push({ node, text: content });
+  }
 }
 
 export function handleChat(
@@ -129,6 +149,7 @@ export function handleChat(
 
         let fullContent = "";
         const steps: ChatStep[] = [];
+        const thinkingRuns: ThinkingRun[] = [];
 
         for await (const chunk of await HiveMind.stream(
           {
@@ -159,6 +180,7 @@ export function handleChat(
 
             const reasoningChunk = message.additional_kwargs?.reasoning_content;
             if (reasoningChunk) {
+              appendThinkingDelta(thinkingRuns, reasoningChunk, metadata.langgraph_node);
               send("thinking_delta", {
                 content: reasoningChunk,
                 node: metadata.langgraph_node,
@@ -186,9 +208,16 @@ export function handleChat(
           ),
         );
 
-        persistAgentMessageInBackground(dataDir, chatId, fullContent, usedTools, steps);
+        persistAgentMessageInBackground(
+          dataDir,
+          chatId,
+          fullContent,
+          usedTools,
+          steps,
+          thinkingRuns,
+        );
 
-        send("done", { content: fullContent, usedTools, steps });
+        send("done", { content: fullContent, usedTools, steps, thinkingRuns });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         send("error", { message: detail });

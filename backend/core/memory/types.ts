@@ -1,6 +1,12 @@
+export interface ThinkingRun {
+  node: string | undefined;
+  text: string;
+}
+
 export interface ChatStepMetadata {
   usedTools: string[];
   steps: unknown[];
+  thinkingRuns?: ThinkingRun[];
 }
 
 export interface ChatRecord {

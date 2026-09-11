@@ -42,7 +42,11 @@ export interface StoredMessage {
   role: "user" | "agent";
   content: string;
   timestamp: number;
-  metadata: { usedTools: string[]; steps: ChatStep[] } | null;
+  metadata: {
+    usedTools: string[];
+    steps: ChatStep[];
+    thinkingRuns?: ThinkingRun[];
+  } | null;
 }
 
 export interface ChatMode {

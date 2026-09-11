@@ -126,6 +126,7 @@ export function Chat() {
           timestamp: m.timestamp,
           usedTools: m.metadata?.usedTools,
           steps: m.metadata?.steps,
+          thinkingRuns: m.metadata?.thinkingRuns,
         })),
       }));
     });
