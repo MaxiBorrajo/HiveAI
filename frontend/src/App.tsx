@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   ToastProvider,
   ToastPortal,
@@ -8,7 +6,6 @@ import {
 } from "@/components/ui/toast";
 import { Chat } from "@/components/Chat";
 import { ChatsSidebar } from "@/components/ChatsSidebar";
-import { StyleGuide } from "@/components/StyleGuide";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/context/ModelsContext";
 import { ChatsProvider } from "@/context/ChatsContext";
@@ -19,7 +16,6 @@ import {
 import { DraftEditorPage } from "@/components/PluginsManager/DraftEditorPage";
 
 function AppContent() {
-  const [showStyleGuide, setShowStyleGuide] = useState(false);
   const { openDraftName, closeDraft, notifyPluginImported } = useDraftEditor();
 
   if (openDraftName) {
@@ -33,18 +29,10 @@ function AppContent() {
   }
 
   return (
-    <>
-      {showStyleGuide ? <StyleGuide /> : <Chat />}
-
-      {/* Only for development; remove when the style guide is no longer needed */}
-      <button
-        type="button"
-        onClick={() => setShowStyleGuide((prev) => !prev)}
-        className="fixed bottom-4 right-4 text-xs font-mono text-muted-foreground hover:text-foreground"
-      >
-        {showStyleGuide ? "Show Chat" : "Show Style Guide"}
-      </button>
-    </>
+    <div className="flex h-screen">
+      <ChatsSidebar />
+      <Chat />
+    </div>
   );
 }
 
@@ -53,19 +41,11 @@ function App() {
     <ToastProvider toastManager={toastManager}>
       <ModelsProvider>
         <ChatsProvider>
-          <div className="flex h-screen">
-            <ChatsSidebar />
-            <Chat />
-          </div>
-        </ChatsProvider>
-      </ModelsProvider>
-      <TooltipProvider>
-        <ModelsProvider>
           <DraftEditorProvider>
             <AppContent />
           </DraftEditorProvider>
-        </ModelsProvider>
-      </TooltipProvider>
+        </ChatsProvider>
+      </ModelsProvider>
 
       <ToastPortal>
         <ToastViewport>
