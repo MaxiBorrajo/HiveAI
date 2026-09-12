@@ -2,10 +2,8 @@ import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microker
 import { ExternalPluginProcessError } from "../../../../core/microkernel/external-plugins/external-plugin-host.ts";
 import { validateDraftPlugin } from "../../../../core/microkernel/drafts/validate-draft.ts";
 import { getDraftRepository } from "../../draft-context.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
-// Promotes a draft to a real, importable external plugin (see
-// hive-microkernel.ts's importExternalPlugin) and removes the draft — from
-// here on it's tracked by ExternalPluginRegistry, not DraftPluginRepository.
 export async function handleImportDraft(
   hive: HiveMicrokernel,
   name: string,
@@ -14,13 +12,17 @@ export async function handleImportDraft(
   const repository = getDraftRepository(hive);
   const record = await repository.get(name);
   if (!record) {
-    return Response.json({ error: "Draft not found." }, { status: 404, headers });
+    return ResponseBuilder.error(["Draft not found."], undefined, {
+      status: 404,
+      headers,
+    });
   }
 
   const validation = await validateDraftPlugin(hive, record.dir);
   if (!validation.valid) {
-    return Response.json(
-      { error: "Draft does not pass validation yet.", issues: validation.issues },
+    return ResponseBuilder.error(
+      ["Draft does not pass validation yet."],
+      { issues: validation.issues },
       { status: 422, headers },
     );
   }
@@ -28,15 +30,23 @@ export async function handleImportDraft(
   try {
     const plugin = await hive.importExternalPlugin(record.dir);
     await repository.remove(name);
-    return Response.json({ name: plugin.name, description: plugin.description }, { headers });
+    return ResponseBuilder.success(
+      { name: plugin.name, description: plugin.description },
+      { headers },
+    );
   } catch (error) {
     if (error instanceof ExternalPluginProcessError) {
-      return Response.json(
-        { error: `Could not start the plugin: ${error.message}` },
+      return ResponseBuilder.error(
+        [`Could not start the plugin: ${error.message}`],
+        undefined,
         { status: 502, headers },
       );
     }
     const detail = error instanceof Error ? error.message : String(error);
-    return Response.json({ error: `Could not import the plugin: ${detail}` }, { status: 400, headers });
+    return ResponseBuilder.error(
+      [`Could not import the plugin: ${detail}`],
+      undefined,
+      { status: 400, headers },
+    );
   }
 }

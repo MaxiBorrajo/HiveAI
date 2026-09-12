@@ -24,5 +24,8 @@ export async function readModesConfig(): Promise<ChatMode[]> {
 }
 
 export async function writeModesConfig(modes: ChatMode[]): Promise<void> {
-  await Deno.writeTextFile(getConfigPath(), JSON.stringify(modes, null, 2) + "\n");
+  await Deno.writeTextFile(
+    getConfigPath(),
+    JSON.stringify(modes, null, 2) + "\n",
+  );
 }

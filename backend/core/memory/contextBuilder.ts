@@ -1,4 +1,8 @@
-import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import { embedText } from "./embeddings.ts";
 import { getRecentMessages, hybridSearchInChat } from "./messageStore.ts";
 import type { MessageRecord } from "./types.ts";

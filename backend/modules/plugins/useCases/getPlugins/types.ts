@@ -1,4 +1,3 @@
-import type { PluginDto } from "../../domain/types.ts";
+import type { PluginDto } from "../../plugin.ts";
 
 export type GetPluginsResponse = PluginDto[];
-

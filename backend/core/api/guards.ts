@@ -1,6 +1,9 @@
 import type { HiveMicrokernel } from "../microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "./response.ts";
-import { EMBEDDING_MODEL, isEmbeddingModelAvailable } from "../memory/embeddings.ts";
+import {
+  EMBEDDING_MODEL,
+  isEmbeddingModelAvailable,
+} from "../memory/embeddings.ts";
 
 export function requireModelsConfigured(
   hive: HiveMicrokernel,
@@ -8,11 +11,9 @@ export function requireModelsConfigured(
 ): Response | null {
   const config = hive.getConfig();
 
-  if (!config.get("model") || !config.get("selectorModel")) {
+  if (!config.get("model")) {
     return ResponseBuilder.error(
-      [
-        "No model is configured. Select a model and a selector model before continuing.",
-      ],
+      ["No model is configured. Select a model before continuing."],
       undefined,
       { headers, status: 400 },
     );

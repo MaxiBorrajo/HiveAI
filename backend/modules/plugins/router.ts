@@ -80,8 +80,6 @@ pluginsRouter.post("/:name/test/:type/:index", async (c) => {
   return handleTest(
     hive,
     config.get("model"),
-    config.get("selectorModel"),
-    config.get("currentStrategy"),
     name,
     index,
     type,

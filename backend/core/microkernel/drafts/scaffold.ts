@@ -1,6 +1,3 @@
-// Generates a starter folder for a new plugin so the user never has to
-// guess the BeePlugin contract or hand-copy bee-plugin.ts (required byte-for
-// -byte identical — see HiveMicrokernel.validatePluginStructure).
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 

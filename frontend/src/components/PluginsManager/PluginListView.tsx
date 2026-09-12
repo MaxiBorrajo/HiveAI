@@ -62,7 +62,6 @@ export function PluginListView({
     if (files && files.length > 0) {
       onImportPlugin(files);
     }
-    // Reset so picking the same folder again still fires a change event.
     event.target.value = "";
   }
 
@@ -140,7 +139,10 @@ export function PluginListView({
           multiple
           className="hidden"
           onChange={handleFilesChosen}
-          {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+          {...({ webkitdirectory: "", directory: "" } as Record<
+            string,
+            string
+          >)}
         />
       </DialogHeader>
 
@@ -178,7 +180,8 @@ export function PluginListView({
                 </div>
 
                 <div className="flex shrink-0 gap-2">
-                  {((plugin.selectionTests && plugin.selectionTests.length > 0) ||
+                  {((plugin.selectionTests &&
+                    plugin.selectionTests.length > 0) ||
                     (plugin.executionTests &&
                       plugin.executionTests.length > 0)) && (
                     <Button

@@ -1,11 +1,3 @@
-// Live validation for a draft plugin folder being edited in-app — run on
-// every save so the user sees whether they're "on the right track" instead
-// of finding out only when they try to import.
-//
-// This launches the same subprocess runner used for a real import (briefly,
-// then kills it) rather than reconstructing structural/test-count checks
-// separately — that keeps validation logic in exactly one place
-// (HiveMicrokernel.validatePlugin) instead of two copies drifting apart.
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { HiveMicrokernel } from "../hive-microkernel.ts";
@@ -61,7 +53,10 @@ export async function validateDraftPlugin(
 
   let handle;
   try {
-    handle = await launchExternalPlugin(externalPluginNameFromSourceDir(draftDir), draftDir);
+    handle = await launchExternalPlugin(
+      externalPluginNameFromSourceDir(draftDir),
+      draftDir,
+    );
   } catch (error) {
     if (error instanceof ExternalPluginProcessError) {
       issues.push(`Plugin code failed to load: ${error.message}`);
@@ -80,11 +75,6 @@ export async function validateDraftPlugin(
       counts: report.counts,
     };
   } finally {
-    // Doesn't call stopSharedHostIfIdle here — HiveMicrokernel is the one
-    // that knows whether any real external plugin is still active, and it
-    // already calls that after its own activate/deactivate/import/remove
-    // flows. Worst case the shared host briefly stays up with nothing
-    // loaded until the next one of those runs.
     await handle.stop();
   }
 }

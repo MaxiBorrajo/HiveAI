@@ -13,4 +13,3 @@ export interface PendingInteraction {
   requestedAt: number;
   payload: InteractionPayload;
 }
-

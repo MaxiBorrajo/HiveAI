@@ -2,11 +2,6 @@ import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microker
 import { zipTsFolder } from "../../../../core/microkernel/drafts/zip-folder.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 
-// Exports an already-imported external plugin as a .zip, so it can be
-// shared with someone else and re-imported on another machine through the
-// ordinary "Import Plugin" folder-upload flow. Built-in plugins aren't
-// exportable this way — they ship with the app itself, not as a
-// user-imported folder.
 export async function handleExportPlugin(
   hive: HiveMicrokernel,
   name: string,

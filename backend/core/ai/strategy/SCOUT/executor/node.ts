@@ -5,11 +5,13 @@ import type { GraphNode } from "@langchain/langgraph/web";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { captureSteps } from "../../../../microkernel/step-capture.ts";
 import { ScoutState, type ChatStep } from "../graph.ts";
-import { getNativeTool } from "../../SADER/nativeTools.ts";
+import { getNativeTool } from "../../shared/native-tools.ts";
 
 function summarize(text: string, maxChars = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length > maxChars ? `${oneLine.slice(0, maxChars)}...` : oneLine;
+  return oneLine.length > maxChars
+    ? `${oneLine.slice(0, maxChars)}...`
+    : oneLine;
 }
 
 async function runToolCall(
@@ -17,7 +19,8 @@ async function runToolCall(
   chatId: string,
 ): Promise<{ message: ToolMessage; steps: ChatStep[]; ok: boolean }> {
   const microkernel = HiveMicrokernel.getInstance();
-  const tool = getNativeTool(toolCall.name, chatId) ?? microkernel.getTool(toolCall.name);
+  const tool =
+    getNativeTool(toolCall.name, chatId) ?? microkernel.getTool(toolCall.name);
 
   if (!tool) {
     return {
@@ -39,8 +42,13 @@ async function runToolCall(
     };
   }
 
-  console.log(`\n[SCOUT - Executor] Preparing to execute tool: "${toolCall.name}"`);
-  console.log(`[SCOUT - Executor] Tool Call Payload:`, JSON.stringify(toolCall));
+  console.log(
+    `\n[SCOUT - Executor] Preparing to execute tool: "${toolCall.name}"`,
+  );
+  console.log(
+    `[SCOUT - Executor] Tool Call Payload:`,
+    JSON.stringify(toolCall),
+  );
 
   const start = performance.now();
 
@@ -50,8 +58,13 @@ async function runToolCall(
     );
     const durationMs = performance.now() - start;
 
-    console.log(`[SCOUT - Executor] Execution successful for "${toolCall.name}"`);
-    console.log(`[SCOUT - Executor] Output:`, summarize(String(toolResult.content)));
+    console.log(
+      `[SCOUT - Executor] Execution successful for "${toolCall.name}"`,
+    );
+    console.log(
+      `[SCOUT - Executor] Output:`,
+      summarize(String(toolResult.content)),
+    );
 
     const steps: ChatStep[] = pluginSteps.map((pluginStep) => ({
       node: "Plugin",
@@ -71,7 +84,10 @@ async function runToolCall(
     const durationMs = performance.now() - start;
     const detail = error instanceof Error ? error.message : String(error);
 
-    console.error(`\n[SCOUT - Executor] Execution FAILED for "${toolCall.name}":`, detail);
+    console.error(
+      `\n[SCOUT - Executor] Execution FAILED for "${toolCall.name}":`,
+      detail,
+    );
 
     return {
       message: new ToolMessage({
@@ -100,9 +116,6 @@ export const Executor: GraphNode<typeof ScoutState> = async (state) => {
     return { messages: [] };
   }
 
-  // Run sequentially, not in parallel: a run_shell call in the batch may need
-  // to pause for human approval, and overlapping approval prompts for
-  // simultaneous tool calls would be confusing to resolve from the UI.
   const messages: ToolMessage[] = [];
   const steps: ChatStep[] = [];
   const executedToolCalls: { name: string; argsKey: string }[] = [];
@@ -135,7 +148,11 @@ export const Executor: GraphNode<typeof ScoutState> = async (state) => {
       continue;
     }
 
-    const { message, steps: callSteps, ok } = await runToolCall(toolCall, state.chatId);
+    const {
+      message,
+      steps: callSteps,
+      ok,
+    } = await runToolCall(toolCall, state.chatId);
     messages.push(message);
     steps.push(...callSteps);
     if (ok) {

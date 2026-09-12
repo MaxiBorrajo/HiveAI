@@ -12,11 +12,6 @@ import type { ChatSummary } from "@/types/chat";
 interface ChatsContextValue {
   chats: ChatSummary[];
   activeChatId: string | null;
-  // Identifies the currently-shown "new chat" draft screen. Changes every
-  // time a fresh blank screen is shown, so Chat.tsx can key a new chat's
-  // in-flight send by this instead of a fixed constant — otherwise starting
-  // a second new chat while a first one is still awaiting its chat_created
-  // event would collide with it on the same slot.
   newChatToken: string;
   isLoadingChats: boolean;
   refreshChats: () => void;

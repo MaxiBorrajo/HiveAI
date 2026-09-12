@@ -1,5 +1,4 @@
-export const MARKDOWN_INSTRUCTION =
-  "Format your response in Markdown when it improves readability — headings, bullet lists, code blocks for commands/paths/output, bold for key terms — but don't force structure on a short conversational answer.";
+import { MARKDOWN_INSTRUCTION } from "../../shared/markdown.ts";
 
 export const RESPONDER_NO_TOOL_SYSTEM_PROMPT = `You are HiveQueen, the mind of HiveAI. You run entirely on the user's machine, on a local model. Nothing in this conversation leaves the device.
 
@@ -31,17 +30,32 @@ Be direct and concise. ${MARKDOWN_INSTRUCTION} Always respond in the language th
 
 export const responderFailureHumanPrompt = (
   userPrompt: string,
-  tool: string,
-  reason: string,
-) =>
-  `User request: ${userPrompt}\n\nA tool was attempted ("${tool}") and could not complete it. Technical reason: ${reason}`;
+  corrections: Array<{ tool: string; reason: string }>,
+) => {
+  const attemptsSection = corrections.length
+    ? corrections
+        .map(
+          (c) =>
+            `A tool was attempted ("${c.tool}") and could not complete it. Technical reason: ${c.reason}`,
+        )
+        .join("\n")
+    : "A tool was attempted and could not complete it. Technical reason: None";
+
+  return `User request: ${userPrompt}\n\n${attemptsSection}`;
+};
 
 export const responderOutOfAttemptsHumanPrompt = (
   userPrompt: string,
-  tool: string,
-  reason: string,
-) =>
-  `User request: ${userPrompt}\n\nSeveral approaches were tried without success. Last attempt: tool "${tool}", reason: ${reason}`;
+  corrections: Array<{ tool: string; reason: string }>,
+) => {
+  const attemptsSection = corrections.length
+    ? corrections
+        .map((c) => `Attempt: tool "${c.tool}", reason: ${c.reason}`)
+        .join("\n")
+    : "Attempt: tool None, reason: None";
+
+  return `User request: ${userPrompt}\n\nSeveral approaches were tried without success.\n${attemptsSection}`;
+};
 
 export const responderSuccessHumanPrompt = (
   userPrompt: string,

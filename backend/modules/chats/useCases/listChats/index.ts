@@ -12,9 +12,13 @@ export async function listChats(
     return ResponseBuilder.success(chats, { headers });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return ResponseBuilder.error([`Failed to list chats: ${detail}`], undefined, {
-      headers,
-      status: 500,
-    });
+    return ResponseBuilder.error(
+      [`Failed to list chats: ${detail}`],
+      undefined,
+      {
+        headers,
+        status: 500,
+      },
+    );
   }
 }

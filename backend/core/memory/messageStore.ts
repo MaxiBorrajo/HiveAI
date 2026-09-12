@@ -20,14 +20,12 @@ function toRecord(row: MessageRow): MessageRecord {
     content: row.content,
     timestamp: row.timestamp,
     vector: JSON.parse(row.vector) as number[],
-    metadata: row.metadata ? (JSON.parse(row.metadata) as ChatStepMetadata) : null,
+    metadata: row.metadata
+      ? (JSON.parse(row.metadata) as ChatStepMetadata)
+      : null,
   };
 }
 
-// FTS5 treats bare text as query syntax. Quoting each individual word (and
-// OR-ing them) matches messages containing ANY of the query's words, rather
-// than requiring the exact phrase — the model's search query rarely repeats
-// the original wording verbatim, so an exact-phrase match misses too often.
 function toFtsMatchQuery(text: string): string {
   const words = text.match(/\p{L}+|\p{N}+/gu) ?? [];
   if (words.length === 0) return `""`;
@@ -81,13 +79,18 @@ export function getRecentMessages(
 ): MessageRecord[] {
   const db = getDb(dataDir);
   const rows = db
-    .prepare(`SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp DESC LIMIT ?`)
+    .prepare(
+      `SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp DESC LIMIT ?`,
+    )
     .all(chatId, limit) as unknown as MessageRow[];
 
   return rows.map(toRecord).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-export function getAllMessages(dataDir: string, chatId: string): MessageRecord[] {
+export function getAllMessages(
+  dataDir: string,
+  chatId: string,
+): MessageRecord[] {
   const db = getDb(dataDir);
   const rows = db
     .prepare(`SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp ASC`)
@@ -96,11 +99,6 @@ export function getAllMessages(dataDir: string, chatId: string): MessageRecord[]
   return rows.map(toRecord);
 }
 
-// A message that scores well is often a question whose answer lives in the
-// very next message of the same chat (or the one right before it, if the
-// match itself is the answer to a preceding question) — pulling in that
-// neighbor lets the recalled snippet carry the actual fact, not just the
-// question that mentions the topic.
 function withAdjacentMessages(
   db: ReturnType<typeof getDb>,
   rows: MessageRow[],
@@ -181,11 +179,9 @@ export function hybridSearchGlobal(
 ): MessageRecord[] {
   const db = getDb(dataDir);
 
-  const candidates = (
-    excludeChatId
-      ? db.prepare(`SELECT * FROM messages WHERE chatId != ?`).all(excludeChatId)
-      : db.prepare(`SELECT * FROM messages`).all()
-  ) as unknown as MessageRow[];
+  const candidates = (excludeChatId
+    ? db.prepare(`SELECT * FROM messages WHERE chatId != ?`).all(excludeChatId)
+    : db.prepare(`SELECT * FROM messages`).all()) as unknown as MessageRow[];
 
   const matchedIds = new Set(
     (

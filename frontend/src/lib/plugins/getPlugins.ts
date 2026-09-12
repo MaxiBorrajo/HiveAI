@@ -16,7 +16,8 @@ interface BackendPlugin {
 }
 
 export async function getPlugins(): Promise<ResponseEntity<Plugin[]>> {
-  const response = await apiClient.get<ResponseEntity<BackendPlugin[]>>("/api/plugins");
+  const response =
+    await apiClient.get<ResponseEntity<BackendPlugin[]>>("/api/plugins");
   return {
     ...response.data,
     data: (response.data.data ?? []).map((plugin) => ({

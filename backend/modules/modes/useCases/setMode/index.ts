@@ -1,13 +1,17 @@
 import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
+import { parseJsonBody } from "../../../../core/api/request.ts";
 import {
   OllamaRestartError,
   restartOllamaService,
-} from "../../../../core/ollama/restartOllamaService.ts";
+} from "../../../../core/restart-ollama-service.ts";
 import { ChatMode } from "../../types.ts";
-import { readModesConfig, writeModesConfig } from "../../utils/modesConfig.ts";
-import { calculateRuntimeModes } from "../../utils/calculateRuntimeModes.ts";
-import { validateModeParameters } from "../../utils/validateModeParameters.ts";
+import {
+  readModesConfig,
+  writeModesConfig,
+} from "../../utils/modes-config.ts";
+import { calculateRuntimeModes } from "../../utils/calculate-runtime-modes.ts";
+import { validateModeParameters } from "../../utils/validate-mode-parameters.ts";
 import { setCurrentMode } from "../setCurrentMode/index.ts";
 
 export class InvalidModeError extends Error {
@@ -16,7 +20,9 @@ export class InvalidModeError extends Error {
   }
 }
 
-export async function clearKvCacheOverride(hive: HiveMicrokernel): Promise<void> {
+export async function clearKvCacheOverride(
+  hive: HiveMicrokernel,
+): Promise<void> {
   const config = hive.getConfig();
   if (!config.get("ollamaKvCacheType")) return;
 
@@ -125,15 +131,9 @@ export async function setMode(
   request: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
-  let body: ChatMode;
-  try {
-    body = await request.json();
-  } catch {
-    return ResponseBuilder.error(["Invalid JSON body"], undefined, {
-      headers,
-      status: 400,
-    });
-  }
+  const parsed = await parseJsonBody<ChatMode>(request, headers);
+  if ("errorResponse" in parsed) return parsed.errorResponse;
+  const body = parsed.body;
 
   if (!body?.name) {
     return ResponseBuilder.error(["'name' is required"], undefined, {
@@ -146,7 +146,10 @@ export async function setMode(
     const modes = await updateMode(hive, body);
     return ResponseBuilder.success(modes, { headers });
   } catch (error) {
-    if (error instanceof InvalidModeError || error instanceof OllamaRestartError) {
+    if (
+      error instanceof InvalidModeError ||
+      error instanceof OllamaRestartError
+    ) {
       return ResponseBuilder.error(
         error instanceof InvalidModeError ? error.errors : [error.message],
         undefined,

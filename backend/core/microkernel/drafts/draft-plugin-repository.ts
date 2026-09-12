@@ -1,13 +1,3 @@
-// Tracks in-progress plugins the user is building from the in-app editor,
-// before they're imported for real (see external-plugin-registry.ts for the
-// "already imported" side).
-//
-// This is a repository interface on purpose: the JSON implementation below
-// is a stopgap. Chats are going to need a real database (LanceDB, for
-// embeddings/semantic search over message history), and once that's wired
-// up drafts should move onto it too — at that point only
-// JsonDraftPluginRepository gets replaced, callers of
-// DraftPluginRepository don't change.
 export interface DraftPluginRecord {
   name: string;
   dir: string;
@@ -61,7 +51,9 @@ export class JsonDraftPluginRepository implements DraftPluginRepository {
 
   async save(record: DraftPluginRecord): Promise<void> {
     const manifest = await this.readManifest();
-    const withoutExisting = manifest.drafts.filter((d) => d.name !== record.name);
+    const withoutExisting = manifest.drafts.filter(
+      (d) => d.name !== record.name,
+    );
     await this.writeManifest({ drafts: [...withoutExisting, record] });
   }
 

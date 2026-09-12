@@ -14,8 +14,7 @@ export interface PendingInteraction {
   payload: InteractionPayload;
 }
 
-export type InteractionResult =
-  | { kind: "approval"; approved: boolean };
+export type InteractionResult = { kind: "approval"; approved: boolean };
 
 interface PendingEntry extends PendingInteraction {
   resolve: (result: InteractionResult) => void;

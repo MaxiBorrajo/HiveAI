@@ -11,10 +11,10 @@ async function waitUntilOllamaIsReady(): Promise<void> {
     try {
       const response = await fetch(OLLAMA_HEALTH_URL);
       if (response.ok) return;
-    } catch {
-      // Not up yet — keep polling until the timeout.
-    }
-    await new Promise((resolve) => setTimeout(resolve, HEALTH_CHECK_INTERVAL_MS));
+    } catch {}
+    await new Promise((resolve) =>
+      setTimeout(resolve, HEALTH_CHECK_INTERVAL_MS),
+    );
   }
 
   throw new OllamaRestartError(
@@ -23,7 +23,11 @@ async function waitUntilOllamaIsReady(): Promise<void> {
 }
 
 async function run(cmd: string, args: string[]): Promise<void> {
-  const command = new Deno.Command(cmd, { args, stdout: "piped", stderr: "piped" });
+  const command = new Deno.Command(cmd, {
+    args,
+    stdout: "piped",
+    stderr: "piped",
+  });
   const { success, stderr } = await command.output();
   if (!success) {
     throw new OllamaRestartError(
@@ -47,9 +51,11 @@ async function restartLinux(kvCacheType: string | null): Promise<void> {
           ].join(" && ");
         })();
 
-  const script = [applyStep, "systemctl daemon-reload", "systemctl restart ollama"].join(
-    " && ",
-  );
+  const script = [
+    applyStep,
+    "systemctl daemon-reload",
+    "systemctl restart ollama",
+  ].join(" && ");
 
   await run("pkexec", ["sh", "-c", script]);
 }

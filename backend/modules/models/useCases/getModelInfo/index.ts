@@ -37,9 +37,7 @@ export async function fetchModelInfo(
     parameterCount: modelInfo["general.parameter_count"] as number,
     parameterSize: data.details.parameter_size,
     quantizationLevel: data.details.quantization_level,
-    quantizationVersion: modelInfo[
-      "general.quantization_version"
-    ] as number,
+    quantizationVersion: modelInfo["general.quantization_version"] as number,
 
     layerCount,
     bytesPerLayer: layerCount > 0 ? sizeBytes / layerCount : 0,
@@ -50,12 +48,8 @@ export async function fetchModelInfo(
       `${architecture}.feed_forward_length`
     ] as number,
 
-    headCount: modelInfo[
-      `${architecture}.attention.head_count`
-    ] as number,
-    headCountKV: modelInfo[
-      `${architecture}.attention.head_count_kv`
-    ] as number,
+    headCount: modelInfo[`${architecture}.attention.head_count`] as number,
+    headCountKV: modelInfo[`${architecture}.attention.head_count_kv`] as number,
 
     capabilities: data.capabilities ?? [],
 

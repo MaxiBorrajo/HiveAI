@@ -26,7 +26,6 @@ interface ModelsContextValue {
   closeManage: () => void;
   refreshModels: () => void;
   changeModel: (name: string) => Promise<void>;
-  changeSelectorModel: (name: string) => Promise<void>;
   modeResetSignal: number;
   runBusy: <T>(message: string, task: () => Promise<T>) => Promise<T>;
 }
@@ -37,7 +36,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [current, setCurrent] = useState<CurrentModels>({
     model: "",
-    selectorModel: "",
   });
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [modeResetSignal, setModeResetSignal] = useState(0);
@@ -45,7 +43,10 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
   const [embeddingModelStatus, setEmbeddingModelStatus] =
     useState<EmbeddingModelStatus | null>(null);
 
-  async function runBusy<T>(message: string, task: () => Promise<T>): Promise<T> {
+  async function runBusy<T>(
+    message: string,
+    task: () => Promise<T>,
+  ): Promise<T> {
     setBusyMessage(message);
     try {
       return await task();
@@ -81,29 +82,10 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  async function changeSelectorModel(name: string) {
-    const previousSelectorModel = current.selectorModel;
-    setCurrent((prev) => ({ ...prev, selectorModel: name }));
-
-    try {
-      const { data } = await setModelsRequest({ selectorModel: name });
-      if (data)
-        setCurrent((prev) => ({
-          ...prev,
-          selectorModel: data.selectorModel,
-        }));
-    } catch {
-      setCurrent((prev) => ({
-        ...prev,
-        selectorModel: previousSelectorModel,
-      }));
-    }
-  }
-
   const value: ModelsContextValue = {
     models,
     current,
-    hasModel: !!current.model && !!current.selectorModel,
+    hasModel: !!current.model,
     hasAvailableModels: models.length > 0,
     embeddingModelStatus,
     isManageOpen,
@@ -111,7 +93,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     closeManage: () => setIsManageOpen(false),
     refreshModels,
     changeModel,
-    changeSelectorModel,
     modeResetSignal,
     runBusy,
   };

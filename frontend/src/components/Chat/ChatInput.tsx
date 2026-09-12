@@ -81,8 +81,8 @@ export function ChatInput({
           <TriangleAlertIcon className="size-4 shrink-0" />
           {hasAvailableModels ? (
             <span>
-              No models selected. Choose a respond &amp; verify model and a
-              tool selector model to start chatting.
+              No models selected. Choose a respond &amp; verify model and a tool
+              selector model to start chatting.
             </span>
           ) : (
             <span>

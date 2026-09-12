@@ -1,6 +1,7 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { zipTsFolder } from "../../../../core/microkernel/drafts/zip-folder.ts";
 import { getDraftRepository } from "../../draft-context.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 
 export async function handleExportDraft(
   hive: HiveMicrokernel,
@@ -9,7 +10,10 @@ export async function handleExportDraft(
 ): Promise<Response> {
   const record = await getDraftRepository(hive).get(name);
   if (!record) {
-    return Response.json({ error: "Draft not found." }, { status: 404, headers });
+    return ResponseBuilder.error(["Draft not found."], undefined, {
+      status: 404,
+      headers,
+    });
   }
 
   const zipBlob = await zipTsFolder(record.dir, name);

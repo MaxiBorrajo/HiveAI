@@ -21,18 +21,24 @@ const markdownComponents: Components = {
     <h6 className="mt-2 mb-1 text-sm font-semibold">{children}</h6>
   ),
   p: ({ children }) => <p className="my-1.5 leading-relaxed">{children}</p>,
-  ul: ({ children }) => <ul className="my-1.5 list-disc space-y-0.5 pl-5">{children}</ul>,
+  ul: ({ children }) => (
+    <ul className="my-1.5 list-disc space-y-0.5 pl-5">{children}</ul>
+  ),
   ol: ({ children }) => (
     <ol className="my-1.5 list-decimal space-y-0.5 pl-5">{children}</ol>
   ),
   li: ({ children }) => <li>{children}</li>,
-  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  strong: ({ children }) => (
+    <strong className="font-semibold">{children}</strong>
+  ),
   em: ({ children }) => <em className="italic">{children}</em>,
   code: ({ children, className }) =>
     className ? (
       <code className="font-mono text-xs">{children}</code>
     ) : (
-      <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{children}</code>
+      <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+        {children}
+      </code>
     ),
   pre: ({ children }) => (
     <pre className="my-1.5 overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs">

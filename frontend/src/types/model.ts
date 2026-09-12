@@ -40,5 +40,4 @@ export interface ModelFilters {
 
 export interface CurrentModels {
   model: string;
-  selectorModel: string;
 }

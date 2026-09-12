@@ -35,7 +35,9 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     schema: z.object({
       command: z
         .string()
-        .describe("Comando exacto a ejecutar, por ejemplo 'chmod +x deploy.sh'"),
+        .describe(
+          "Comando exacto a ejecutar, por ejemplo 'chmod +x deploy.sh'",
+        ),
       cwd: z
         .string()
         .default(".")
@@ -53,9 +55,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Lee y devuelve el contenido completo de texto de un archivo local. Requiere la ruta exacta: no busca archivos ni lista directorios.",
     schema: z.object({
-      path: z
-        .string()
-        .describe("Ruta absoluta o relativa del archivo a leer"),
+      path: z.string().describe("Ruta absoluta o relativa del archivo a leer"),
       encoding: z
         .enum(["utf8", "ascii", "base64"])
         .default("utf8")
@@ -69,7 +69,9 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     schema: z.object({
       query: z
         .string()
-        .describe("Texto exacto o expresión regular a buscar dentro de los archivos"),
+        .describe(
+          "Texto exacto o expresión regular a buscar dentro de los archivos",
+        ),
       is_regex: z
         .boolean()
         .default(false)
@@ -87,7 +89,9 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     schema: z.object({
       args: z
         .array(z.string())
-        .describe("Argumentos del comando git, por ejemplo ['commit', '-m', 'Fix']"),
+        .describe(
+          "Argumentos del comando git, por ejemplo ['commit', '-m', 'Fix']",
+        ),
       repo_path: z
         .string()
         .default(".")
@@ -99,9 +103,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Devuelve los metadatos de un archivo: tamaño, fecha de modificación y permisos. No devuelve el contenido del archivo.",
     schema: z.object({
-      path: z
-        .string()
-        .describe("Ruta del archivo del cual obtener metadatos"),
+      path: z.string().describe("Ruta del archivo del cual obtener metadatos"),
     }),
   },
   {
@@ -109,9 +111,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Ejecuta un archivo .py con el entorno Python del proyecto, de manera aislada. Es el plugin indicado para correr scripts de Python.",
     schema: z.object({
-      script_path: z
-        .string()
-        .describe("Ruta al archivo Python a ejecutar"),
+      script_path: z.string().describe("Ruta al archivo Python a ejecutar"),
       args: z
         .array(z.string())
         .default([])
@@ -123,13 +123,13 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Lista el contenido inmediato de un directorio: archivos y subcarpetas de ese nivel. No baja recursivamente ni filtra por patrón.",
     schema: z.object({
-      path: z
-        .string()
-        .describe("Ruta del directorio a listar"),
+      path: z.string().describe("Ruta del directorio a listar"),
       show_hidden: z
         .boolean()
         .default(false)
-        .describe("Incluir archivos y carpetas ocultos que comienzan con punto"),
+        .describe(
+          "Incluir archivos y carpetas ocultos que comienzan con punto",
+        ),
     }),
   },
   {
@@ -137,12 +137,12 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Extrae un valor puntual de un archivo JSON indicando la ruta de la propiedad. Evita cargar el archivo entero cuando solo se necesita un dato.",
     schema: z.object({
-      path: z
-        .string()
-        .describe("Ruta al archivo JSON local"),
+      path: z.string().describe("Ruta al archivo JSON local"),
       json_path: z
         .string()
-        .describe("Ruta de la propiedad a extraer, por ejemplo 'dependencies.zod'"),
+        .describe(
+          "Ruta de la propiedad a extraer, por ejemplo 'dependencies.zod'",
+        ),
     }),
   },
   {
@@ -163,7 +163,9 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     schema: z.object({
       url: z
         .string()
-        .describe("URL completa incluyendo protocolo, por ejemplo 'https://api.ejemplo.com'"),
+        .describe(
+          "URL completa incluyendo protocolo, por ejemplo 'https://api.ejemplo.com'",
+        ),
       method: z
         .enum(["GET", "POST", "PUT", "DELETE"])
         .default("GET")
@@ -175,9 +177,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Ejecuta una sentencia SQL sobre una base de datos SQLite local. No se conecta a bases de datos remotas ni a PostgreSQL.",
     schema: z.object({
-      query: z
-        .string()
-        .describe("Consulta SQL completa a ejecutar"),
+      query: z.string().describe("Consulta SQL completa a ejecutar"),
       db_path: z
         .string()
         .describe("Ruta al archivo local de la base SQLite (.db o .sqlite)"),
@@ -221,16 +221,16 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Crea un issue nuevo en el repositorio de GitHub del proyecto. Sirve para reportar bugs o registrar tareas pendientes.",
     schema: z.object({
-      title: z
-        .string()
-        .describe("Título corto y descriptivo del issue"),
+      title: z.string().describe("Título corto y descriptivo del issue"),
       body: z
         .string()
         .describe("Cuerpo detallado del issue en formato Markdown"),
       labels: z
         .array(z.string())
         .default([])
-        .describe("Etiquetas para clasificar el issue, por ejemplo ['bug', 'frontend']"),
+        .describe(
+          "Etiquetas para clasificar el issue, por ejemplo ['bug', 'frontend']",
+        ),
     }),
   },
   {
@@ -238,9 +238,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Formatea un archivo de código según las reglas de estilo del proyecto. Solo cambia el formato: no detecta errores ni malas prácticas.",
     schema: z.object({
-      file_path: z
-        .string()
-        .describe("Ruta al archivo de código a formatear"),
+      file_path: z.string().describe("Ruta al archivo de código a formatear"),
     }),
   },
   {
@@ -248,9 +246,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Analiza un archivo de código con el linter del proyecto y reporta errores y malas prácticas. No reformatea el código por sí solo.",
     schema: z.object({
-      file_path: z
-        .string()
-        .describe("Ruta del archivo a analizar"),
+      file_path: z.string().describe("Ruta del archivo a analizar"),
       auto_fix: z
         .boolean()
         .default(false)
@@ -337,9 +333,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Convierte un archivo CSV local a formato JSON. Devuelve el resultado como un array de objetos.",
     schema: z.object({
-      path: z
-        .string()
-        .describe("Ruta al archivo CSV a convertir"),
+      path: z.string().describe("Ruta al archivo CSV a convertir"),
       delimiter: z
         .string()
         .default(",")
@@ -351,9 +345,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Calcula el hash de un texto con el algoritmo indicado. Es unidireccional: no cifra ni permite recuperar el texto original.",
     schema: z.object({
-      text: z
-        .string()
-        .describe("Texto del cual calcular el hash"),
+      text: z.string().describe("Texto del cual calcular el hash"),
       algorithm: z
         .enum(["md5", "sha1", "sha256", "sha512"])
         .default("sha256")
@@ -365,9 +357,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Agenda un evento en el calendario del usuario. No lee ni consulta eventos existentes.",
     schema: z.object({
-      title: z
-        .string()
-        .describe("Título del evento a crear"),
+      title: z.string().describe("Título del evento a crear"),
       datetime_iso: z
         .string()
         .describe("Fecha y hora de inicio en formato ISO 8601"),
@@ -386,10 +376,10 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     schema: z.object({
       target: z
         .string()
-        .describe("Canal destino, por ejemplo '#general', o nombre del usuario"),
-      message: z
-        .string()
-        .describe("Contenido del mensaje a enviar"),
+        .describe(
+          "Canal destino, por ejemplo '#general', o nombre del usuario",
+        ),
+      message: z.string().describe("Contenido del mensaje a enviar"),
     }),
   },
   {
@@ -411,9 +401,7 @@ export const MOCK_PLUGINS: MockPlugin[] = [
     description:
       "Traduce un texto de un idioma a otro usando un servicio de traducción remoto.",
     schema: z.object({
-      text: z
-        .string()
-        .describe("Texto a traducir"),
+      text: z.string().describe("Texto a traducir"),
       target_lang: z
         .string()
         .describe("Código de dos letras del idioma destino, por ejemplo 'es'"),

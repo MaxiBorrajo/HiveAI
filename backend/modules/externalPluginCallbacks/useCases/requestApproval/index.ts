@@ -1,15 +1,26 @@
 import { humanInteractionQueue } from "../../../../core/microkernel/human-interaction.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
+import { parseJsonBody } from "../../../../core/api/request.ts";
+
+interface RequestApprovalBody {
+  pluginName?: string;
+  title?: string;
+  description?: string;
+  details?: Record<string, string>;
+}
 
 export async function handleExternalPluginRequestApproval(
   req: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
-  const body = await req.json();
-  const { pluginName, title, description, details } = body;
+  const parsed = await parseJsonBody<RequestApprovalBody>(req, headers);
+  if ("errorResponse" in parsed) return parsed.errorResponse;
+  const { pluginName, title, description, details } = parsed.body;
 
   if (!pluginName || !title || !description) {
-    return Response.json(
-      { error: "'pluginName', 'title', and 'description' are required." },
+    return ResponseBuilder.error(
+      ["'pluginName', 'title', and 'description' are required."],
+      undefined,
       { status: 400, headers },
     );
   }
@@ -22,5 +33,5 @@ export async function handleExternalPluginRequestApproval(
   });
   const approved = await wait;
 
-  return Response.json({ approved }, { headers });
+  return ResponseBuilder.success({ approved }, { headers });
 }

@@ -7,4 +7,3 @@ export interface SendMessageResponse {
   content: unknown;
   usedTools: string[];
 }
-

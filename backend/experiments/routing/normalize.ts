@@ -31,8 +31,7 @@ function accumulate(
     result.input_tokens += msg.usage_metadata?.input_tokens ?? 0;
     result.output_tokens += msg.usage_metadata?.output_tokens ?? 0;
     const duration = msg.response_metadata?.total_duration as
-      | number
-      | undefined;
+      number | undefined;
     result.duration_ms += (duration ?? 0) / 1_000_000;
   }
 }

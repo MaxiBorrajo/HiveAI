@@ -7,14 +7,14 @@ export interface ChatMode {
 }
 
 export interface ChatModeParameter {
-    name: string;
-    description: string;
-    type: "string" | "number" | "boolean";
-    defaultValue: string | number | boolean | null;
-    currentValue?: string | number | boolean | null;
-    options?: string[] | number[] | boolean[];
-    minValue?: number;
-    maxValue?: number | null;
-    note?: string;
-    requiresServiceRestart: boolean;
-  }
+  name: string;
+  description: string;
+  type: "string" | "number" | "boolean";
+  defaultValue: string | number | boolean | null;
+  currentValue?: string | number | boolean | null;
+  options?: string[] | number[] | boolean[];
+  minValue?: number;
+  maxValue?: number | null;
+  note?: string;
+  requiresServiceRestart: boolean;
+}

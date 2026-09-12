@@ -23,9 +23,7 @@ export function ModelDetailsView({ model, onBack }: ModelDetailsViewProps) {
         >
           <ArrowLeft className="size-4" />
         </Button>
-        <DialogTitle className="font-mono truncate">
-          {model.name}
-        </DialogTitle>
+        <DialogTitle className="font-mono truncate">{model.name}</DialogTitle>
       </DialogHeader>
 
       <ScrollArea className="flex-1 p-6 pt-2">

@@ -4,12 +4,6 @@ import { OllamaEmbeddings } from "@langchain/ollama";
 export const EMBEDDING_MODEL = "nomic-embed-text";
 export const EMBEDDING_DIMENSIONS = 768;
 
-// Never auto-pulls: nomic-embed-text is a few hundred MB, and downloading it
-// inline would block the chat (or memory persistence) for minutes on a
-// clean install. The user is expected to trigger the download themselves
-// (see pullEmbeddingModel(), exposed through the UI's banner) — see
-// isEmbeddingModelAvailable(), used to surface that as an upfront warning
-// instead of a silent multi-minute freeze.
 export async function isEmbeddingModelAvailable(): Promise<boolean> {
   const ollama = new Ollama();
   const { models } = await ollama.list();

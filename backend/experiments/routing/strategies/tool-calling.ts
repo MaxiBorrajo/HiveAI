@@ -4,7 +4,11 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { MockPlugin } from "../mock-plugins.ts";
 import { tool } from "@langchain/core/tools";
 
-export async function toolCalling(query: string, model: string, catalog: MockPlugin[]) {
+export async function toolCalling(
+  query: string,
+  model: string,
+  catalog: MockPlugin[],
+) {
   const toolCaller = new ChatOllama({
     model,
     think: false,
@@ -18,14 +22,14 @@ export async function toolCalling(query: string, model: string, catalog: MockPlu
       description: c.description,
       schema: c.schema,
     }),
-  )
+  );
 
-  const modelWithTools = toolCaller.bindTools(tools)
+  const modelWithTools = toolCaller.bindTools(tools);
 
   const response = await modelWithTools.invoke([
     new SystemMessage(TOOL_CALLING_PROMPT),
     new HumanMessage(query),
   ]);
 
-  return response
+  return response;
 }

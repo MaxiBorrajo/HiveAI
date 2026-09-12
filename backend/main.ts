@@ -18,7 +18,6 @@ const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_MODEL = "qwen3:8b";
-const DEFAULT_SELECTOR_MODEL = "qwen3:8b";
 
 const app = new Hono<{
   Variables: { hive: HiveMicrokernel };
@@ -46,15 +45,10 @@ app.route("/api/interactions", interactionsRouter);
 app.route("/api/external-plugin-callbacks", externalPluginCallbacksRouter);
 app.route("/api/drafts", draftsRouter);
 
-// Serves the built frontend directly (packaged desktop app / production).
 app.use("/*", serveStatic({ root: "../frontend/dist" }));
 
 app.get("/", (c) => c.json("Welcome to HiveAI"));
 
-// A random free port avoids clashing with anything already running (or a
-// previous instance that didn't shut down cleanly). Written to
-// frontend/.env.local so the separate Vite dev server (used in local
-// development, alongside this same backend) knows which port to call.
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
 Deno.writeTextFileSync(
@@ -70,15 +64,8 @@ hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
 hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
 await hive.getConfig().load();
 
-// External plugin subprocesses proxy requestApproval/reportStep back to this
-// same process over HTTP (see modules/externalPluginCallbacks) — they need
-// this process's own address, which is only known once the server above is
-// listening. Falls back to the built-in defaults for model/selectorModel
-// only if load() above didn't already restore persisted values.
 hive.configure({
   model: hive.getConfig().get("model") || DEFAULT_MODEL,
-  selectorModel:
-    hive.getConfig().get("selectorModel") || DEFAULT_SELECTOR_MODEL,
   callbackBaseUrl: `http://localhost:${port}/api/external-plugin-callbacks`,
 });
 
@@ -89,17 +76,10 @@ async function loadPlugins() {
       await hive.loadAndRegister(join(pluginsDir, entry.name));
     }
   }
-
-  // Built-in plugins are active by default — the model should be able to
-  // use any of them out of the box, without the user having to visit the
-  // Plugins settings first.
   for (const plugin of hive.getRegisteredPlugins()) {
     await hive.activate(plugin.name);
   }
 
-  // Relaunches every plugin the user imported in a previous session as its
-  // own subprocess — see core/microkernel/external-plugins/ for why they run
-  // out-of-process instead of being import()'d directly.
   await hive.loadPersistedExternalPlugins();
 
   console.log(

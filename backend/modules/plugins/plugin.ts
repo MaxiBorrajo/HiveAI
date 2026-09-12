@@ -1,4 +1,7 @@
-import type { ExecutionTestCase, SelectionTestCase } from "../../../core/microkernel/bee-plugin.ts";
+import type {
+  ExecutionTestCase,
+  SelectionTestCase,
+} from "../../core/microkernel/bee-plugin.ts";
 
 export interface PluginDto {
   name: string;
@@ -8,4 +11,3 @@ export interface PluginDto {
   executionTests?: ExecutionTestCase[];
   isExternal?: boolean;
 }
-

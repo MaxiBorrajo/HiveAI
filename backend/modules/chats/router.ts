@@ -22,14 +22,7 @@ chatsRouter.post("/", async (c) => {
   if (embeddingGuardError) return embeddingGuardError;
 
   const config = hive.getConfig();
-  return handleChat(
-    hive,
-    config.get("model"),
-    config.get("selectorModel"),
-    config.get("currentStrategy"),
-    c.req.raw,
-    headers,
-  );
+  return handleChat(hive, config.get("model"), c.req.raw, headers);
 });
 
 chatsRouter.get("/", async (c) => {

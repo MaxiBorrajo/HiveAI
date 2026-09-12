@@ -110,7 +110,11 @@ async function fetchWithRetry(
   for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt++) {
     try {
       const response = await fetchWithTimeout(url, ms, headers);
-      if (response.ok || response.status < 500 || attempt === MAX_FETCH_RETRIES) {
+      if (
+        response.ok ||
+        response.status < 500 ||
+        attempt === MAX_FETCH_RETRIES
+      ) {
         return response;
       }
     } catch {

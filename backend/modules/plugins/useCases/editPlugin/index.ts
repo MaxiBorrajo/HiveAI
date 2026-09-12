@@ -1,17 +1,12 @@
 import { join } from "node:path";
 import { rename } from "node:fs/promises";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
-import { getDraftsDir, getDraftRepository } from "../../../drafts/draft-context.ts";
+import {
+  getDraftsDir,
+  getDraftRepository,
+} from "../../../drafts/draft-context.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 
-// Turns an already-imported external plugin back into an editable draft:
-// deactivates it (killing its subprocess if running), drops it from the
-// external-plugins registry, and moves its folder as-is into the drafts
-// directory — reusing the same in-app editor, live validation, and import
-// flow a brand-new plugin goes through, instead of a separate "edit in
-// place" mode for already-active code. The plugin stops being registered
-// (and stops appearing to the selector) the moment this runs; it only comes
-// back once the user re-imports the draft.
 export async function handleEditPlugin(
   hive: HiveMicrokernel,
   name: string,
@@ -38,7 +33,12 @@ export async function handleEditPlugin(
   await rename(sourceDir, draftDir);
 
   const now = new Date().toISOString();
-  await getDraftRepository(hive).save({ name, dir: draftDir, createdAt: now, updatedAt: now });
+  await getDraftRepository(hive).save({
+    name,
+    dir: draftDir,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return ResponseBuilder.success({ name, dir: draftDir }, { headers });
 }

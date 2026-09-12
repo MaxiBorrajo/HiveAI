@@ -7,7 +7,6 @@ export function fetchCurrentModels(hive: HiveMicrokernel): CurrentModels {
 
   return {
     model: config.get("model"),
-    selectorModel: config.get("selectorModel"),
   };
 }
 

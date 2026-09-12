@@ -10,29 +10,42 @@ import { handleRemoveDraft } from "./useCases/removeDraft/index.ts";
 import { handleExportDraft } from "./useCases/exportDraft/index.ts";
 
 export const draftsRouter = new Hono<{
-  Variables: { hive: HiveMicrokernel; model: string; selectorModel: string };
+  Variables: { hive: HiveMicrokernel };
 }>();
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
 draftsRouter.get("/", (c) => handleListDrafts(c.get("hive"), JSON_HEADERS));
 
-draftsRouter.post("/", (c) => handleCreateDraft(c.get("hive"), c.req.raw, JSON_HEADERS));
+draftsRouter.post("/", (c) =>
+  handleCreateDraft(c.get("hive"), c.req.raw, JSON_HEADERS),
+);
 
 draftsRouter.get("/:name/files", (c) =>
-  handleGetDraftFiles(c.get("hive"), c.req.param("name"), JSON_HEADERS));
+  handleGetDraftFiles(c.get("hive"), c.req.param("name"), JSON_HEADERS),
+);
 
 draftsRouter.put("/:name/files", (c) =>
-  handleSaveDraftFile(c.get("hive"), c.req.param("name"), c.req.raw, JSON_HEADERS));
+  handleSaveDraftFile(
+    c.get("hive"),
+    c.req.param("name"),
+    c.req.raw,
+    JSON_HEADERS,
+  ),
+);
 
 draftsRouter.post("/:name/validate", (c) =>
-  handleValidateDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS));
+  handleValidateDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),
+);
 
 draftsRouter.post("/:name/import", (c) =>
-  handleImportDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS));
+  handleImportDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),
+);
 
 draftsRouter.get("/:name/export", (c) =>
-  handleExportDraft(c.get("hive"), c.req.param("name"), {}));
+  handleExportDraft(c.get("hive"), c.req.param("name"), {}),
+);
 
 draftsRouter.delete("/:name", (c) =>
-  handleRemoveDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS));
+  handleRemoveDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),
+);

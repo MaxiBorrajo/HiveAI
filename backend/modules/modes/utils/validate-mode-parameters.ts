@@ -21,10 +21,7 @@ function validateParameter(
 
   if (reference.type === "number") {
     const numValue = value as number;
-    if (
-      reference.minValue !== undefined &&
-      numValue < reference.minValue
-    ) {
+    if (reference.minValue !== undefined && numValue < reference.minValue) {
       errors.push(
         `Parameter '${path}' must be >= ${reference.minValue}, got ${numValue}`,
       );
@@ -67,7 +64,9 @@ export function validateModeParameters(
   for (const parameter of incoming.parameters ?? []) {
     const referenceParam = referenceParams.get(parameter.name);
     if (!referenceParam) {
-      errors.push(`Unknown parameter '${parameter.name}' for mode '${incoming.name}'`);
+      errors.push(
+        `Unknown parameter '${parameter.name}' for mode '${incoming.name}'`,
+      );
       continue;
     }
     validateParameter(parameter, referenceParam, errors);

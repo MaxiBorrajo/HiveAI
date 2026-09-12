@@ -6,8 +6,11 @@ import type {
   ExecutionTestCase,
   SelectionTestCase,
 } from "../../../../core/microkernel/bee-plugin.ts";
-import type { ExecutionTestResult, SelectionTestResult, TestKind } from "./types.ts";
-import { HiveMind } from "../../../../core/ai/strategy/SADER/graph.ts";
+import type {
+  ExecutionTestResult,
+  SelectionTestResult,
+  TestKind,
+} from "./types.ts";
 import { Scout } from "../../../../core/ai/strategy/SCOUT/graph.ts";
 import { homeDir } from "hive-ai";
 import { join } from "node:path";
@@ -16,8 +19,6 @@ import { ResponseBuilder } from "../../../../core/api/response.ts";
 export async function handleTest(
   hive: HiveMicrokernel,
   model: string,
-  selectorModel: string,
-  strategy: string,
   pluginName: string,
   index: number,
   type: TestKind = "selection",
@@ -60,10 +61,8 @@ export async function handleTest(
     return await executeSelectionTest(
       testCase as SelectionTestCase,
       model,
-      selectorModel,
       pluginName,
       req.signal,
-      strategy,
     );
   } else {
     return await executeExecutionTest(
@@ -74,12 +73,6 @@ export async function handleTest(
   }
 }
 
-// SCOUT can request more than one tool per turn, and can loop through
-// several turns before answering — so "was this plugin selected" has to
-// scan every tool call across the whole run, not just the first one of the
-// first AI message. Falls back to the very first tool call seen anywhere
-// (if the plugin under test was never chosen) so callers can still report
-// what was picked instead.
 function extractScoutToolCall(
   messages: unknown[],
   pluginName: string,
@@ -91,7 +84,10 @@ function extractScoutToolCall(
     if (aiMsg.type !== "ai" || !aiMsg.tool_calls?.length) continue;
 
     for (const call of aiMsg.tool_calls) {
-      const parsed = { name: call.name, args: call.args as Record<string, unknown> };
+      const parsed = {
+        name: call.name,
+        args: call.args as Record<string, unknown>,
+      };
       firstCall ??= parsed;
       if (call.name === pluginName) return parsed;
     }
@@ -100,13 +96,14 @@ function extractScoutToolCall(
   return firstCall;
 }
 
+const MAX_TOOL_CALLS = 5;
+const SCOUT_RECURSION_LIMIT = MAX_TOOL_CALLS * 2;
+
 export async function executeSelectionTest(
   testCase: SelectionTestCase,
   model: string,
-  selectorModel: string,
   pluginName: string,
   signal: AbortSignal,
-  strategy: string,
 ) {
   const start = performance.now();
   let success = false;
@@ -119,58 +116,40 @@ export async function executeSelectionTest(
   let inputTokens = 0;
   let outputTokens = 0;
 
-  // A selection test only wants to know whether the model would pick THIS
-  // plugin for this query. Both strategies bind every active plugin to the
-  // model and can run more than one real tool call before finishing (SCOUT
-  // natively, SADER via its chaining), so leaving other plugins active here
-  // risks a "negative" test (shouldInvoke: false) triggering a real,
-  // unrelated tool along the way — e.g. run_shell — as a side effect of just
-  // running a selection test. Deactivate every other plugin for the
-  // duration of the call so only the one under test can be invoked at all.
   const microkernel = HiveMicrokernel.getInstance();
-  const otherActivePlugins = microkernel
-    .getRegisteredPlugins()
-    .filter((p) => p.name !== pluginName && microkernel.isActive(p.name))
-    .map((p) => p.name);
+  const originalExecute = microkernel.execute.bind(microkernel);
+  let toolCallCount = 0;
 
-  for (const name of otherActivePlugins) {
-    await microkernel.deactivate(name);
-  }
+  microkernel.execute = async (
+    name: string,
+    data: unknown,
+    options?: { signal?: AbortSignal },
+  ) => {
+    if (name !== pluginName) {
+      toolCallCount += 1;
+      return {
+        success: true,
+        message: `Mock result: '${name}' executed successfully.`,
+      };
+    }
+    return originalExecute(name, data, options);
+  };
 
   try {
     try {
-      let selectedTool: string | undefined;
-      let params: Record<string, unknown> | undefined;
-      let resultMessages: unknown[] = [];
-
-      if (strategy === "SCOUT") {
-        const result = await Scout.invoke(
-          {
-            messages: [new HumanMessage(testCase.query)],
-            chatId: "plugin-selection-test",
-            model,
-            modelOptions: {},
-          },
-          { signal },
-        );
-        resultMessages = result.messages ?? [];
-        const call = extractScoutToolCall(resultMessages, pluginName);
-        selectedTool = call?.name;
-        params = call?.args;
-      } else {
-        const result = await HiveMind.invoke(
-          {
-            messages: [new HumanMessage(testCase.query)],
-            currentPrompt: testCase.query,
-            model,
-            selectorModel,
-          },
-          { signal },
-        );
-        resultMessages = result.messages ?? [];
-        selectedTool = result.selectedTool;
-        params = result.args?.params;
-      }
+      const result = await Scout.invoke(
+        {
+          messages: [new HumanMessage(testCase.query)],
+          chatId: "plugin-selection-test",
+          model,
+          modelOptions: {},
+        },
+        { signal, recursionLimit: SCOUT_RECURSION_LIMIT },
+      );
+      const resultMessages: unknown[] = result.messages ?? [];
+      const call = extractScoutToolCall(resultMessages, pluginName);
+      const selectedTool = call?.name;
+      const params = call?.args;
 
       details = {
         selectedTool,
@@ -189,7 +168,12 @@ export async function executeSelectionTest(
 
       const didInvoke = selectedTool === pluginName;
 
-      if (testCase.shouldInvoke && !didInvoke) {
+      if (toolCallCount > MAX_TOOL_CALLS) {
+        failureCategory = "Loop";
+        errors.push(
+          `Model kept invoking other tools past the limit (${toolCallCount} calls to plugins other than '${pluginName}').`,
+        );
+      } else if (testCase.shouldInvoke && !didInvoke) {
         failureCategory = "Misrouting";
         errors.push(
           `Expected plugin '${pluginName}' to be selected, but '${selectedTool || "none"}' was selected instead.`,
@@ -223,9 +207,7 @@ export async function executeSelectionTest(
       errors.push(String(err));
     }
   } finally {
-    for (const name of otherActivePlugins) {
-      await microkernel.activate(name);
-    }
+    microkernel.execute = originalExecute;
   }
   const end = performance.now();
   const durationMs = Math.round(end - start);

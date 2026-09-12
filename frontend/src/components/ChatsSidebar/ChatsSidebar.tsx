@@ -1,10 +1,5 @@
 import { useState } from "react";
-import {
-  Plus,
-  Trash2,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
+import { Plus, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "../ui/button.tsx";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import {
@@ -44,7 +39,8 @@ export function ChatsSidebar() {
     deleteChat,
     unreadChatIds,
   } = useChats();
-  const [chatPendingDelete, setChatPendingDelete] = useState<ChatSummary | null>(null);
+  const [chatPendingDelete, setChatPendingDelete] =
+    useState<ChatSummary | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   async function confirmDelete() {
@@ -111,9 +107,7 @@ export function ChatsSidebar() {
           )}
 
           {!isLoadingChats && chats.length === 0 && (
-            <p className="p-2 text-xs text-muted-foreground">
-              No chats yet
-            </p>
+            <p className="p-2 text-xs text-muted-foreground">No chats yet</p>
           )}
 
           {chats.map((chat) => (
@@ -164,12 +158,16 @@ export function ChatsSidebar() {
           <DialogHeader>
             <DialogTitle>Delete chat</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{chatPendingDelete?.title || "this chat"}
+              Are you sure you want to delete "
+              {chatPendingDelete?.title || "this chat"}
               "? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setChatPendingDelete(null)}>
+            <Button
+              variant="outline"
+              onClick={() => setChatPendingDelete(null)}
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>

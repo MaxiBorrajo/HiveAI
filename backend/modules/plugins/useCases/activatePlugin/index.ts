@@ -1,7 +1,10 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 
-export function activatePlugin(hive: HiveMicrokernel, pluginName: string): Promise<boolean> {
+export function activatePlugin(
+  hive: HiveMicrokernel,
+  pluginName: string,
+): Promise<boolean> {
   return hive.activate(pluginName);
 }
 

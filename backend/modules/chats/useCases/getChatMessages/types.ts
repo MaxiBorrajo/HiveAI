@@ -1,4 +1,7 @@
-import type { ChatRecord, MessageRecord } from "../../../../core/memory/types.ts";
+import type {
+  ChatRecord,
+  MessageRecord,
+} from "../../../../core/memory/types.ts";
 
 export interface GetChatMessagesResponse {
   chat: ChatRecord;

@@ -14,17 +14,14 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-// Pairs each step with the thinking run of the same node at the same
-// occurrence index — e.g. the 2nd Executor step gets the 2nd Executor run —
-// since both arrays accumulate one entry per node execution, in order,
-// rather than merging repeats.
 function matchThinkingRun(
   steps: NonNullable<Message["steps"]>,
   thinkingRuns: ThinkingRun[],
   index: number,
 ): ThinkingRun | undefined {
   const node = steps[index].node;
-  const occurrence = steps.slice(0, index + 1).filter((s) => s.node === node).length - 1;
+  const occurrence =
+    steps.slice(0, index + 1).filter((s) => s.node === node).length - 1;
   const runsForNode = thinkingRuns.filter((run) => run.node === node);
   return runsForNode[occurrence];
 }
@@ -53,7 +50,8 @@ export function StepsPanel({
                 Pasos de la respuesta
               </DialogPrimitive.Title>
               <p className="text-xs text-muted-foreground">
-                {steps.length} paso{steps.length === 1 ? "" : "s"} · {formatDuration(totalMs)} en total
+                {steps.length} paso{steps.length === 1 ? "" : "s"} ·{" "}
+                {formatDuration(totalMs)} en total
               </p>
             </div>
             <DialogPrimitive.Close
@@ -73,7 +71,10 @@ export function StepsPanel({
                       <span>
                         {step.node}
                         {step.label !== step.node && (
-                          <span className="font-normal text-muted-foreground"> · {step.label}</span>
+                          <span className="font-normal text-muted-foreground">
+                            {" "}
+                            · {step.label}
+                          </span>
                         )}
                       </span>
                       <span className="text-[10px] font-normal text-muted-foreground">

@@ -29,8 +29,7 @@ export function InteractionDialog() {
         if (!cancelled) {
           setPending((current) => current ?? data?.[0] ?? null);
         }
-      } catch {
-      }
+      } catch {}
     }
 
     poll();

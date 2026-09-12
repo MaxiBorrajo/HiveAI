@@ -1,5 +1,6 @@
 import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
+import { parseJsonBody } from "../../../../core/api/request.ts";
 import { fetchAvailableModels } from "../getModels/index.ts";
 import { fetchCurrentModels } from "../getCurrentModels/index.ts";
 import { setCurrentMode } from "../../../modes/useCases/setCurrentMode/index.ts";
@@ -13,7 +14,6 @@ const DEFAULT_MODE = "default";
 
 interface SetModelsBody {
   model?: string;
-  selectorModel?: string;
 }
 
 export class InvalidModelsError extends Error {
@@ -26,38 +26,27 @@ export async function updateModels(
   hive: HiveMicrokernel,
   patch: SetModelsBody,
 ): Promise<CurrentModels> {
-  const { model, selectorModel } = patch;
+  const { model } = patch;
 
-  if (!model && !selectorModel) {
-    throw new InvalidModelsError([
-      "At least one of 'model' or 'selectorModel' must be provided",
-    ]);
+  if (!model) {
+    throw new InvalidModelsError(["'model' must be provided"]);
   }
 
   const availableModels = await fetchAvailableModels();
   const availableNames = new Set(availableModels.map((m) => m.name));
 
   const errors: string[] = [];
-  if (model && !availableNames.has(model)) {
+  if (!availableNames.has(model)) {
     errors.push(`Model '${model}' is not available`);
-  }
-  if (selectorModel && !availableNames.has(selectorModel)) {
-    errors.push(`Model '${selectorModel}' is not available`);
   }
 
   if (errors.length > 0) {
     throw new InvalidModelsError(errors);
   }
 
-  hive.configure({
-    ...(model && { model }),
-    ...(selectorModel && { selectorModel }),
-  });
-
-  if (model) {
-    await clearKvCacheOverride(hive);
-    setCurrentMode(hive, DEFAULT_MODE);
-  }
+  hive.configure({ model });
+  await clearKvCacheOverride(hive);
+  setCurrentMode(hive, DEFAULT_MODE);
 
   return fetchCurrentModels(hive);
 }
@@ -67,21 +56,17 @@ export async function setModels(
   request: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
-  let body: SetModelsBody;
-  try {
-    body = await request.json();
-  } catch {
-    return ResponseBuilder.error(["Invalid JSON body"], undefined, {
-      headers,
-      status: 400,
-    });
-  }
+  const parsed = await parseJsonBody<SetModelsBody>(request, headers);
+  if ("errorResponse" in parsed) return parsed.errorResponse;
 
   try {
-    const current = await updateModels(hive, body);
+    const current = await updateModels(hive, parsed.body);
     return ResponseBuilder.success(current, { headers });
   } catch (error) {
-    if (error instanceof InvalidModelsError || error instanceof InvalidModeError) {
+    if (
+      error instanceof InvalidModelsError ||
+      error instanceof InvalidModeError
+    ) {
       return ResponseBuilder.error(error.errors, undefined, {
         headers,
         status: 400,
