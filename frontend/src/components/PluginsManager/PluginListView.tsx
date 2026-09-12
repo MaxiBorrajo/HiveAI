@@ -54,7 +54,16 @@ export function PluginListView({
   const allActive = plugins.length > 0 && plugins.every((p) => p.active);
 
   async function handleExport(plugin: Plugin) {
-    await exportPlugin(plugin.name);
+    try {
+      const { data } = await exportPlugin(plugin.name);
+      if (data?.path) {
+        alert(`Plugin exported to:\n${data.path}`);
+      }
+    } catch (err) {
+      alert(
+        `Failed to export plugin: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   function handleFilesChosen(event: React.ChangeEvent<HTMLInputElement>) {

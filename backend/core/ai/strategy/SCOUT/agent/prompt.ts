@@ -34,3 +34,6 @@ Once you have everything you need (or you've decided no tool applies at all), re
 
 export const AGENT_OUT_OF_ITERATIONS_PROMPT =
   "You've reached the maximum number of tool calls available for this turn. No more tools can be used now. Answer the user with whatever you've already gathered, being upfront about anything you weren't able to finish — never claim something was completed if it wasn't.";
+
+export const AGENT_EMPTY_RESPONSE_PROMPT =
+  "Your previous response came back empty — no text and no tool call. Respond now with an actual answer in natural language: use a tool if the request still needs one, or otherwise answer directly. Do not return an empty response again.";

@@ -25,51 +25,61 @@ export async function handleTest(
   req: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
+  // HiveMicrokernel is a process-wide singleton, so pointing dataDir at the
+  // tests sandbox here affects every other request until it's restored —
+  // without this, running a plugin test would permanently redirect all
+  // later plugin activate/edit/export/remove operations (and anything else
+  // that reads dataDir) at ~/.hiveai/tests instead of the real data dir.
+  const originalDataDir = hive.getConfig().get("dataDir");
   hive.configure({
     dataDir: join(homeDir!, ".hiveai", "tests"),
   });
 
-  const wasActive = hive.isActive(pluginName);
+  try {
+    const wasActive = hive.isActive(pluginName);
 
-  if (!wasActive) await hive.activate(pluginName);
+    if (!wasActive) await hive.activate(pluginName);
 
-  const plugin = hive.getPlugin(pluginName);
+    const plugin = hive.getPlugin(pluginName);
 
-  if (!plugin) {
-    return ResponseBuilder.error(["Plugin not found"], undefined, {
-      status: 404,
-      headers,
-    });
-  }
+    if (!plugin) {
+      return ResponseBuilder.error(["Plugin not found"], undefined, {
+        status: 404,
+        headers,
+      });
+    }
 
-  const tests =
-    type === "selection" ? plugin.selectionTests : plugin.executionTests;
+    const tests =
+      type === "selection" ? plugin.selectionTests : plugin.executionTests;
 
-  console.log(tests);
-  console.log(tests[index]);
+    console.log(tests);
+    console.log(tests[index]);
 
-  if (!plugin || !tests || !tests[index]) {
-    return ResponseBuilder.error(["Test not found"], undefined, {
-      status: 404,
-      headers,
-    });
-  }
+    if (!plugin || !tests || !tests[index]) {
+      return ResponseBuilder.error(["Test not found"], undefined, {
+        status: 404,
+        headers,
+      });
+    }
 
-  const testCase = tests[index];
+    const testCase = tests[index];
 
-  if (type === "selection") {
-    return await executeSelectionTest(
-      testCase as SelectionTestCase,
-      model,
-      pluginName,
-      req.signal,
-    );
-  } else {
-    return await executeExecutionTest(
-      hive,
-      plugin,
-      testCase as ExecutionTestCase<typeof plugin.schema>,
-    );
+    if (type === "selection") {
+      return await executeSelectionTest(
+        testCase as SelectionTestCase,
+        model,
+        pluginName,
+        req.signal,
+      );
+    } else {
+      return await executeExecutionTest(
+        hive,
+        plugin,
+        testCase as ExecutionTestCase<typeof plugin.schema>,
+      );
+    }
+  } finally {
+    hive.configure({ dataDir: originalDataDir });
   }
 }
 

@@ -9,7 +9,6 @@ export const ChatStepSchema = z.object({
     "HiveQueenResponder",
     "Plugin",
     "Agent",
-    "Reflect",
   ]),
   label: z.string(),
   durationMs: z.number(),

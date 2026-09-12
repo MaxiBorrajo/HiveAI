@@ -11,3 +11,11 @@ export function reportError(errors: string[]) {
     description,
   });
 }
+
+export function reportSuccess(title: string, description?: string) {
+  toastManager.add({
+    type: "success",
+    title,
+    description,
+  });
+}

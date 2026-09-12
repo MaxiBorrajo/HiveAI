@@ -7,7 +7,6 @@ export interface StreamHandlers {
   onThinking: () => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
-  onReflecting: (reason: string) => void;
   onDone: (content: string, usedTools: string[], steps: ChatStep[]) => void;
   onError: (message: string) => void;
 }
@@ -39,8 +38,6 @@ export async function sendMessage(
       handlers.onThinkingDelta(payload.content, payload.node);
     } else if (eventName === "token") {
       handlers.onToken(payload.content);
-    } else if (eventName === "reflecting") {
-      handlers.onReflecting(payload.reason);
     } else if (eventName === "done") {
       handlers.onDone(
         payload.content,

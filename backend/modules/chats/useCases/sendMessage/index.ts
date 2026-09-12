@@ -22,39 +22,45 @@ function deriveTitle(message: string): string {
   return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
 }
 
-function persistUserMessageInBackground(
+// Awaited (not fire-and-forget) before the turn is considered done: the
+// next turn in this same chat builds its context from what's already in
+// SQLite (buildTurnContext / getRecentMessages), so if this were
+// fire-and-forget, a user typing the next message quickly after seeing a
+// response could have that response silently missing from the model's
+// context — it hadn't finished being written yet.
+async function persistUserMessage(
   dataDir: string,
   chatId: string,
   userText: string,
-): void {
-  embedText(userText)
-    .then((vector) => addMessage(dataDir, chatId, "user", userText, vector))
-    .then(() => touchChat(dataDir, chatId))
-    .catch((error) => {
-      console.error("Failed to persist user message:", error);
-    });
+): Promise<void> {
+  try {
+    const vector = await embedText(userText);
+    addMessage(dataDir, chatId, "user", userText, vector);
+    await touchChat(dataDir, chatId);
+  } catch (error) {
+    console.error("Failed to persist user message:", error);
+  }
 }
 
-function persistAgentMessageInBackground(
+async function persistAgentMessage(
   dataDir: string,
   chatId: string,
   fullContent: string,
   usedTools: string[],
   steps: ChatStep[],
   thinkingRuns: ThinkingRun[],
-): void {
-  embedText(fullContent)
-    .then((vector) =>
-      addMessage(dataDir, chatId, "agent", fullContent, vector, {
-        usedTools,
-        steps,
-        thinkingRuns,
-      }),
-    )
-    .then(() => touchChat(dataDir, chatId))
-    .catch((error) => {
-      console.error("Failed to persist agent message:", error);
+): Promise<void> {
+  try {
+    const vector = await embedText(fullContent);
+    addMessage(dataDir, chatId, "agent", fullContent, vector, {
+      usedTools,
+      steps,
+      thinkingRuns,
     });
+    await touchChat(dataDir, chatId);
+  } catch (error) {
+    console.error("Failed to persist agent message:", error);
+  }
 }
 
 function appendThinkingDelta(
@@ -82,9 +88,6 @@ async function consumeStream(
   let fullContent = "";
   const steps: ChatStep[] = [];
   const thinkingRuns: ThinkingRun[] = [];
-  let seenStepCount = 0;
-
-  let awaitingFreshDraft = false;
 
   for await (const chunk of streamIterable) {
     const [mode, payload] = chunk as
@@ -120,29 +123,13 @@ async function consumeStream(
 
       const chunkText = String(message.content ?? "");
       if (!chunkText) continue;
-      if (awaitingFreshDraft) {
-        fullContent = "";
-        awaitingFreshDraft = false;
-      }
       fullContent += chunkText;
       send("token", { content: chunkText });
       continue;
     }
 
-    const newSteps = payload.steps.slice(seenStepCount);
-    seenStepCount = payload.steps.length;
     steps.length = 0;
     steps.push(...payload.steps);
-
-    for (const step of newSteps) {
-      if (
-        step.node === "Reflect" &&
-        step.summary.startsWith("Sent back for another pass")
-      ) {
-        awaitingFreshDraft = true;
-        send("reflecting", { reason: step.summary });
-      }
-    }
   }
 
   return { fullContent, steps, thinkingRuns };
@@ -212,7 +199,7 @@ export function handleChat(
             .join(", ")}]`,
         );
 
-        persistUserMessageInBackground(dataDir, chatId, userText);
+        await persistUserMessage(dataDir, chatId, userText);
 
         send("thinking", {});
 
@@ -245,7 +232,7 @@ export function handleChat(
           ),
         );
 
-        persistAgentMessageInBackground(
+        await persistAgentMessage(
           dataDir,
           chatId,
           fullContent,

@@ -10,7 +10,6 @@ import z from "zod";
 import { ChatStepSchema, type ChatStep } from "../shared/chat-step.ts";
 import { Agent, shouldContinue } from "./agent/node.ts";
 import { Executor } from "./executor/node.ts";
-import { Reflect, shouldRetryAfterReflection } from "./reflect/node.ts";
 
 export type { ChatStep };
 
@@ -34,17 +33,12 @@ export const ScoutState = new StateSchema({
     z.array(z.object({ name: z.string(), argsKey: z.string() })).default([]),
     { reducer: (current, next) => [...current, ...next] },
   ),
-  reflectionAttempts: new ReducedValue(z.number().default(0), {
-    reducer: (x: number, y: number) => x + y,
-  }),
 });
 
 export const Scout = new StateGraph(ScoutState)
   .addNode("Agent", Agent)
   .addNode("Executor", Executor)
-  .addNode("Reflect", Reflect)
   .addEdge(START, "Agent")
-  .addConditionalEdges("Agent", shouldContinue, ["Executor", "Reflect"])
+  .addConditionalEdges("Agent", shouldContinue, ["Executor", END])
   .addEdge("Executor", "Agent")
-  .addConditionalEdges("Reflect", shouldRetryAfterReflection, ["Agent", END])
   .compile();

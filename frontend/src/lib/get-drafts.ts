@@ -107,24 +107,14 @@ export async function removeDraft(name: string): Promise<void> {
   await parseOrThrow(response);
 }
 
-export async function exportDraft(name: string): Promise<void> {
+// The backend writes the zip to the user's Downloads folder and returns its
+// path — the app's embedded webview doesn't reliably support
+// <a download> + blob URLs, so a browser-style download here would fail
+// silently.
+export async function exportDraft(name: string): Promise<string> {
   const response = await fetch(
     `${API_URL}/api/drafts/${encodeURIComponent(name)}/export`,
   );
-  if (!response.ok) {
-    const body: ResponseEntity = await response
-      .json()
-      .catch(() => ({ success: false }));
-    throw new Error(
-      body.errors?.[0] || `Export failed with status ${response.status}`,
-    );
-  }
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${name}.zip`;
-  link.click();
-  URL.revokeObjectURL(url);
+  const data = await parseOrThrow<{ path: string }>(response);
+  return data.path;
 }

@@ -1,15 +1,18 @@
 import {
   AIMessage,
+  BaseMessage,
   HumanMessage,
   SystemMessage,
 } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
+import { END } from "@langchain/langgraph";
 import { ChatOllama } from "@langchain/ollama";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { ScoutState, type ChatStep } from "../graph.ts";
 import {
   buildAgentSystemPrompt,
   AGENT_OUT_OF_ITERATIONS_PROMPT,
+  AGENT_EMPTY_RESPONSE_PROMPT,
 } from "./prompt.ts";
 import { MAX_AGENT_ITERATIONS, MAX_AGENT_DURATION_MS } from "../constants.ts";
 import { buildNativeTools } from "../../shared/native-tools.ts";
@@ -44,17 +47,34 @@ export const Agent: GraphNode<typeof ScoutState> = async (state) => {
       : []),
   ];
 
-  const response = outOfIterations
-    ? await agentModel.invoke([...systemMessages, ...state.messages])
-    : await agentModel
-        .bindTools([
-          ...microkernel.getTools(),
-          ...buildNativeTools(state.chatId),
-        ])
-        .invoke([...systemMessages, ...state.messages]);
+  const tools = [...microkernel.getTools(), ...buildNativeTools(state.chatId)];
+
+  const invoke = (messages: BaseMessage[]) =>
+    outOfIterations
+      ? agentModel.invoke(messages)
+      : agentModel.bindTools(tools).invoke(messages);
+
+  let response = await invoke([...systemMessages, ...state.messages]);
 
   console.log(`[SCOUT - Agent] Raw model response:`, response.content);
   console.log(`[SCOUT - Agent] Tool calls requested:`, response.tool_calls);
+
+  if (!response.content && !response.tool_calls?.length) {
+    console.log(
+      `[SCOUT - Agent] Empty response with no tool calls — retrying once with an explicit nudge`,
+    );
+    response = await invoke([
+      ...systemMessages,
+      ...state.messages,
+      response,
+      new HumanMessage(AGENT_EMPTY_RESPONSE_PROMPT),
+    ]);
+    console.log(`[SCOUT - Agent] Raw model response (retry):`, response.content);
+    console.log(
+      `[SCOUT - Agent] Tool calls requested (retry):`,
+      response.tool_calls,
+    );
+  }
 
   const durationMs = performance.now() - start;
   const toolNames = (response.tool_calls ?? []).map((tc) => tc.name).join(", ");
@@ -81,5 +101,5 @@ export const Agent: GraphNode<typeof ScoutState> = async (state) => {
 export const shouldContinue = (state: typeof ScoutState.State) => {
   const last = state.messages[state.messages.length - 1];
   if (AIMessage.isInstance(last) && last.tool_calls?.length) return "Executor";
-  return "Reflect";
+  return END;
 };

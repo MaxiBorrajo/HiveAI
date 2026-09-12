@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Editor, { type BeforeMount } from "@monaco-editor/react";
-import { toast } from "sonner";
+import { reportError, reportSuccess } from "@/lib/toastManager";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
@@ -164,13 +164,13 @@ export function DraftEditorPage({
     setIsExporting(true);
     setExportError(null);
     try {
-      await exportDraft(draftName);
-      toast.success(`'${draftName}.zip' downloaded.`);
+      const path = await exportDraft(draftName);
+      reportSuccess(`'${draftName}.zip' exported`, path);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not export the plugin.";
       setExportError(message);
-      toast.error(message);
+      reportError([message]);
     } finally {
       setIsExporting(false);
     }
@@ -183,12 +183,12 @@ export function DraftEditorPage({
       await importDraft(draftName);
       onImported();
       onClose();
-      toast.success(`'${draftName}' imported successfully.`);
+      reportSuccess(`'${draftName}' imported successfully.`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not import the plugin.";
       setImportError(message);
-      toast.error(message);
+      reportError([message]);
     } finally {
       setIsImporting(false);
     }

@@ -188,19 +188,6 @@ export function Chat() {
           onChatCreated(chatId);
         },
         onThinking: () => {},
-        onReflecting: () => {
-          setMessagesByChat((prev) => ({
-            ...prev,
-            [key]: (prev[key] ?? []).map((message) =>
-              message.id === agentMessageId
-                ? {
-                    ...message,
-                    content: `${message.content}\n\n---\n*Revisando la respuesta antes de continuar...*\n\n`,
-                  }
-                : message,
-            ),
-          }));
-        },
         onThinkingDelta: (delta, node) => {
           setThinkingByChat((prev) => {
             const current = prev[key] ?? IDLE_THINKING;
