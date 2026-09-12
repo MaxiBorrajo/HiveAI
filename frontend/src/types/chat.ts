@@ -1,17 +1,19 @@
 import type { ReactElement } from "react";
 
 export interface ChatStep {
-  node: "Solver" | "AbstentionVerificator" | "Executor" | "Diagnostician" | "HiveQueenResponder" | "Plugin";
+  node:
+    | "Solver"
+    | "AbstentionVerificator"
+    | "Executor"
+    | "Diagnostician"
+    | "HiveQueenResponder"
+    | "Plugin"
+    | "Agent";
   label: string;
   durationMs: number;
   summary: string;
 }
 
-// One contiguous burst of "thinking" text from a single node. A node that
-// runs more than once in the same turn (e.g. Executor retried after
-// Diagnostician) produces multiple runs, one per occurrence — matched to
-// `steps` by order of appearance, the same way `steps` itself accumulates
-// one entry per node execution rather than merging repeats.
 export interface ThinkingRun {
   node: string | undefined;
   text: string;
@@ -59,14 +61,14 @@ export interface ChatMode {
 }
 
 export interface ChatModeParameter {
-    name: string;
-    description: string;
-    type: "string" | "number" | "boolean";
-    defaultValue: string | number | boolean | null;
-    currentValue?: string | number | boolean | null;
-    options?: string[] | number[] | boolean[];
-    minValue?: number;
-    maxValue?: number | null;
-    note?: string;
-    requiresServiceRestart: boolean;
-  }
+  name: string;
+  description: string;
+  type: "string" | "number" | "boolean";
+  defaultValue: string | number | boolean | null;
+  currentValue?: string | number | boolean | null;
+  options?: string[] | number[] | boolean[];
+  minValue?: number;
+  maxValue?: number | null;
+  note?: string;
+  requiresServiceRestart: boolean;
+}

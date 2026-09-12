@@ -43,18 +43,16 @@ export function touchChat(dataDir: string, chatId: string): void {
   const chat = getChat(dataDir, chatId);
   if (!chat) return;
 
-  db.prepare(`UPDATE chats SET updatedAt = ?, messageCount = ? WHERE id = ?`).run(
-    Date.now(),
-    chat.messageCount + 1,
-    chatId,
-  );
+  db.prepare(
+    `UPDATE chats SET updatedAt = ?, messageCount = ? WHERE id = ?`,
+  ).run(Date.now(), chat.messageCount + 1, chatId);
 }
 
 export function deleteChat(dataDir: string, chatId: string): void {
   const db = getDb(dataDir);
   db.prepare(`DELETE FROM chats WHERE id = ?`).run(chatId);
-  db.prepare(`DELETE FROM messages_fts WHERE id IN (SELECT id FROM messages WHERE chatId = ?)`).run(
-    chatId,
-  );
+  db.prepare(
+    `DELETE FROM messages_fts WHERE id IN (SELECT id FROM messages WHERE chatId = ?)`,
+  ).run(chatId);
   db.prepare(`DELETE FROM messages WHERE chatId = ?`).run(chatId);
 }

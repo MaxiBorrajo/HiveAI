@@ -5,22 +5,12 @@ export interface HiveSettings {
   dataDir: string;
   configDir: string;
   model: string;
-  selectorModel: string;
   currentMode: string;
   ollamaKvCacheType: string;
-  // Base URL external plugin subprocesses call back to for
-  // requestApproval/reportStep (see core/microkernel/external-plugins/ and
-  // modules/externalPluginCallbacks). Empty until main.ts knows its own
-  // listening port.
   callbackBaseUrl: string;
 }
 
-const PERSISTED_KEYS = [
-  "model",
-  "selectorModel",
-  "currentMode",
-  "ollamaKvCacheType",
-] as const;
+const PERSISTED_KEYS = ["model", "currentMode", "ollamaKvCacheType"] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;
 
 const SETTINGS_FILE_NAME = "settings.json";

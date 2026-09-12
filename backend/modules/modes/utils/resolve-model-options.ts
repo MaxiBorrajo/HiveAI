@@ -1,4 +1,4 @@
-import { readModesConfig } from "./modesConfig.ts";
+import { readModesConfig } from "./modes-config.ts";
 import { ChatModeParameter } from "../types.ts";
 
 export interface OllamaModelOptions {
@@ -16,23 +16,31 @@ export interface OllamaModelOptions {
   numPredict?: number;
 }
 
-function resolveNumPredict(parameters: ChatModeParameter[]): number | undefined {
+function resolveNumPredict(
+  parameters: ChatModeParameter[],
+): number | undefined {
   const limitOutput = parameters.find((p) => p.name === "limit_output");
   if (limitOutput?.currentValue === false) return -1;
   return undefined;
 }
 
-function toNumber(value: ChatModeParameter["currentValue"]): number | undefined {
+function toNumber(
+  value: ChatModeParameter["currentValue"],
+): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
-function resolveNumGpu(value: ChatModeParameter["currentValue"]): number | undefined {
+function resolveNumGpu(
+  value: ChatModeParameter["currentValue"],
+): number | undefined {
   const numGpu = toNumber(value);
   if (numGpu === -1) return undefined;
   return numGpu;
 }
 
-function toBoolean(value: ChatModeParameter["currentValue"]): boolean | undefined {
+function toBoolean(
+  value: ChatModeParameter["currentValue"],
+): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 

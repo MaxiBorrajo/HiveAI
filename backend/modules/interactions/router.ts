@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { handleListInteractions } from "./useCases/listInteractions/index.ts";
 import { handleResolveInteraction } from "./useCases/resolveInteraction/index.ts";
+import { ResponseBuilder } from "../../core/api/response.ts";
 
 export const interactionsRouter = new Hono();
 
@@ -13,8 +14,9 @@ interactionsRouter.post("/:id/:decision", (c) => {
   const decision = c.req.param("decision");
 
   if (decision !== "approve" && decision !== "reject") {
-    return Response.json(
-      { error: "decision must be 'approve' or 'reject'" },
+    return ResponseBuilder.error(
+      ["decision must be 'approve' or 'reject'"],
+      undefined,
       { status: 400 },
     );
   }

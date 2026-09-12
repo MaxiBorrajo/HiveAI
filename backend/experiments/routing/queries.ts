@@ -1,8 +1,5 @@
 export type QueryCategory =
-  | "DIRECTA"
-  | "AMBIGUA"
-  | "SIN_MATCH"
-  | "PARAMS_IMPLICITOS";
+  "DIRECTA" | "AMBIGUA" | "SIN_MATCH" | "PARAMS_IMPLICITOS";
 
 export interface RoutingQuery {
   id: string;
@@ -111,7 +108,8 @@ export const queries: RoutingQuery[] = [
   },
   {
     id: "q37",
-    query: "andá a postgres y armame una tabla nueva de usuarios con id y nombre",
+    query:
+      "andá a postgres y armame una tabla nueva de usuarios con id y nombre",
     category: "SIN_MATCH",
     expected_plugin: null,
     expected_params: {},

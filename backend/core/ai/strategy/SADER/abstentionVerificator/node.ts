@@ -3,14 +3,14 @@ import { GraphNode } from "@langchain/langgraph/web";
 import { ChatOllama } from "@langchain/ollama";
 import z from "zod";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
-import { parseModelJSON } from "../../utils.ts";
+import { parseModelJSON } from "../../shared/utils.ts";
 import { HiveAIState } from "../graph.ts";
 import {
   abstentionVerificatorHumanPrompt,
   buildAbstentionVerificatorSystemPrompt,
 } from "./prompt.ts";
 import { MAX_ATTEMPTS } from "../constants.ts";
-import { buildNativeTools, getNativeTool } from "../nativeTools.ts";
+import { buildNativeTools, getNativeTool } from "../../shared/native-tools.ts";
 
 export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
   state,
@@ -69,7 +69,7 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     action: "confirm" | "challenge";
     reason: string;
     suggestedTool?: string;
-  }>(response.content as string);
+  }>(response.content as string, "AbstentionVerificator");
 
   console.log(
     `[SADER - AbstentionVerificator] Parsed verification result:`,
@@ -118,10 +118,12 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
   return {
     abstentionVerified: true,
     abstentionChallenged: true,
-    correction: {
-      tool: parsed.suggestedTool ?? "unknown",
-      reason: parsed.reason,
-    },
+    corrections: [
+      {
+        tool: parsed.suggestedTool ?? "unknown",
+        reason: parsed.reason,
+      },
+    ],
     attempts: 1,
     selectionAttempts: 1,
     steps: [

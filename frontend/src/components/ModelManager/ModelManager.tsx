@@ -11,7 +11,6 @@ export function ModelManager({ forceOpenDownward }: ModelManagerProps) {
     models,
     current,
     changeModel,
-    changeSelectorModel,
     isManageOpen,
     openManage,
     closeManage,
@@ -24,7 +23,6 @@ export function ModelManager({ forceOpenDownward }: ModelManagerProps) {
         models={models}
         current={current}
         onChangeModel={changeModel}
-        onChangeSelectorModel={changeSelectorModel}
         onOpenManage={openManage}
         onOpen={refreshModels}
         forceOpenDownward={forceOpenDownward}
@@ -35,7 +33,6 @@ export function ModelManager({ forceOpenDownward }: ModelManagerProps) {
         models={models}
         current={current}
         onChangeModel={changeModel}
-        onChangeSelectorModel={changeSelectorModel}
       />
     </>
   );

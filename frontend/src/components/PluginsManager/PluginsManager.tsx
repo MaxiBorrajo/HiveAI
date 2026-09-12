@@ -62,7 +62,6 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
           title: `'${data.name}' imported successfully.`,
         });
       }
-      // On failure the apiClient interceptor already shows an error toast.
     } catch (error) {
       console.error("[PluginsManager] importPlugin threw:", error);
     } finally {
@@ -77,7 +76,6 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
       await refreshPlugins();
       toastManager.add({ type: "success", title: `'${plugin.name}' removed.` });
     }
-    // On failure the apiClient interceptor already shows an error toast.
   }
 
   async function handleEditPlugin(plugin: Plugin) {
@@ -96,7 +94,6 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         title: `'${plugin.name}' moved to drafts for editing.`,
       });
     }
-    // On failure the apiClient interceptor already shows an error toast.
   }
 
   async function toggleAllPlugins(nextActive: boolean) {

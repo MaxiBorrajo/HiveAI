@@ -17,11 +17,6 @@ import {
   requestNotificationPermission,
 } from "../../lib/notify.ts";
 
-// Slot for a chat that hasn't been assigned a real id yet (the "new chat"
-// screen, before the first message's chat_created event arrives). Scoped by
-// ChatsContext's newChatToken — which changes every time a fresh blank
-// screen is shown — so starting a second new chat while a first one is
-// still awaiting its chat_created event can't collide with it on one slot.
 function newChatKey(token: string): string {
   return `__new__:${token}`;
 }
@@ -38,11 +33,6 @@ const IDLE_THINKING: ThinkingState = {
   thinkingRuns: [],
 };
 
-// Appends a delta to the run list, opening a new run whenever the
-// producing node changes (or on the very first delta) so a node that
-// executes more than once in a turn ends up as separate runs instead of
-// one merged blob — mirrors how the backend's `steps` array accumulates
-// one entry per node execution rather than collapsing repeats.
 function appendThinkingDelta(
   runs: ThinkingRun[],
   content: string,
@@ -69,9 +59,6 @@ export function Chat() {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Messages and "thinking" state are kept in maps keyed by chat id, so
-  // each chat's state is fully isolated — switching chats or a background
-  // response finishing can never write into the wrong chat's view.
   const [messagesByChat, setMessagesByChat] = useState<
     Record<string, Message[]>
   >({});
@@ -79,16 +66,11 @@ export function Chat() {
     Record<string, ThinkingState>
   >({});
 
-  // Set right when a chat is created mid-send (chat_created event), so the
-  // fetch-on-select effect below doesn't immediately race the still-streaming
-  // response with a server fetch that may not have the message persisted yet.
   const justCreatedChatIdRef = useRef<string | null>(null);
 
-  // Tracks the currently-viewed chat/draft key live, so a response that
-  // finishes after the user has switched chats can tell it's no longer
-  // being watched — reading activeChatId/newChatToken directly here would
-  // only ever see the value captured when handleSend started.
-  const displayKeyRef = useRef<string>(activeChatId ?? newChatKey(newChatToken));
+  const displayKeyRef = useRef<string>(
+    activeChatId ?? newChatKey(newChatToken),
+  );
 
   const displayKey = activeChatId ?? newChatKey(newChatToken);
   useEffect(() => {
@@ -100,7 +82,8 @@ export function Chat() {
     chatsRef.current = chats;
   }, [chats]);
   const messages = messagesByChat[displayKey] ?? [];
-  const { isThinking, thinkingText } = thinkingByChat[displayKey] ?? IDLE_THINKING;
+  const { isThinking, thinkingText } =
+    thinkingByChat[displayKey] ?? IDLE_THINKING;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -140,16 +123,11 @@ export function Chat() {
     const content = input.trim();
     if (!content || isThinking) return;
     if (!hasModel) return;
-    if (embeddingModelStatus !== null && !embeddingModelStatus.available) return;
+    if (embeddingModelStatus !== null && !embeddingModelStatus.available)
+      return;
 
-    // Fired from this click/submit gesture so the browser/webview is willing
-    // to show the OS permission prompt — requesting it later from onDone
-    // (an async stream callback, not a user gesture) gets silently ignored.
     requestNotificationPermission();
 
-    // The slot this send writes into. Starts as this new-chat screen's own
-    // draft key (or the existing chat's id) and gets migrated to the real
-    // chat id once chat_created arrives.
     const startKey = activeChatId ?? newChatKey(newChatToken);
     let key = startKey;
 

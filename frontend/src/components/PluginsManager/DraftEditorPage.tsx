@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import Editor, { type BeforeMount } from "@monaco-editor/react";
-import { toast } from "sonner";
+import { reportError, reportSuccess } from "@/lib/toastManager";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CheckCircle2, Download, Loader2, Save, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Download,
+  Loader2,
+  Save,
+  XCircle,
+} from "lucide-react";
 import {
   getDraftFiles,
   saveDraftFile,
@@ -13,13 +20,6 @@ import {
   type DraftValidationResult,
 } from "@/lib/get-drafts";
 
-// Monaco has no access to the real node_modules/Deno cache, so without help
-// it flags `import ... from "zod"` as an unresolved module. This is a
-// deliberately minimal stub — just enough of zod's shape for the scaffolded
-// plugin code to type-check in the editor — not a full port of zod's types.
-// Real validation of the plugin (including its actual zod usage) still runs
-// for real in the backend subprocess; this only avoids a misleading red
-// squiggle while editing.
 const ZOD_TYPES_STUB = `
 declare module "zod" {
   export interface ZodType<Output = unknown> {
@@ -59,10 +59,16 @@ interface DraftEditorPageProps {
 
 const SAVE_DEBOUNCE_MS = 600;
 
-export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorPageProps) {
+export function DraftEditorPage({
+  draftName,
+  onClose,
+  onImported,
+}: DraftEditorPageProps) {
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [activeFile, setActiveFile] = useState<string>("index.ts");
-  const [validation, setValidation] = useState<DraftValidationResult | null>(null);
+  const [validation, setValidation] = useState<DraftValidationResult | null>(
+    null,
+  );
   const [isValidating, setIsValidating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -71,7 +77,9 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   useEffect(() => {
     setValidation(null);
@@ -85,7 +93,8 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      if (justSavedTimeoutRef.current) clearTimeout(justSavedTimeoutRef.current);
+      if (justSavedTimeoutRef.current)
+        clearTimeout(justSavedTimeoutRef.current);
     };
   }, []);
 
@@ -93,7 +102,10 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
 
   const handleBeforeMount: BeforeMount = (monaco) => {
     const ts = monaco.languages.typescript.typescriptDefaults;
-    ts.addExtraLib(ZOD_TYPES_STUB, "file:///node_modules/@types/zod/index.d.ts");
+    ts.addExtraLib(
+      ZOD_TYPES_STUB,
+      "file:///node_modules/@types/zod/index.d.ts",
+    );
 
     const beePlugin = files.find((f) => f.name === "bee-plugin.ts");
     if (beePlugin) {
@@ -106,7 +118,9 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
     try {
       await saveDraftFile(draftName, name, content);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Could not save the file.");
+      setSaveError(
+        error instanceof Error ? error.message : "Could not save the file.",
+      );
       return;
     }
 
@@ -119,7 +133,11 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
       const result = await validateDraft(draftName);
       setValidation(result);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Could not validate the plugin.");
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Could not validate the plugin.",
+      );
     } finally {
       setIsValidating(false);
     }
@@ -146,12 +164,13 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
     setIsExporting(true);
     setExportError(null);
     try {
-      await exportDraft(draftName);
-      toast.success(`'${draftName}.zip' downloaded.`);
+      const path = await exportDraft(draftName);
+      reportSuccess(`'${draftName}.zip' exported`, path);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not export the plugin.";
+      const message =
+        error instanceof Error ? error.message : "Could not export the plugin.";
       setExportError(message);
-      toast.error(message);
+      reportError([message]);
     } finally {
       setIsExporting(false);
     }
@@ -164,11 +183,12 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
       await importDraft(draftName);
       onImported();
       onClose();
-      toast.success(`'${draftName}' imported successfully.`);
+      reportSuccess(`'${draftName}' imported successfully.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not import the plugin.";
+      const message =
+        error instanceof Error ? error.message : "Could not import the plugin.";
       setImportError(message);
-      toast.error(message);
+      reportError([message]);
     } finally {
       setIsImporting(false);
     }
@@ -178,7 +198,12 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <div className="flex items-center justify-between gap-4 border-b border-border p-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onClose} className="size-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="size-8"
+          >
             <ArrowLeft size={16} />
           </Button>
           <span className="font-mono text-sm font-semibold">{draftName}</span>
@@ -267,7 +292,8 @@ export function DraftEditorPage({ draftName, onClose, onImported }: DraftEditorP
             )
           ) : (
             <span className="text-xs text-muted-foreground">
-              Edit index.ts (or click Save) to validate the plugin before importing it.
+              Edit index.ts (or click Save) to validate the plugin before
+              importing it.
             </span>
           )}
           {importError && (

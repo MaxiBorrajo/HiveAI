@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { reportError, reportSuccess } from "@/lib/toastManager";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, FilePenLine } from "lucide-react";
-import { listDrafts, createDraft, removeDraft, type Draft } from "@/lib/get-drafts";
+import {
+  listDrafts,
+  createDraft,
+  removeDraft,
+  type Draft,
+} from "@/lib/get-drafts";
 
 interface DraftListViewProps {
   onOpenDraft: (name: string) => void;
@@ -32,11 +37,12 @@ export function DraftListView({ onOpenDraft }: DraftListViewProps) {
       setIsCreating(false);
       refresh();
       onOpenDraft(draft.name);
-      toast.success(`Draft '${draft.name}' created.`);
+      reportSuccess(`Draft '${draft.name}' created.`);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not create the draft.";
+      const message =
+        e instanceof Error ? e.message : "Could not create the draft.";
       setError(message);
-      toast.error(message);
+      reportError([message]);
     }
   }
 
@@ -44,9 +50,11 @@ export function DraftListView({ onOpenDraft }: DraftListViewProps) {
     try {
       await removeDraft(name);
       refresh();
-      toast.success(`Draft '${name}' deleted.`);
+      reportSuccess(`Draft '${name}' deleted.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not delete the draft.");
+      reportError([
+        e instanceof Error ? e.message : "Could not delete the draft.",
+      ]);
     }
   }
 

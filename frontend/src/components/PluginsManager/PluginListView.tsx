@@ -54,7 +54,16 @@ export function PluginListView({
   const allActive = plugins.length > 0 && plugins.every((p) => p.active);
 
   async function handleExport(plugin: Plugin) {
-    await exportPlugin(plugin.name);
+    try {
+      const { data } = await exportPlugin(plugin.name);
+      if (data?.path) {
+        alert(`Plugin exported to:\n${data.path}`);
+      }
+    } catch (err) {
+      alert(
+        `Failed to export plugin: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   function handleFilesChosen(event: React.ChangeEvent<HTMLInputElement>) {
@@ -62,7 +71,6 @@ export function PluginListView({
     if (files && files.length > 0) {
       onImportPlugin(files);
     }
-    // Reset so picking the same folder again still fires a change event.
     event.target.value = "";
   }
 
@@ -140,7 +148,10 @@ export function PluginListView({
           multiple
           className="hidden"
           onChange={handleFilesChosen}
-          {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+          {...({ webkitdirectory: "", directory: "" } as Record<
+            string,
+            string
+          >)}
         />
       </DialogHeader>
 
@@ -178,7 +189,8 @@ export function PluginListView({
                 </div>
 
                 <div className="flex shrink-0 gap-2">
-                  {((plugin.selectionTests && plugin.selectionTests.length > 0) ||
+                  {((plugin.selectionTests &&
+                    plugin.selectionTests.length > 0) ||
                     (plugin.executionTests &&
                       plugin.executionTests.length > 0)) && (
                     <Button

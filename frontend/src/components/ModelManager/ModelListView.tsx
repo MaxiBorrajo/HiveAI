@@ -10,7 +10,6 @@ interface ModelListViewProps {
   models: ModelInfo[];
   current: CurrentModels;
   onChangeModel: (name: string) => void;
-  onChangeSelectorModel: (name: string) => void;
   onSelectModel: (model: ModelInfo) => void;
 }
 
@@ -18,7 +17,6 @@ export function ModelListView({
   models,
   current,
   onChangeModel,
-  onChangeSelectorModel,
   onSelectModel,
 }: ModelListViewProps) {
   return (
@@ -38,7 +36,6 @@ export function ModelListView({
 
           {models.map((model) => {
             const isModel = model.name === current.model;
-            const isSelectorModel = model.name === current.selectorModel;
 
             return (
               <div
@@ -49,10 +46,7 @@ export function ModelListView({
                   <div className="flex-1 min-w-0">
                     <p className="font-mono text-sm font-semibold flex items-center flex-wrap gap-2 mb-2">
                       {model.name}
-                      {isModel && <Badge variant="default">Respond</Badge>}
-                      {isSelectorModel && (
-                        <Badge variant="secondary">Selector</Badge>
-                      )}
+                      {isModel && <Badge variant="default">Active</Badge>}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {model.parameterSize} · {model.quantizationLevel} ·{" "}
@@ -79,18 +73,8 @@ export function ModelListView({
                     size="sm"
                     disabled={isModel}
                     onClick={() => onChangeModel(model.name)}
-                    title="Used to respond to messages and verify results. Prefer a larger, more capable model here."
                   >
-                    Use to respond &amp; verify
-                  </Button>
-                  <Button
-                    variant={isSelectorModel ? "default" : "outline"}
-                    size="sm"
-                    disabled={isSelectorModel}
-                    onClick={() => onChangeSelectorModel(model.name)}
-                    title="Used to quickly select which plugins to run. Prefer a smaller, faster model here."
-                  >
-                    Use as tool selector
+                    Use this model
                   </Button>
                 </div>
               </div>

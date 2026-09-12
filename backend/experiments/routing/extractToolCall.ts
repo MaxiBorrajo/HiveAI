@@ -1,4 +1,6 @@
-function extractToolCall(response: AIMessage): { name: string; args: Record<string, unknown> } | null {
+function extractToolCall(
+  response: AIMessage,
+): { name: string; args: Record<string, unknown> } | null {
   if (response.tool_calls?.length) {
     const call = response.tool_calls[0];
     return { name: call.name, args: call.args };
@@ -13,7 +15,7 @@ function extractToolCall(response: AIMessage): { name: string; args: Record<stri
   const paramRegex = /<param name="([^"]+)">([\s\S]*?)<\/param>/g;
   let match;
   while ((match = paramRegex.exec(content)) !== null) {
-    const value = match[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
+    const value = match[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim();
     try {
       args[match[1]] = JSON.parse(value);
     } catch {

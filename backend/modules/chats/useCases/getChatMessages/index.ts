@@ -14,10 +14,14 @@ export async function getChatMessages(
 
     const chat = await getChat(dataDir, chatId);
     if (!chat) {
-      return ResponseBuilder.error([`Chat '${chatId}' was not found.`], undefined, {
-        headers,
-        status: 404,
-      });
+      return ResponseBuilder.error(
+        [`Chat '${chatId}' was not found.`],
+        undefined,
+        {
+          headers,
+          status: 404,
+        },
+      );
     }
 
     const messages = await getAllMessages(dataDir, chatId);

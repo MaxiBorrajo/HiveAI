@@ -10,7 +10,14 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
-import { BookOpen, Cog, Feather, Info, TriangleAlert, User } from "lucide-react";
+import {
+  BookOpen,
+  Cog,
+  Feather,
+  Info,
+  TriangleAlert,
+  User,
+} from "lucide-react";
 import type { ChatMode, ChatModeParameter } from "../../types/chat.ts";
 import { getModes } from "../../lib/modes/getModes.ts";
 import { Button } from "../ui/button.tsx";
@@ -86,9 +93,7 @@ export function ModesManager() {
       try {
         await setMode(mode);
         refreshModes();
-      } catch {
-        // Toast already shown by the shared apiClient interceptor.
-      }
+      } catch {}
     });
   };
 

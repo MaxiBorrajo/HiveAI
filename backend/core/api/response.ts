@@ -15,4 +15,3 @@ export class ResponseBuilder {
     return Response.json(body, init);
   }
 }
-

@@ -13,6 +13,8 @@ const FETCH_TIMEOUT_MS = 10_000;
 const JINA_TIMEOUT_MS = 15_000;
 const MAX_CONTENT_CHARS = 20_000;
 const MIN_ACCEPTABLE_CONTENT_CHARS = 200;
+const MAX_FETCH_RETRIES = 2;
+const RETRY_BACKOFF_MS = 500;
 const READ_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
@@ -96,6 +98,33 @@ async function fetchWithTimeout(
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  ms: number,
+  headers: Record<string, string> = {},
+): Promise<Response | null> {
+  for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, ms, headers);
+      if (
+        response.ok ||
+        response.status < 500 ||
+        attempt === MAX_FETCH_RETRIES
+      ) {
+        return response;
+      }
+    } catch {
+      if (attempt === MAX_FETCH_RETRIES) return null;
+    }
+    await sleep(RETRY_BACKOFF_MS * (attempt + 1));
+  }
+  return null;
+}
+
 function isPdfUrl(url: string): boolean {
   return /\.pdf(\?|#|$)/i.test(url);
 }
@@ -108,17 +137,12 @@ function truncate(content: string): string {
 async function extractWithReadability(
   url: string,
 ): Promise<{ content: string; title?: string } | null> {
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(url, FETCH_TIMEOUT_MS, {
-      "User-Agent": READ_USER_AGENT,
-      Accept: "text/html,*/*",
-    });
-  } catch {
-    return null;
-  }
+  const response = await fetchWithRetry(url, FETCH_TIMEOUT_MS, {
+    "User-Agent": READ_USER_AGENT,
+    Accept: "text/html,*/*",
+  });
 
-  if (!response.ok) return null;
+  if (!response || !response.ok) return null;
 
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType && !contentType.includes("text/html")) return null;

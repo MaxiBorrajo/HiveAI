@@ -62,7 +62,7 @@ export async function harness(
           pluginsSize,
           index + 1,
           false,
-          selectorModel
+          selectorModel,
         ),
       );
     } catch (error) {

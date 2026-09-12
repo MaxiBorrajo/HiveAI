@@ -1,21 +1,20 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 import {
-  HiveMind,
-  HiveAIState,
+  Scout,
   type ChatStep,
-} from "../../../../core/ai/strategy/SADER/graph.ts";
-import { resolveModelOptions } from "../../../modes/utils/resolveModelOptions.ts";
-import { createChat, getChat, touchChat } from "../../../../core/memory/chatStore.ts";
+} from "../../../../core/ai/strategy/SCOUT/graph.ts";
+import { resolveModelOptions } from "../../../modes/utils/resolve-model-options.ts";
+import {
+  createChat,
+  getChat,
+  touchChat,
+} from "../../../../core/memory/chatStore.ts";
 import { addMessage } from "../../../../core/memory/messageStore.ts";
 import { embedText } from "../../../../core/memory/embeddings.ts";
 import { buildTurnContext } from "../../../../core/memory/contextBuilder.ts";
 import type { ThinkingRun } from "../../../../core/memory/types.ts";
 
-// A sanity cap, not a token-accurate limit (that depends on the model's
-// tokenizer and the user's configured context window) — it exists to fail
-// fast on pathological input instead of only finding out ~3 minutes later,
-// when Ollama itself rejects a message that overflows its context length.
 const MAX_MESSAGE_LENGTH = 20_000;
 
 function deriveTitle(message: string): string {
@@ -23,45 +22,47 @@ function deriveTitle(message: string): string {
   return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
 }
 
-function persistUserMessageInBackground(
+// Awaited (not fire-and-forget) before the turn is considered done: the
+// next turn in this same chat builds its context from what's already in
+// SQLite (buildTurnContext / getRecentMessages), so if this were
+// fire-and-forget, a user typing the next message quickly after seeing a
+// response could have that response silently missing from the model's
+// context — it hadn't finished being written yet.
+async function persistUserMessage(
   dataDir: string,
   chatId: string,
   userText: string,
-): void {
-  embedText(userText)
-    .then((vector) => addMessage(dataDir, chatId, "user", userText, vector))
-    .then(() => touchChat(dataDir, chatId))
-    .catch((error) => {
-      console.error("Failed to persist user message:", error);
-    });
+): Promise<void> {
+  try {
+    const vector = await embedText(userText);
+    addMessage(dataDir, chatId, "user", userText, vector);
+    await touchChat(dataDir, chatId);
+  } catch (error) {
+    console.error("Failed to persist user message:", error);
+  }
 }
 
-function persistAgentMessageInBackground(
+async function persistAgentMessage(
   dataDir: string,
   chatId: string,
   fullContent: string,
   usedTools: string[],
   steps: ChatStep[],
   thinkingRuns: ThinkingRun[],
-): void {
-  embedText(fullContent)
-    .then((vector) =>
-      addMessage(dataDir, chatId, "agent", fullContent, vector, {
-        usedTools,
-        steps,
-        thinkingRuns,
-      }),
-    )
-    .then(() => touchChat(dataDir, chatId))
-    .catch((error) => {
-      console.error("Failed to persist agent message:", error);
+): Promise<void> {
+  try {
+    const vector = await embedText(fullContent);
+    addMessage(dataDir, chatId, "agent", fullContent, vector, {
+      usedTools,
+      steps,
+      thinkingRuns,
     });
+    await touchChat(dataDir, chatId);
+  } catch (error) {
+    console.error("Failed to persist agent message:", error);
+  }
 }
 
-// Opens a new run whenever the producing node changes (or on the very first
-// delta) so a node that executes more than once in a turn ends up as
-// separate runs instead of one merged blob — mirrors how `steps` accumulates
-// one entry per node execution rather than collapsing repeats.
 function appendThinkingDelta(
   runs: ThinkingRun[],
   content: string,
@@ -75,10 +76,68 @@ function appendThinkingDelta(
   }
 }
 
+async function consumeStream(
+  streamIterable: AsyncIterable<unknown>,
+  finalNodeName: string,
+  send: (event: string, data: unknown) => void,
+): Promise<{
+  fullContent: string;
+  steps: ChatStep[];
+  thinkingRuns: ThinkingRun[];
+}> {
+  let fullContent = "";
+  const steps: ChatStep[] = [];
+  const thinkingRuns: ThinkingRun[] = [];
+
+  for await (const chunk of streamIterable) {
+    const [mode, payload] = chunk as
+      | [
+          "messages",
+          [
+            {
+              content?: unknown;
+              additional_kwargs?: { reasoning_content?: string };
+            },
+            { langgraph_node?: string },
+          ],
+        ]
+      | ["values", { steps: ChatStep[] }];
+
+    if (mode === "messages") {
+      const [message, metadata] = payload;
+
+      const reasoningChunk = message.additional_kwargs?.reasoning_content;
+      if (reasoningChunk) {
+        appendThinkingDelta(
+          thinkingRuns,
+          reasoningChunk,
+          metadata.langgraph_node,
+        );
+        send("thinking_delta", {
+          content: reasoningChunk,
+          node: metadata.langgraph_node,
+        });
+      }
+
+      if (metadata.langgraph_node !== finalNodeName) continue;
+
+      const chunkText = String(message.content ?? "");
+      if (!chunkText) continue;
+      fullContent += chunkText;
+      send("token", { content: chunkText });
+      continue;
+    }
+
+    steps.length = 0;
+    steps.push(...payload.steps);
+  }
+
+  return { fullContent, steps, thinkingRuns };
+}
+
 export function handleChat(
   hive: HiveMicrokernel,
   model: string,
-  selectorModel: string,
   req: Request,
   headers: Record<string, string>,
 ): Response {
@@ -103,7 +162,10 @@ export function handleChat(
         const userText: string = body.message;
 
         if (typeof userText !== "string" || userText.trim().length === 0) {
-          send("error", { message: "The 'message' field is required and must be a non-empty string." });
+          send("error", {
+            message:
+              "The 'message' field is required and must be a non-empty string.",
+          });
           return;
         }
 
@@ -137,7 +199,7 @@ export function handleChat(
             .join(", ")}]`,
         );
 
-        persistUserMessageInBackground(dataDir, chatId, userText);
+        await persistUserMessage(dataDir, chatId, userText);
 
         send("thinking", {});
 
@@ -145,60 +207,22 @@ export function handleChat(
           hive.getConfig().get("currentMode"),
         );
 
-        const contextMessages = await buildTurnContext(dataDir, chatId, userText);
+        const contextMessages = await buildTurnContext(
+          dataDir,
+          chatId,
+          userText,
+        );
 
-        let fullContent = "";
-        const steps: ChatStep[] = [];
-        const thinkingRuns: ThinkingRun[] = [];
-
-        for await (const chunk of await HiveMind.stream(
-          {
-            messages: contextMessages,
-            chatId,
-            model,
-            selectorModel,
-            currentPrompt: userText,
-            modelOptions,
-          },
+        const streamIterable = await Scout.stream(
+          { messages: contextMessages, chatId, model, modelOptions },
           { streamMode: ["messages", "values"] },
-        )) {
-          const [mode, payload] = chunk as
-            | [
-                "messages",
-                [
-                  {
-                    content?: unknown;
-                    additional_kwargs?: { reasoning_content?: string };
-                  },
-                  { langgraph_node?: string },
-                ],
-              ]
-            | ["values", typeof HiveAIState.State];
+        );
 
-          if (mode === "messages") {
-            const [message, metadata] = payload;
-
-            const reasoningChunk = message.additional_kwargs?.reasoning_content;
-            if (reasoningChunk) {
-              appendThinkingDelta(thinkingRuns, reasoningChunk, metadata.langgraph_node);
-              send("thinking_delta", {
-                content: reasoningChunk,
-                node: metadata.langgraph_node,
-              });
-            }
-
-            if (metadata.langgraph_node !== "HiveQueenResponder") continue;
-
-            const chunkText = String(message.content ?? "");
-            if (!chunkText) continue;
-            fullContent += chunkText;
-            send("token", { content: chunkText });
-            continue;
-          }
-
-          steps.length = 0;
-          steps.push(...payload.steps);
-        }
+        const { fullContent, steps, thinkingRuns } = await consumeStream(
+          streamIterable,
+          "Agent",
+          send,
+        );
 
         const usedTools = Array.from(
           new Set(
@@ -208,7 +232,7 @@ export function handleChat(
           ),
         );
 
-        persistAgentMessageInBackground(
+        await persistAgentMessage(
           dataDir,
           chatId,
           fullContent,

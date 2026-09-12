@@ -1,4 +1,8 @@
-import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
 import { HiveAIState } from "../graph.ts";
 import { ChatOllama } from "@langchain/ollama";
@@ -27,10 +31,13 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   };
   const responder = new ChatOllama(responderOptions);
 
-  console.log(`[SADER - Responder] Effective Ollama options:`, responderOptions);
+  console.log(
+    `[SADER - Responder] Effective Ollama options:`,
+    responderOptions,
+  );
 
   const isNoToolNeeded =
-    state.selectedTool === "NONE" && state.abstentionVerified;
+    state.pendingToolCalls.length === 0 && state.abstentionVerified;
   const isUnrecoverableFailure = state.giveUp;
   const outOfAttempts = state.attempts > MAX_ATTEMPTS;
 
@@ -43,8 +50,7 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
       ? {
           humanPrompt: responderFailureHumanPrompt(
             state.currentPrompt,
-            state.correction?.tool ?? "None",
-            state.correction?.reason ?? "None",
+            state.corrections,
           ),
           systemPrompt: RESPONDER_FAILURE_SYSTEM_PROMPT,
         }
@@ -52,17 +58,14 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
         ? {
             humanPrompt: responderOutOfAttemptsHumanPrompt(
               state.currentPrompt,
-              state.correction?.tool ?? "None",
-              state.correction?.reason ?? "None",
+              state.corrections,
             ),
             systemPrompt: RESPONDER_OUT_OF_ATTEMPTS_SYSTEM_PROMPT,
           }
         : {
             humanPrompt: responderSuccessHumanPrompt(
               state.currentPrompt,
-              state.selectedTool,
-              state.args.params,
-              state.toolResult.output,
+              state.toolCallHistory,
             ),
             systemPrompt: RESPONDER_SUCCESS_SYSTEM_PROMPT,
           };
@@ -72,10 +75,6 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
     `[SADER - Responder] State: noTool=${isNoToolNeeded}, giveUp=${isUnrecoverableFailure}, outOfAttempts=${outOfAttempts}`,
   );
 
-  // state.messages also carries this turn's tool-selection scratchpad
-  // (Solver's tool-call AIMessages, Executor's ToolMessages) — keep only
-  // the plain conversation turns so the final answer has access to prior
-  // chat history without that noise.
   const conversationHistory = state.messages.filter(
     (message) =>
       message instanceof HumanMessage ||
@@ -94,7 +93,8 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   );
 
   const durationMs = performance.now() - start;
-  const outputTokens = (response as AIMessage).usage_metadata?.output_tokens ?? 0;
+  const outputTokens =
+    (response as AIMessage).usage_metadata?.output_tokens ?? 0;
   const tokensPerSecond =
     durationMs > 0 && outputTokens > 0
       ? Number(((outputTokens / durationMs) * 1000).toFixed(1))

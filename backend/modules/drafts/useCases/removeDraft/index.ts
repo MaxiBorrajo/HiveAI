@@ -1,4 +1,5 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
 import { getDraftRepository } from "../../draft-context.ts";
 
 export async function handleRemoveDraft(
@@ -7,5 +8,10 @@ export async function handleRemoveDraft(
   headers: Record<string, string>,
 ): Promise<Response> {
   const removed = await getDraftRepository(hive).remove(name);
-  return Response.json({ success: removed }, { headers, status: removed ? 200 : 404 });
+  return removed
+    ? ResponseBuilder.success(undefined, { headers })
+    : ResponseBuilder.error(["Draft not found"], undefined, {
+        headers,
+        status: 404,
+      });
 }

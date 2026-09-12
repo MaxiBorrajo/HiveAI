@@ -1,28 +1,28 @@
-import * as React from "react"
-import { Toast as ToastPrimitive } from "@base-ui/react/toast"
+import * as React from "react";
+import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 import {
   CircleCheckIcon,
   InfoIcon,
   OctagonXIcon,
   TriangleAlertIcon,
   XIcon,
-} from "lucide-react"
+} from "lucide-react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 const toastIconByType: Record<string, React.ReactNode> = {
   success: <CircleCheckIcon className="size-5 text-primary" />,
   info: <InfoIcon className="size-5 text-primary" />,
   warning: <TriangleAlertIcon className="size-5 text-amber-500" />,
   error: <OctagonXIcon className="size-5 text-destructive" />,
-}
+};
 
 function ToastProvider({ ...props }: ToastPrimitive.Provider.Props) {
-  return <ToastPrimitive.Provider data-slot="toast-provider" {...props} />
+  return <ToastPrimitive.Provider data-slot="toast-provider" {...props} />;
 }
 
 function ToastPortal({ ...props }: ToastPrimitive.Portal.Props) {
-  return <ToastPrimitive.Portal data-slot="toast-portal" {...props} />
+  return <ToastPrimitive.Portal data-slot="toast-portal" {...props} />;
 }
 
 function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
@@ -31,15 +31,15 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
       data-slot="toast-viewport"
       className={cn(
         "fixed top-auto left-4 bottom-4 z-100 mx-auto flex w-96 max-w-[calc(100%-2rem)] flex-col outline-none",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function ToastList() {
-  const { toasts } = ToastPrimitive.useToastManager()
+  const { toasts } = ToastPrimitive.useToastManager();
 
   return toasts.map((toast) => (
     <ToastRoot key={toast.id} toast={toast}>
@@ -54,7 +54,7 @@ function ToastList() {
         <ToastClose />
       </div>
     </ToastRoot>
-  ))
+  ));
 }
 
 function ToastRoot({ className, ...props }: ToastPrimitive.Root.Props) {
@@ -67,7 +67,7 @@ function ToastRoot({ className, ...props }: ToastPrimitive.Root.Props) {
         "data-starting-style:translate-y-full data-starting-style:opacity-0",
         "data-ending-style:opacity-0",
         "data-[limited]:opacity-0",
-        className
+        className,
       )}
       style={{
         zIndex: "calc(1000 - var(--toast-index))",
@@ -76,7 +76,7 @@ function ToastRoot({ className, ...props }: ToastPrimitive.Root.Props) {
       }}
       {...props}
     />
-  )
+  );
 }
 
 function ToastTitle({ className, ...props }: ToastPrimitive.Title.Props) {
@@ -86,7 +86,7 @@ function ToastTitle({ className, ...props }: ToastPrimitive.Title.Props) {
       className={cn("text-base font-medium leading-snug", className)}
       {...props}
     />
-  )
+  );
 }
 
 function ToastDescription({
@@ -99,7 +99,7 @@ function ToastDescription({
       className={cn("mt-1 text-sm text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }
 
 function ToastClose({ className, ...props }: ToastPrimitive.Close.Props) {
@@ -109,13 +109,13 @@ function ToastClose({ className, ...props }: ToastPrimitive.Close.Props) {
       aria-label="Dismiss"
       className={cn(
         "shrink-0 rounded-md p-1 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-1 focus-visible:ring-ring",
-        className
+        className,
       )}
       {...props}
     >
       <XIcon className="size-4" />
     </ToastPrimitive.Close>
-  )
+  );
 }
 
 export {
@@ -127,4 +127,4 @@ export {
   ToastTitle,
   ToastDescription,
   ToastClose,
-}
+};

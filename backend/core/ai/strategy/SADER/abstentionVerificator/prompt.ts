@@ -12,7 +12,7 @@ Pay special attention to time markers in the request: words like "this year", "c
 
 Choose "confirm" when you agree that no tool resolves the request — for example, if it is a general knowledge question with no time marker, a task requiring pure reasoning, or something clearly outside the catalog.
 
-Choose "challenge" when you believe a tool does apply and the Selector failed to pick it. In that case, set "suggestedTool" to the exact name of the tool that should have been chosen.
+Choose "challenge" when you believe a tool does apply and the Selector failed to pick it. In that case, set "suggestedTool" to the exact name of the tool that should have been chosen. This includes cases where several tools looked plausible and the Selector abstained out of hesitation instead of picking the best-matching one — that is a mistake to challenge, not a valid abstention.
 
 Outside of time-marker cases, be conservative: only challenge the abstention when you are highly confident that a tool resolves the request.`;
 };
@@ -20,5 +20,4 @@ Outside of time-marker cases, be conservative: only challenge the abstention whe
 export const abstentionVerificatorHumanPrompt = (
   userPrompt: string,
   catalogSummary: string,
-) =>
-  `User request: ${userPrompt}\n\nAvailable tools:\n${catalogSummary}`;
+) => `User request: ${userPrompt}\n\nAvailable tools:\n${catalogSummary}`;

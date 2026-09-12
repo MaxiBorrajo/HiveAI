@@ -5,7 +5,11 @@ import type { Message } from "../../types/chat.ts";
 import { MessageMarkdown } from "./MessageMarkdown.tsx";
 import { StepsPanel } from "./StepsPanel.tsx";
 
-export const ChatMessage = memo(function ChatMessage({ message }: { message: Message }) {
+export const ChatMessage = memo(function ChatMessage({
+  message,
+}: {
+  message: Message;
+}) {
   const isAgent = message.role === "agent";
   const [stepsOpen, setStepsOpen] = useState(false);
 

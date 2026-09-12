@@ -19,8 +19,8 @@
         "name": "n_ctx",
         "description": "Context window size in tokens, defining the maximum prompt and history length the model can process simultaneously.",
         "type": "number",
-        "defaultValue": 2048,
-        "currentValue": 2048,
+        "defaultValue": 4096,
+        "currentValue": 4096,
         "minValue": 512,
         "maxValue": 4096,
         "requiresServiceRestart": false

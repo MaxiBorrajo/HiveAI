@@ -10,7 +10,6 @@ interface ModelsModalProps {
   models: ModelInfo[];
   current: CurrentModels;
   onChangeModel: (name: string) => void;
-  onChangeSelectorModel: (name: string) => void;
 }
 
 export function ModelsModal({
@@ -19,7 +18,6 @@ export function ModelsModal({
   models,
   current,
   onChangeModel,
-  onChangeSelectorModel,
 }: ModelsModalProps) {
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null);
 
@@ -44,7 +42,6 @@ export function ModelsModal({
             models={models}
             current={current}
             onChangeModel={onChangeModel}
-            onChangeSelectorModel={onChangeSelectorModel}
             onSelectModel={setSelectedModel}
           />
         )}

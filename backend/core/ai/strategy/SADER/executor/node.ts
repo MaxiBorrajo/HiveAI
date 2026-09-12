@@ -1,10 +1,11 @@
-import { AIMessage } from "@langchain/core/messages";
 import { ToolMessage } from "@langchain/core/messages/tool";
+import type { ToolCall } from "@langchain/core/messages/tool";
 import type { GraphNode } from "@langchain/langgraph/web";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { captureSteps } from "../../../../microkernel/step-capture.ts";
 import type { HiveAIState, ChatStep } from "../graph.ts";
-import { getNativeTool } from "../nativeTools.ts";
+import { getNativeTool } from "../../shared/native-tools.ts";
+import { MAX_TOOL_CHAIN } from "../constants.ts";
 
 function summarize(text: string, maxChars = 200): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -14,141 +15,158 @@ function summarize(text: string, maxChars = 200): string {
 }
 
 export const Executor: GraphNode<typeof HiveAIState> = async (state) => {
-  const lastMessage = [...state.messages]
-    .reverse()
-    .find((m) => AIMessage.isInstance(m) && m.tool_calls?.length);
-
-  if (lastMessage == null || !AIMessage.isInstance(lastMessage)) {
+  if (state.pendingToolCalls.length === 0) {
     return { messages: [] };
   }
 
   const microkernel = HiveMicrokernel.getInstance();
+  const messages: ToolMessage[] = [];
+  const steps: ChatStep[] = [];
+  const toolResults: {
+    tool: string;
+    args: Record<string, unknown>;
+    ok: boolean;
+    output: string;
+  }[] = [];
+  const toolCallHistory: {
+    tool: string;
+    args: Record<string, unknown>;
+    output: string;
+  }[] = [];
 
-  const toolCall = lastMessage.tool_calls?.[0];
-
-  if (!toolCall) {
-    return {
-      messages: [
-        new ToolMessage({
-          tool_call_id: "",
-          name: state.selectedTool,
-          content: `There is no tool named '${state.selectedTool}' in the hive.`,
-          status: "error",
-        }),
-      ],
-      toolResult: {
-        ok: false,
-        output: `There is no tool named '${state.selectedTool}' in the hive.`,
-      },
+  for (const pending of state.pendingToolCalls) {
+    const toolCall: ToolCall = {
+      id: crypto.randomUUID(),
+      name: pending.tool,
+      args: pending.args,
+      type: "tool_call",
     };
-  }
 
-  const tool = getNativeTool(toolCall.name, state.chatId) ?? microkernel.getTool(toolCall.name);
+    const tool =
+      getNativeTool(toolCall.name, state.chatId) ??
+      microkernel.getTool(toolCall.name);
 
-  if (!tool) {
-    return {
-      messages: [
-        new ToolMessage({
-          tool_call_id: "",
-          name: state.selectedTool,
-          content: `There is no tool named '${state.selectedTool}' in the hive.`,
-          status: "error",
-        }),
-      ],
-      toolResult: {
-        ok: false,
-        output: `There is no tool named '${state.selectedTool}' in the hive.`,
-      },
-      steps: [
-        {
-          node: "Executor" as const,
-          label: state.selectedTool,
-          durationMs: 0,
-          summary: "That tool does not exist in the hive",
-        },
-      ],
-    };
-  }
-
-  console.log(
-    `\n[SADER - Executor] Preparing to execute tool: "${toolCall.name}"`,
-  );
-  console.log(
-    `[SADER - Executor] Tool Call Payload:`,
-    JSON.stringify(toolCall),
-  );
-
-  const start = performance.now();
-
-  try {
-    const { result: toolResult, steps: pluginSteps } = await captureSteps(() =>
-      tool.invoke(toolCall),
-    );
-    const durationMs = performance.now() - start;
-
-    console.log(
-      `[SADER - Executor] Execution successful for "${toolCall.name}"`,
-    );
-    console.log(
-      `[SADER - Executor] Output:`,
-      summarize(String(toolResult.content)),
-    );
-
-    const steps: ChatStep[] = pluginSteps.map((pluginStep) => ({
-      node: "Plugin",
-      label: toolCall.name,
-      durationMs: 0,
-      summary: summarize(pluginStep.label),
-    }));
-    steps.push({
-      node: "Executor",
-      label: toolCall.name,
-      durationMs,
-      summary: summarize(String(toolResult.content)),
-    });
-
-    return {
-      messages: [toolResult],
-      toolResult: {
-        ok: true,
-        output: toolResult.content as string,
-      },
-      steps,
-    };
-  } catch (error) {
-    const durationMs = performance.now() - start;
-    const detail = error instanceof Error ? error.message : String(error);
-
-    console.error(
-      `\n[SADER - Executor] Execution FAILED for "${toolCall.name}":`,
-      detail,
-    );
-
-    return {
-      messages: [
+    if (!tool) {
+      const output = `There is no tool named '${toolCall.name}' in the hive.`;
+      messages.push(
         new ToolMessage({
           tool_call_id: toolCall.id ?? "",
           name: toolCall.name,
-          content: `Tool '${toolCall.name}' failed: ${detail}`,
+          content: output,
           status: "error",
         }),
-      ],
-      toolResult: {
+      );
+      toolResults.push({
+        tool: toolCall.name,
+        args: pending.args,
         ok: false,
-        output: `Tool '${toolCall.name}' failed: ${detail}`,
-      },
-      steps: [
-        {
-          node: "Executor" as const,
+        output,
+      });
+      steps.push({
+        node: "Executor",
+        label: toolCall.name,
+        durationMs: 0,
+        summary: "That tool does not exist in the hive",
+      });
+      continue;
+    }
+
+    console.log(
+      `\n[SADER - Executor] Preparing to execute tool: "${toolCall.name}"`,
+    );
+    console.log(
+      `[SADER - Executor] Tool Call Payload:`,
+      JSON.stringify(toolCall),
+    );
+
+    const start = performance.now();
+
+    try {
+      const { result: toolResult, steps: pluginSteps } = await captureSteps(
+        () => tool.invoke(toolCall),
+      );
+      const durationMs = performance.now() - start;
+
+      console.log(
+        `[SADER - Executor] Execution successful for "${toolCall.name}"`,
+      );
+      console.log(
+        `[SADER - Executor] Output:`,
+        summarize(String(toolResult.content)),
+      );
+
+      for (const pluginStep of pluginSteps) {
+        steps.push({
+          node: "Plugin",
           label: toolCall.name,
-          durationMs,
-          summary: `Error: ${detail}`,
-        },
-      ],
-    };
+          durationMs: 0,
+          summary: summarize(pluginStep.label),
+        });
+      }
+      steps.push({
+        node: "Executor",
+        label: toolCall.name,
+        durationMs,
+        summary: summarize(String(toolResult.content)),
+      });
+
+      messages.push(toolResult);
+      toolResults.push({
+        tool: toolCall.name,
+        args: pending.args,
+        ok: true,
+        output: toolResult.content as string,
+      });
+      toolCallHistory.push({
+        tool: toolCall.name,
+        args: pending.args,
+        output: toolResult.content as string,
+      });
+    } catch (error) {
+      const durationMs = performance.now() - start;
+      const detail = error instanceof Error ? error.message : String(error);
+
+      console.error(
+        `\n[SADER - Executor] Execution FAILED for "${toolCall.name}":`,
+        detail,
+      );
+
+      const output = `Tool '${toolCall.name}' failed: ${detail}`;
+      messages.push(
+        new ToolMessage({
+          tool_call_id: toolCall.id ?? "",
+          name: toolCall.name,
+          content: output,
+          status: "error",
+        }),
+      );
+      toolResults.push({
+        tool: toolCall.name,
+        args: pending.args,
+        ok: false,
+        output,
+      });
+      steps.push({
+        node: "Executor" as const,
+        label: toolCall.name,
+        durationMs,
+        summary: `Error: ${detail}`,
+      });
+    }
   }
+
+  return {
+    messages,
+    toolResults,
+    toolCallHistory,
+    chainAttempts: 1,
+    hasChainedToolResult: true,
+    steps,
+  };
 };
 
 export const shouldDiagnose = (state: typeof HiveAIState.State) => {
-  return state.toolResult.ok ? "HiveQueenResponder" : "Diagnostician";
+  if (state.toolResults.some((r) => !r.ok)) return "Diagnostician";
+  if (state.chainAttempts < MAX_TOOL_CHAIN) return "Solver";
+  return "HiveQueenResponder";
 };

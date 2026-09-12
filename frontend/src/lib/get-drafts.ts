@@ -1,4 +1,5 @@
 import { API_URL } from "./config";
+import type { ResponseEntity } from "./config";
 
 export interface Draft {
   name: string;
@@ -19,11 +20,15 @@ export interface DraftValidationResult {
 }
 
 async function parseOrThrow<T>(response: Response): Promise<T> {
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || `Request failed with status ${response.status}`);
+  const body: ResponseEntity<T> = await response
+    .json()
+    .catch(() => ({ success: false }));
+  if (!response.ok || !body.success) {
+    throw new Error(
+      body.errors?.[0] || `Request failed with status ${response.status}`,
+    );
   }
-  return data;
+  return body.data as T;
 }
 
 export async function listDrafts(): Promise<Draft[]> {
@@ -42,24 +47,38 @@ export async function createDraft(name: string): Promise<Draft> {
 }
 
 export async function getDraftFiles(name: string): Promise<DraftFile[]> {
-  const response = await fetch(`${API_URL}/api/drafts/${encodeURIComponent(name)}/files`);
+  const response = await fetch(
+    `${API_URL}/api/drafts/${encodeURIComponent(name)}/files`,
+  );
   const data = await parseOrThrow<{ files: DraftFile[] }>(response);
   return data.files;
 }
 
-export async function saveDraftFile(name: string, file: string, content: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/drafts/${encodeURIComponent(name)}/files`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ file, content }),
-  });
+export async function saveDraftFile(
+  name: string,
+  file: string,
+  content: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/drafts/${encodeURIComponent(name)}/files`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ file, content }),
+    },
+  );
   await parseOrThrow(response);
 }
 
-export async function validateDraft(name: string): Promise<DraftValidationResult> {
-  const response = await fetch(`${API_URL}/api/drafts/${encodeURIComponent(name)}/validate`, {
-    method: "POST",
-  });
+export async function validateDraft(
+  name: string,
+): Promise<DraftValidationResult> {
+  const response = await fetch(
+    `${API_URL}/api/drafts/${encodeURIComponent(name)}/validate`,
+    {
+      method: "POST",
+    },
+  );
   return parseOrThrow<DraftValidationResult>(response);
 }
 
@@ -69,34 +88,33 @@ export interface ImportDraftResult {
 }
 
 export async function importDraft(name: string): Promise<ImportDraftResult> {
-  const response = await fetch(`${API_URL}/api/drafts/${encodeURIComponent(name)}/import`, {
-    method: "POST",
-  });
+  const response = await fetch(
+    `${API_URL}/api/drafts/${encodeURIComponent(name)}/import`,
+    {
+      method: "POST",
+    },
+  );
   return parseOrThrow<ImportDraftResult>(response);
 }
 
 export async function removeDraft(name: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/drafts/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  });
+  const response = await fetch(
+    `${API_URL}/api/drafts/${encodeURIComponent(name)}`,
+    {
+      method: "DELETE",
+    },
+  );
   await parseOrThrow(response);
 }
 
-// Downloads a .zip of the draft (with the plugin's own name as the
-// top-level folder inside) so it can be shared and imported on another
-// machine through the ordinary "Import Plugin" folder-upload flow.
-export async function exportDraft(name: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/drafts/${encodeURIComponent(name)}/export`);
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || `Export failed with status ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${name}.zip`;
-  link.click();
-  URL.revokeObjectURL(url);
+// The backend writes the zip to the user's Downloads folder and returns its
+// path — the app's embedded webview doesn't reliably support
+// <a download> + blob URLs, so a browser-style download here would fail
+// silently.
+export async function exportDraft(name: string): Promise<string> {
+  const response = await fetch(
+    `${API_URL}/api/drafts/${encodeURIComponent(name)}/export`,
+  );
+  const data = await parseOrThrow<{ path: string }>(response);
+  return data.path;
 }

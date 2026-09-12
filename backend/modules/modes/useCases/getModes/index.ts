@@ -1,6 +1,6 @@
 import { ResponseBuilder } from "../../../../core/api/response.ts";
-import { calculateRuntimeModes } from "../../utils/calculateRuntimeModes.ts";
-import { readModesConfig } from "../../utils/modesConfig.ts";
+import { calculateRuntimeModes } from "../../utils/calculate-runtime-modes.ts";
+import { readModesConfig } from "../../utils/modes-config.ts";
 
 export async function getModes(
   model: string,
