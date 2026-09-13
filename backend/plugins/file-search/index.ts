@@ -1,0 +1,300 @@
+import { z } from "zod";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import type {
+  BeePlugin,
+  BeeContext,
+  SelectionTestCase,
+  ExecutionTestCase,
+} from "./bee-plugin.ts";
+
+const DEFAULT_MAX_DEPTH = 8;
+const DEFAULT_MAX_RESULTS = 20;
+const MAX_CONCURRENCY = 32;
+
+const EXCLUDED_DIR_NAMES = new Set([
+  "node_modules",
+  ".git",
+  ".svn",
+  ".hg",
+  "dist",
+  "build",
+  ".cache",
+  ".next",
+  ".venv",
+  "venv",
+  "__pycache__",
+  "AppData",
+  "$RECYCLE.BIN",
+  "System Volume Information",
+]);
+
+const schema = z.object({
+  name: z
+    .string()
+    .describe(
+      "Name of the file or folder to search for, for example 'report.pdf' or 'report'. The search is case-insensitive and performs a partial match.",
+    ),
+  folder: z
+    .string()
+    .optional()
+    .describe(
+      "Absolute path of a specific folder to search in. If omitted, it searches in the user's common folders (Desktop, Documents, Downloads, and home).",
+    ),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .default(DEFAULT_MAX_RESULTS)
+    .describe("Maximum number of matches to return."),
+});
+
+type FileSearchSchema = typeof schema;
+
+export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
+  name = "file_search";
+  description =
+    "Locates files and folders anywhere in the filesystem by matching partial names. USE CASES: Use this when the user asks to find a lost file, locate where a specific configuration or document is stored, or when you need the exact absolute path of a file before you can read it. It is optimized for substring matching (e.g., use 'config' instead of '*.config'). Do NOT use this tool if you already know the absolute path of the file. It only matches by file/folder name — it cannot tell whether a file was modified, its content, or its version-control status; for anything about a file's history or changes, this tool does not apply.";
+
+  schema = schema;
+
+  selectionTests: SelectionTestCase<FileSearchSchema>[] = [
+    {
+      query: "search for the file report.pdf in my documents",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "where did I save index.ts?",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "find the backend folder on my machine",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "what time is it?",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "reset the counter",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "explain how quicksort works in Python",
+      kind: "negative",
+      shouldInvoke: false,
+    },
+    {
+      query: "read what is inside README.md",
+      kind: "ambiguous",
+    },
+    {
+      query: "search the web for TypeScript tutorials",
+      kind: "ambiguous",
+    },
+    {
+      query: "check if port 8000 is open",
+      kind: "ambiguous",
+    },
+  ];
+
+  executionTests: ExecutionTestCase<FileSearchSchema>[] = [
+    {
+      description: "Search for a known existing file in current directory",
+      kind: "happy",
+      params: { name: "deno.json", folder: Deno.cwd(), maxResults: 5 },
+      expect: (output: string) =>
+        output.includes("Found") && output.includes("deno.json"),
+    },
+    {
+      description: "Search for a partial name match in current directory",
+      kind: "happy",
+      params: { name: "bee-plugin", folder: Deno.cwd(), maxResults: 5 },
+      expect: (output: string) =>
+        output.includes("Found") && output.includes("bee-plugin"),
+    },
+    {
+      description: "Search for a folder by name in current directory",
+      kind: "happy",
+      params: { name: "plugins", folder: Deno.cwd(), maxResults: 5 },
+      expect: (output: string) =>
+        output.includes("Found") && output.includes("plugins"),
+    },
+    {
+      description: "Search with maxResults capped to 1",
+      kind: "edge",
+      params: { name: "ts", folder: Deno.cwd(), maxResults: 1 },
+      expect: (output: string) => output.includes("Found 1 match(es)"),
+    },
+    {
+      description: "Search for a non-existent file name in valid folder",
+      kind: "edge",
+      params: {
+        name: "non_existent_file_xyz_123456789.none",
+        folder: Deno.cwd(),
+        maxResults: 5,
+      },
+      expect: (output: string) => output.includes("No file or folder matching"),
+    },
+    {
+      description: "Search with uppercase name (case-insensitive test)",
+      kind: "edge",
+      params: { name: "DENO.JSON", folder: Deno.cwd(), maxResults: 5 },
+      expect: (output: string) =>
+        output.includes("Found") && output.toLowerCase().includes("deno.json"),
+    },
+    {
+      description: "Search in a non-existent folder",
+      kind: "error",
+      params: {
+        name: "test",
+        folder: "/non/existent/directory/path/12345",
+        maxResults: 5,
+      },
+      expect: (output: string) =>
+        output.includes("does not exist or is not accessible"),
+    },
+    {
+      description: "Invalid maxResults below minimum (< 1)",
+      kind: "error",
+      params: { name: "test", folder: Deno.cwd(), maxResults: 0 as any },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+    {
+      description: "Missing required name property",
+      kind: "error",
+      params: { name: undefined as any, folder: Deno.cwd(), maxResults: 5 },
+      expect: (output: string) =>
+        output.toLowerCase().includes("invalid") ||
+        output.toLowerCase().includes("error"),
+    },
+  ];
+
+  get testCases() {
+    return this.selectionTests;
+  }
+
+  initialize(_context: BeeContext): void {}
+
+  private getDefaultSearchDirs(): string[] {
+    const home = homedir();
+    const dirs = [home];
+
+    const oneDrive =
+      Deno.env.get("OneDrive") ?? Deno.env.get("OneDriveConsumer");
+    if (oneDrive && oneDrive !== home) {
+      dirs.push(oneDrive);
+    }
+
+    return dirs;
+  }
+
+  private async searchDirs(
+    roots: string[],
+    maxDepth: number,
+    searchTerm: string,
+    maxResults: number,
+  ): Promise<string[]> {
+    const matches: string[] = [];
+    const seen = new Set<string>();
+
+    type QueueItem = { dir: string; depth: number };
+    const queue: QueueItem[] = roots.map((dir) => ({ dir, depth: maxDepth }));
+    let cursor = 0;
+    let workersInFlight = 0;
+
+    const worker = async () => {
+      while (matches.length < maxResults) {
+        if (cursor >= queue.length) {
+          if (workersInFlight === 0) return;
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          continue;
+        }
+
+        const { dir, depth } = queue[cursor++];
+        if (depth < 0) continue;
+
+        workersInFlight++;
+        let entries: Deno.DirEntry[];
+        try {
+          entries = [];
+          for await (const entry of Deno.readDir(dir)) {
+            entries.push(entry);
+          }
+        } catch {
+          workersInFlight--;
+          continue;
+        }
+        workersInFlight--;
+
+        for (const entry of entries) {
+          if (matches.length >= maxResults) return;
+
+          const fullPath = join(dir, entry.name);
+
+          if (
+            entry.name.toLowerCase().includes(searchTerm) &&
+            !seen.has(fullPath)
+          ) {
+            seen.add(fullPath);
+            matches.push(fullPath);
+          }
+
+          if (entry.isDirectory && !EXCLUDED_DIR_NAMES.has(entry.name)) {
+            queue.push({ dir: fullPath, depth: depth - 1 });
+          }
+        }
+      }
+    };
+
+    const workers = Array.from({ length: MAX_CONCURRENCY }, worker);
+    await Promise.all(workers);
+
+    return matches;
+  }
+
+  async process(input: z.infer<FileSearchSchema>): Promise<string> {
+    const parsed = this.schema.safeParse(input);
+    if (!parsed.success) {
+      return `The provided parameters are invalid. Error: ${parsed.error.message}`;
+    }
+
+    const { name, folder, maxResults } = parsed.data;
+    const searchTerm = name.toLowerCase();
+
+    const roots = folder ? [folder] : this.getDefaultSearchDirs();
+
+    if (folder) {
+      try {
+        await Deno.stat(folder);
+      } catch {
+        return `The specified folder does not exist or is not accessible: ${folder}`;
+      }
+    }
+
+    const matches = await this.searchDirs(
+      roots,
+      DEFAULT_MAX_DEPTH,
+      searchTerm,
+      maxResults,
+    );
+
+    if (matches.length === 0) {
+      const where = folder
+        ? `in the folder '${folder}'`
+        : "in the user's home folder (including Desktop, Documents, Downloads, etc.)";
+      return `No file or folder matching '${name}' was found ${where}.`;
+    }
+
+    const limited = matches.slice(0, maxResults);
+    const list = limited.map((p) => `- ${p}`).join("\n");
+    return `Found ${limited.length} match(es) for '${name}':\n${list}`;
+  }
+}

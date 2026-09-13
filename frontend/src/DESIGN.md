@@ -62,8 +62,10 @@ Dos familias, tres tamaños. Más que eso es ruido.
 ### Familias
 
 **Archivo** (`font-sans`) — todo el texto de interfaz y de conversación.
+**Inter** (`font-sans`) — todo el texto de interfaz y de conversación.
 
 **JetBrains Mono** (`font-mono`) — territorio de máquina. Esto no es decorativo: la fuente monoespaciada marca lo que el sistema ejecuta o identifica, no lo que dice.
+La fuente monoespaciada (`font-mono`) recae en los defaults del sistema operativo (territorio de máquina). Esto marca lo que el sistema ejecuta o identifica.
 
 Va en mono:
 - Nombres de plugin (`FileSearchPlugin`)
@@ -79,10 +81,12 @@ No va en mono:
 ### Los imports son específicos y no se tocan
 
 Ambas familias se cargan self-hosted vía Fontsource, importadas al principio de `src/index.css`:
+La familia se carga self-hosted vía Fontsource, importada al principio de `src/index.css`:
 
 ```css
 @import "@fontsource-variable/archivo/standard.css";
 @import "@fontsource-variable/jetbrains-mono/latin.css";
+@import "@fontsource-variable/inter";
 ```
 
 **`standard.css` en Archivo no es intercambiable por `wght.css`.** Fontsource publica los ejes por separado: `wght.css` trae solo peso, `standard.css` trae peso y ancho (`font-stretch: 62% 125%`). Si alguien lo cambia a `wght.css` para ahorrar unos KB, `text-display` deja de funcionar sin dar ningún error — simplemente se ve igual que el texto normal. Verificado sobre el paquete instalado.
@@ -90,6 +94,7 @@ Ambas familias se cargan self-hosted vía Fontsource, importadas al principio de
 **Nunca agregues una fuente por CDN de Google.** La app corre offline; un link externo la rompe sin red y filtra una request en cada arranque, lo cual contradice la premisa del producto.
 
 Solo estas dos familias. Si el preset de shadcn arrastra una tercera (Geist, por ejemplo), sacala: `--font-sans` ya apunta a Archivo, así que sería peso muerto en el binario.
+Solo esta familia. Si el preset de shadcn arrastra una tercera, sacala para mantener el binario final liviano.
 
 ### Escala
 
