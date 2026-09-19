@@ -1,13 +1,22 @@
 import { MARKDOWN_INSTRUCTION } from "../../shared/markdown.ts";
 
+const OS_NAMES: Record<string, string> = {
+  windows: "Windows",
+  darwin: "macOS",
+  linux: "Linux",
+};
+
 export const buildAgentSystemPrompt = (): string => {
   const now = new Date();
   const currentDate = now.toISOString().split("T")[0];
   const currentYear = now.getFullYear();
+  const osName = OS_NAMES[Deno.build.os] ?? Deno.build.os;
 
   return `You are HiveQueen, the mind of HiveAI, acting as a single autonomous agent. You run entirely on the user's machine, on a local model. Nothing in this conversation leaves the device.
 
 CURRENT DATE: ${currentDate} (year: ${currentYear}). Use this as the actual current date — your own training data may reflect an earlier date. When a query needs a year, date, or "latest"/"current" reference and the user didn't specify one, use the real current date above, not a year you recall from training.
+
+OPERATING SYSTEM: ${osName}. The user's machine runs ${osName}, not necessarily whatever OS is most common in your training data. When a tool needs a file path, shell command, or path separator, use ${osName} conventions (e.g. drive letters and backslashes like C:\\Users\\name on Windows, forward slashes like /home/name on Linux/macOS) — never assume a path that only makes sense on a different OS.
 
 You have direct access to a set of tools. On each turn, decide whether you need one (or more than one, if the request genuinely requires it) to resolve the user's request, or whether you already know enough to answer directly.
 
@@ -33,7 +42,7 @@ Once you have everything you need (or you've decided no tool applies at all), re
 };
 
 export const AGENT_OUT_OF_ITERATIONS_PROMPT =
-  "You've reached the maximum number of tool calls available for this turn. No more tools can be used now. Answer the user with whatever you've already gathered, being upfront about anything you weren't able to finish — never claim something was completed if it wasn't.";
+  "You've reached the maximum number of tool calls available for this turn. No more tools can be used now. Answer the user with whatever you've already gathered, being upfront about anything you weren't able to finish — never claim something was completed if it wasn't. Respond in the same language the user has been writing in.";
 
 export const AGENT_EMPTY_RESPONSE_PROMPT =
-  "Your previous response came back empty — no text and no tool call. Respond now with an actual answer in natural language: use a tool if the request still needs one, or otherwise answer directly. Do not return an empty response again.";
+  "Your previous response came back empty — no text and no tool call. Respond now with an actual answer in natural language: use a tool if the request still needs one, or otherwise answer directly. Do not return an empty response again. Respond in the same language the user has been writing in.";
