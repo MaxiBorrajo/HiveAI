@@ -53,6 +53,20 @@ deno desktop --hmr .
 **3. Visualizar**
 Abre tu navegador web en `http://localhost:5173`. Todos los cambios que hagas en React se reflejarán instantáneamente, y si cambias la lógica del backend, la API se reiniciará sola de fondo.
 
+## Modo Producción (App de Escritorio)
+
+Para generar el ejecutable nativo de la aplicación de escritorio, existe un script automatizado que unifica la construcción del frontend y empaqueta el backend en un binario independiente usando Deno.
+
+Desde la raíz del proyecto (o desde la carpeta `backend/`), ejecuta:
+
+```bash
+deno task build:desktop
+```
+
+*(O puedes correr `./build-desktop.sh` directamente si estás en la raíz).*
+
+Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta `dist/` en la raíz del proyecto.
+
 ---
 
 ## Contribuir

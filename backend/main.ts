@@ -75,13 +75,37 @@ try {
 
 console.log(`\n🚀 Backend is running on http://localhost:${port}`);
 
-const win = new Deno.BrowserWindow({
-  title: "HiveAI Desktop",
-  width: 1200,
-  height: 800,
-});
+type DesktopWindow = {
+  navigate?: (url: string) => void;
+  setSize?: (w: number, h: number) => void;
+  setTitle?: (t: string) => void;
+  setApplicationMenu?: (menu: unknown[]) => void;
+  executeJs?: (code: string) => Promise<unknown>;
+  addEventListener?: (
+    type: string,
+    cb: (e: { detail?: { id?: string } }) => void,
+  ) => void;
+};
 
-win.navigate(`http://localhost:${port}`);
+const desktop = Deno as unknown as {
+  BrowserWindow?: new (opts: Record<string, unknown>) => DesktopWindow;
+};
+
+if (desktop.BrowserWindow) {
+  const win = new desktop.BrowserWindow({
+    title: "HiveAI Desktop",
+    width: 1200,
+    height: 800,
+  });
+  if (win.navigate) {
+    win.navigate(`http://localhost:${port}`);
+  }
+  console.log("🖥️  Desktop window opened!");
+} else {
+  console.log(
+    "ℹ️  Tip: Run with 'deno desktop backend/main.ts' to open as a desktop app.",
+  );
+}
 
 hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
 hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
