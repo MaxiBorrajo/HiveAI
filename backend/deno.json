@@ -10,7 +10,8 @@
   },
   "tasks": {
     "dev": "deno run --watch --allow-net --allow-env --allow-write --allow-read --allow-ffi --allow-sys=homedir,cpus,systemMemoryInfo,osRelease --allow-run=bash,cmd,powershell,deno,/bin/sh,nvidia-smi,pkexec,osascript,launchctl main.ts",
-    "experiment": "deno run -A experiments/routing/run.ts"
+    "experiment": "deno run -A experiments/routing/run.ts",
+    "build:desktop": "../build-desktop.sh"
   },
   "imports": {
     "@langchain/core": "npm:@langchain/core@^1.2.9",
@@ -41,9 +42,9 @@
     },
     "backend": "webview",
     "output": {
-      "macos": "./dist/HiveAI.app",
-      "windows": "./dist/HiveAI",
-      "linux": "./dist/hive-ai"
+      "macos": "../dist/HiveAI.app",
+      "windows": "../dist/HiveAI",
+      "linux": "../dist/hive-ai"
     }
   }
 }
