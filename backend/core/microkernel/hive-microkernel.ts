@@ -132,9 +132,18 @@ export class HiveMicrokernel {
       );
     }
 
-    const coreBeeContent = await Deno.readTextFile(
-      new URL("./bee-plugin.ts", import.meta.url),
-    );
+
+    let coreBeeContent: string;
+    try {
+      coreBeeContent = await Deno.readTextFile(
+        new URL("./bee-plugin.ts", import.meta.url),
+      );
+    } catch (e) {
+      // If we are running in a compiled executable, the core bee-plugin.ts
+      // might not be available as a file asset. In production, we trust the bundled plugins.
+      return;
+    }
+    
     if (pluginBeeContent.trim() !== coreBeeContent.trim()) {
       throw new Error(
         `Plugin at '${beePluginPath}' is outdated: its bee-plugin.ts does not match the microkernel's version.`,

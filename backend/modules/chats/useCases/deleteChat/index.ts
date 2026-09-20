@@ -1,19 +1,16 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
-import {
-  deleteChat as deleteChatFromMemory,
-  getChat,
-} from "../../../../core/memory/chatStore.ts";
+import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
+import { ChatRepository } from "../../../../infrastructure/db/repositories/ChatRepository.ts";
 
 export async function deleteChat(
-  hive: HiveMicrokernel,
-  chatId: string,
+  db: AppDatabase,
+  chatId: number,
   headers: Record<string, string>,
 ): Promise<Response> {
   try {
-    const dataDir = hive.getConfig().get("dataDir");
-
-    const chat = await getChat(dataDir, chatId);
+    const chatRepo = new ChatRepository(db);
+    const chat = await chatRepo.findById(chatId);
     if (!chat) {
       return ResponseBuilder.error(
         [`Chat '${chatId}' was not found.`],
@@ -24,8 +21,7 @@ export async function deleteChat(
         },
       );
     }
-
-    await deleteChatFromMemory(dataDir, chatId);
+    await chatRepo.delete(chatId);
     return ResponseBuilder.success({ success: true }, { headers });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
