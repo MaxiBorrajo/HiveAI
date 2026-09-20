@@ -1,14 +1,15 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
-import { listChats as listChatsFromMemory } from "../../../../core/memory/chatStore.ts";
+import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
+import { ChatRepository } from "../../../../infrastructure/db/repositories/ChatRepository.ts";
 
 export async function listChats(
-  hive: HiveMicrokernel,
+  db: AppDatabase,
   headers: Record<string, string>,
 ): Promise<Response> {
   try {
-    const dataDir = hive.getConfig().get("dataDir");
-    const chats = await listChatsFromMemory(dataDir);
+    const chatRepo = new ChatRepository(db);
+    const chats = await chatRepo.findAll();
     return ResponseBuilder.success(chats, { headers });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

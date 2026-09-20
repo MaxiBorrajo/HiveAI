@@ -1,18 +1,20 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
-import { getChat } from "../../../../core/memory/chatStore.ts";
-import { getAllMessages } from "../../../../core/memory/messageStore.ts";
-import type { GetChatMessagesResponse } from "./types.ts";
+import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
+import { ChatRepository } from "../../../../infrastructure/db/repositories/ChatRepository.ts";
+import { MessageRepository } from "../../../../infrastructure/db/repositories/MessageRepository.ts";
+import type { ChatStepMetadata } from "../../types/memory.ts";
+import type { ChatMessageResponse } from "./types.ts";
 
 export async function getChatMessages(
-  hive: HiveMicrokernel,
-  chatId: string,
+  db: AppDatabase,
+  chatId: number,
   headers: Record<string, string>,
 ): Promise<Response> {
   try {
     const dataDir = hive.getConfig().get("dataDir");
 
-    const chat = await getChat(dataDir, chatId);
+    const chat = await chatRepo.findById(chatId);
     if (!chat) {
       return ResponseBuilder.error(
         [`Chat '${chatId}' was not found.`],
@@ -24,10 +26,23 @@ export async function getChatMessages(
       );
     }
 
-    const messages = await getAllMessages(dataDir, chatId);
+    const messages = await msgRepo.findByChatId(chatId);
 
-    const response: GetChatMessagesResponse = { chat, messages };
-    return ResponseBuilder.success(response, { headers });
+    const formattedMessages: ChatMessageResponse[] = messages.map((m) => ({
+      id: m.id,
+      chatId: m.chatId,
+      role: (m.role === "assistant" ? "agent" : m.role) as "user" | "agent",
+      content: m.content,
+      timestamp: m.timestamp,
+      metadata: m.metadata
+        ? (JSON.parse(m.metadata) as ChatStepMetadata)
+        : null,
+    }));
+
+    return ResponseBuilder.success(
+      { chat, messages: formattedMessages },
+      { headers },
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return ResponseBuilder.error(

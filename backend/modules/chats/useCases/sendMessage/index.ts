@@ -1,19 +1,15 @@
-import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
-import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
+import { ResponseBuilder } from "../../../../core/api/response.ts";
+import { type HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import {
   Scout,
   type ChatStep,
 } from "../../../../core/ai/strategy/SCOUT/graph.ts";
+import { ChatRepository } from "../../../../infrastructure/db/repositories/ChatRepository.ts";
+import { MessageRepository } from "../../../../infrastructure/db/repositories/MessageRepository.ts";
+import type { ThinkingRun } from "../../types/memory.ts";
 import { resolveModelOptions } from "../../../modes/utils/resolve-model-options.ts";
-import {
-  createChat,
-  getChat,
-  touchChat,
-} from "../../../../core/memory/chatStore.ts";
-import { addMessage } from "../../../../core/memory/messageStore.ts";
-import { embedText } from "../../../../core/memory/embeddings.ts";
-import { buildTurnContext } from "../../../../core/memory/contextBuilder.ts";
-import type { ThinkingRun } from "../../../../core/memory/types.ts";
+import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
+import { embedText } from "../../../../core/ai/embeddings/embeddings.ts";
 
 const MAX_MESSAGE_LENGTH = 20_000;
 
@@ -29,38 +25,58 @@ function deriveTitle(message: string): string {
 // response could have that response silently missing from the model's
 // context — it hadn't finished being written yet.
 async function persistUserMessage(
-  dataDir: string,
-  chatId: string,
+  db: AppDatabase,
+  chatId: number,
   userText: string,
-): Promise<void> {
-  try {
-    const vector = await embedText(userText);
-    addMessage(dataDir, chatId, "user", userText, vector);
-    await touchChat(dataDir, chatId);
-  } catch (error) {
-    console.error("Failed to persist user message:", error);
-  }
+) {
+  const chatRepo = new ChatRepository(db);
+  const msgRepo = new MessageRepository(db);
+
+  const chat = await chatRepo.findById(chatId);
+  if (!chat) throw new Error("Chat not found");
+
+  chat.messageCount++;
+  chat.updatedAt = Date.now();
+  await chatRepo.update(chat);
+
+  const vector = await embedText(userText);
+  await msgRepo.create({
+    chatId: chat.id,
+    role: "user",
+    content: userText,
+    timestamp: Date.now(),
+    metadata: null,
+    vector: JSON.stringify(vector),
+  });
 }
 
-async function persistAgentMessage(
-  dataDir: string,
-  chatId: string,
+async function persistAssistantMessage(
+  db: AppDatabase,
+  chatId: number,
   fullContent: string,
   usedTools: string[],
   steps: ChatStep[],
   thinkingRuns: ThinkingRun[],
-): Promise<void> {
-  try {
-    const vector = await embedText(fullContent);
-    addMessage(dataDir, chatId, "agent", fullContent, vector, {
-      usedTools,
-      steps,
-      thinkingRuns,
-    });
-    await touchChat(dataDir, chatId);
-  } catch (error) {
-    console.error("Failed to persist agent message:", error);
-  }
+) {
+  const chatRepo = new ChatRepository(db);
+  const msgRepo = new MessageRepository(db);
+
+  const chat = await chatRepo.findById(chatId);
+  if (!chat) throw new Error("Chat not found");
+
+  chat.messageCount++;
+  chat.updatedAt = Date.now();
+  await chatRepo.update(chat);
+
+  const vector = await embedText(fullContent);
+  await msgRepo.create({
+    chatId: chat.id,
+    role: "agent",
+    content: fullContent,
+    timestamp: Date.now(),
+    metadata: JSON.stringify({ usedTools, steps, thinkingRuns }),
+    vector: JSON.stringify(vector),
+  });
 }
 
 function appendThinkingDelta(
@@ -135,7 +151,10 @@ async function consumeStream(
   return { fullContent, steps, thinkingRuns };
 }
 
-export function handleChat(
+export async function sendMessage(
+  db: AppDatabase,
+  chatId: number | null,
+  userText: string,
   hive: HiveMicrokernel,
   model: string,
   req: Request,
@@ -150,7 +169,6 @@ export function handleChat(
 
   const stream = new ReadableStream({
     async start(controller) {
-      const encoder = new TextEncoder();
       const send = (event: string, data: unknown) => {
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
@@ -158,13 +176,26 @@ export function handleChat(
       };
 
       try {
-        const body = await req.json();
-        const userText: string = body.message;
+        const chatRepo = new ChatRepository(db);
 
-        if (typeof userText !== "string" || userText.trim().length === 0) {
-          send("error", {
-            message:
-              "The 'message' field is required and must be a non-empty string.",
+        // Resolve or create chat
+        let resolvedChatId: number;
+        if (chatId !== null) {
+          const existing = await chatRepo.findById(chatId);
+          if (!existing) {
+            send("error", { message: `Chat ${chatId} not found.` });
+            controller.close();
+            return;
+          }
+          resolvedChatId = chatId;
+        } else {
+          const generatedTitle =
+            userText.length > 50 ? userText.slice(0, 47) + "..." : userText;
+          resolvedChatId = await chatRepo.create({
+            title: generatedTitle,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messageCount: 0,
           });
           return;
         }
@@ -232,16 +263,22 @@ export function handleChat(
           ),
         );
 
-        await persistAgentMessage(
-          dataDir,
-          chatId,
+        await persistAssistantMessage(
+          db,
+          resolvedChatId,
           fullContent,
           usedTools,
           steps,
           thinkingRuns,
         );
 
-        send("done", { content: fullContent, usedTools, steps, thinkingRuns });
+        send("done", {
+          content: fullContent,
+          usedTools,
+          steps,
+          thinkingRuns,
+        });
+        controller.close();
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         send("error", { message: detail });

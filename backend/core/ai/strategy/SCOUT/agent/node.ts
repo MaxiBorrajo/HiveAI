@@ -47,7 +47,10 @@ export const Agent: GraphNode<typeof ScoutState> = async (state) => {
       : []),
   ];
 
-  const tools = [...microkernel.getTools(), ...buildNativeTools(state.chatId)];
+  const tools = [
+    ...microkernel.getTools(),
+    ...buildNativeTools(Number(state.chatId)),
+  ];
 
   const invoke = (messages: BaseMessage[]) =>
     outOfIterations
@@ -69,7 +72,10 @@ export const Agent: GraphNode<typeof ScoutState> = async (state) => {
       response,
       new HumanMessage(AGENT_EMPTY_RESPONSE_PROMPT),
     ]);
-    console.log(`[SCOUT - Agent] Raw model response (retry):`, response.content);
+    console.log(
+      `[SCOUT - Agent] Raw model response (retry):`,
+      response.content,
+    );
     console.log(
       `[SCOUT - Agent] Tool calls requested (retry):`,
       response.tool_calls,

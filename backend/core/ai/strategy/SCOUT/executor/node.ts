@@ -20,7 +20,8 @@ async function runToolCall(
 ): Promise<{ message: ToolMessage; steps: ChatStep[]; ok: boolean }> {
   const microkernel = HiveMicrokernel.getInstance();
   const tool =
-    getNativeTool(toolCall.name, chatId) ?? microkernel.getTool(toolCall.name);
+    getNativeTool(toolCall.name, Number(chatId)) ??
+    microkernel.getTool(toolCall.name);
 
   if (!tool) {
     return {

@@ -12,6 +12,6 @@ deno task build
 echo "🔨 Empaquetando la aplicación de Escritorio con Deno..."
 cd "$DIR/backend"
 deno install
-deno desktop -A --include plugins --include ../frontend/dist main.ts
+deno desktop -A --include plugins --include ../frontend/dist --include infrastructure/db/migrations main.ts
 
 echo "✅ ¡Build finalizado! El ejecutable se encuentra en la nueva carpeta 'dist/' en la raíz (dist/hive-ai)"
