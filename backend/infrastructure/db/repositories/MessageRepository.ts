@@ -4,9 +4,9 @@ import {
   HumanMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
-import { embedText } from "../../../core/ai/embeddings/embeddings.ts";
 import type { AppDatabase } from "../orm.ts";
 import { messages, type Message, type NewMessage } from "../schema/messages.ts";
+import { embedText } from "../../../core/memory/embeddings.ts";
 
 export type MessageRecord = Message;
 export type { NewMessage };
