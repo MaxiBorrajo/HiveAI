@@ -6,24 +6,14 @@ import {
 } from "../../../../core/ai/strategy/SCOUT/graph.ts";
 import { ChatRepository } from "../../../../infrastructure/db/repositories/ChatRepository.ts";
 import { MessageRepository } from "../../../../infrastructure/db/repositories/MessageRepository.ts";
-import type { ThinkingRun } from "../../types/memory.ts";
+import { type ThinkingRun } from "../../../../core/memory/types.ts";
 import { resolveModelOptions } from "../../../modes/utils/resolve-model-options.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
-import { embedText } from "../../../../core/ai/embeddings/embeddings.ts";
+import { embedText } from "../../../../core/memory/embeddings.ts";
+import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 
 const MAX_MESSAGE_LENGTH = 20_000;
 
-function deriveTitle(message: string): string {
-  const trimmed = message.trim();
-  return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
-}
-
-// Awaited (not fire-and-forget) before the turn is considered done: the
-// next turn in this same chat builds its context from what's already in
-// SQLite (buildTurnContext / getRecentMessages), so if this were
-// fire-and-forget, a user typing the next message quickly after seeing a
-// response could have that response silently missing from the model's
-// context — it hadn't finished being written yet.
 async function persistUserMessage(
   db: AppDatabase,
   chatId: number,
@@ -159,7 +149,7 @@ export async function sendMessage(
   model: string,
   req: Request,
   headers: Record<string, string>,
-): Response {
+): Promise<Response> {
   const streamHeaders = {
     ...headers,
     "content-type": "text/event-stream",
@@ -169,6 +159,7 @@ export async function sendMessage(
 
   const stream = new ReadableStream({
     async start(controller) {
+      const encoder = new TextEncoder();
       const send = (event: string, data: unknown) => {
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
@@ -197,7 +188,7 @@ export async function sendMessage(
             updatedAt: Date.now(),
             messageCount: 0,
           });
-          return;
+          send("chat_created", { chatId: resolvedChatId.toString() });
         }
 
         if (userText.length > MAX_MESSAGE_LENGTH) {
@@ -205,21 +196,6 @@ export async function sendMessage(
             message: `The message is too long (${userText.length} characters, max ${MAX_MESSAGE_LENGTH}).`,
           });
           return;
-        }
-
-        const dataDir = hive.getConfig().get("dataDir");
-
-        let chatId: string = body.chatId;
-        if (!chatId) {
-          const chat = await createChat(dataDir, deriveTitle(userText));
-          chatId = chat.id;
-          send("chat_created", { chatId });
-        } else {
-          const existingChat = await getChat(dataDir, chatId);
-          if (!existingChat) {
-            send("error", { message: `Chat '${chatId}' was not found.` });
-            return;
-          }
         }
 
         console.log(
@@ -230,7 +206,7 @@ export async function sendMessage(
             .join(", ")}]`,
         );
 
-        await persistUserMessage(dataDir, chatId, userText);
+        await persistUserMessage(db, resolvedChatId, userText);
 
         send("thinking", {});
 
@@ -238,14 +214,14 @@ export async function sendMessage(
           hive.getConfig().get("currentMode"),
         );
 
-        const contextMessages = await buildTurnContext(
-          dataDir,
-          chatId,
+        const msgRepo = new MessageRepository(db);
+        const contextMessages = await msgRepo.buildTurnContext(
+          resolvedChatId,
           userText,
         );
 
         const streamIterable = await Scout.stream(
-          { messages: contextMessages, chatId, model, modelOptions },
+          { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
           { streamMode: ["messages", "values"] },
         );
 

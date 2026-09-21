@@ -11,6 +11,7 @@ import { externalPluginCallbacksRouter } from "./modules/externalPluginCallbacks
 import { draftsRouter } from "./modules/drafts/router.ts";
 import { modesRouter } from "./modules/modes/router.ts";
 import { modelsRouter } from "./modules/models/router.ts";
+import { initORM } from "./infrastructure/db/orm.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -45,6 +46,7 @@ app.route("/api/drafts", draftsRouter);
 
 const frontendDistPath = join(__dirname, "../frontend/dist");
 
+
 app.use("/*", serveStatic({ root: frontendDistPath }));
 
 // Fallback for React Router (SPA)
@@ -61,6 +63,13 @@ app.get("*", async (c) => {
     );
   }
 });
+
+hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
+hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
+await hive.getConfig().load();
+
+const dataDir = hive.getConfig().get("dataDir");
+await initORM(dataDir);
 
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
@@ -106,10 +115,6 @@ if (desktop.BrowserWindow) {
     "ℹ️  Tip: Run with 'deno desktop backend/main.ts' to open as a desktop app.",
   );
 }
-
-hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
-hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
-await hive.getConfig().load();
 
 hive.configure({
   model: hive.getConfig().get("model"),

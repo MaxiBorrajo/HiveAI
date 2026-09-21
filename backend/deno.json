@@ -9,7 +9,7 @@
     "types": ["npm:@types/node@^22.10.0"]
   },
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --allow-write --allow-read --allow-ffi --allow-sys=homedir,cpus,systemMemoryInfo,osRelease --allow-run=bash,cmd,powershell,deno,/bin/sh,nvidia-smi,pkexec,osascript,launchctl main.ts",
+    "dev": "deno run --watch -A main.ts",
     "experiment": "deno run -A experiments/routing/run.ts",
     "build:desktop": "../build-desktop.sh",
     "db:generate": "deno run -A npm:drizzle-kit@^0.30.0 generate",
