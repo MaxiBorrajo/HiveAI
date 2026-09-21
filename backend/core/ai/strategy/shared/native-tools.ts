@@ -1,8 +1,7 @@
 import { tool, type DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import { HiveMicrokernel } from "../../../microkernel/hive-microkernel.ts";
-import { embedText } from "../../../memory/embeddings.ts";
-import { hybridSearchGlobal } from "../../../memory/messageStore.ts";
+import { getORM } from "../../../../infrastructure/db/orm.ts";
+import { MessageRepository } from "../../../../infrastructure/db/repositories/MessageRepository.ts";
 
 const RECALL_TOOL_NAME = "recall_past_conversations";
 
@@ -20,15 +19,13 @@ type NativeTool = DynamicStructuredTool<
   string
 >;
 
-function buildRecallTool(chatId: string): NativeTool {
+function buildRecallTool(chatId: number): NativeTool {
   return tool(
     async ({ query, limit }: z.infer<typeof RecallSchema>) => {
-      const dataDir = HiveMicrokernel.getInstance().getConfig().get("dataDir");
-      const vector = await embedText(query);
-      const results = await hybridSearchGlobal(
-        dataDir,
+      const db = getORM();
+      const msgRepo = new MessageRepository(db);
+      const results = await msgRepo.hybridSearchGlobal(
         query,
-        vector,
         limit ?? 10,
         chatId,
       );
@@ -53,13 +50,13 @@ function buildRecallTool(chatId: string): NativeTool {
   );
 }
 
-export function buildNativeTools(chatId: string): NativeTool[] {
+export function buildNativeTools(chatId: number): NativeTool[] {
   return [buildRecallTool(chatId)];
 }
 
 export function getNativeTool(
   name: string,
-  chatId: string,
+  chatId: number,
 ): NativeTool | undefined {
   return buildNativeTools(chatId).find((t) => t.name === name);
 }
