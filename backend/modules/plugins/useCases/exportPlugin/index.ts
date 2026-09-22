@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { homeDir } from "hive-ai";
+import { homeDir } from "../../../../core/env.ts";
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { zipTsFolder } from "../../../../core/microkernel/drafts/zip-folder.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";

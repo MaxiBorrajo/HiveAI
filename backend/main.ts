@@ -12,9 +12,8 @@ import { draftsRouter } from "./modules/drafts/router.ts";
 import { modesRouter } from "./modules/modes/router.ts";
 import { modelsRouter } from "./modules/models/router.ts";
 import { initORM } from "./infrastructure/db/orm.ts";
+import { homeDir } from "./core/env.ts";
 
-export const homeDir: string | undefined =
-  Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
 const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
