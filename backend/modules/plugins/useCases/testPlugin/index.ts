@@ -12,7 +12,7 @@ import type {
   TestKind,
 } from "./types.ts";
 import { Scout } from "../../../../core/ai/strategy/SCOUT/graph.ts";
-import { homeDir } from "hive-ai";
+import { homeDir } from "../../../../core/env.ts";
 import { join } from "node:path";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 
