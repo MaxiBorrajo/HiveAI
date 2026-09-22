@@ -17,7 +17,8 @@ El problema que ataca no es el costo ni la privacidad: es que hoy todo lo que co
 - **Grafos de agente:** LangGraph
 - **Modelo local:** Ollama
 - **Linting:** Oxlint en `frontend/`, `deno lint` nativo en `backend/`
-- **Tests:** Vitest + Testing Library
+- **Tests backend:** `deno test` nativo + `@std/assert`
+- **Tests frontend:** Vitest + Testing Library (pendiente de instalar)
 
 Deno se eligió sobre Node deliberadamente: su sistema de módulos por URL y caché global evita el `node_modules` por proyecto, lo que mantiene livianos los plugins exportados y simplifica la funcionalidad de export/import que viene más adelante.
 
@@ -66,6 +67,28 @@ deno task build:desktop
 *(O puedes correr `./build-desktop.sh` directamente si estás en la raíz).*
 
 Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta `dist/` en la raíz del proyecto.
+
+---
+
+## Tests
+
+El foco está en el backend: ahí vive la lógica de negocio (grafos de agentes, microkernel de plugins, use cases), mientras que el frontend es mayormente UI de gestión donde los bugs se notan a simple vista.
+
+**Backend** — corre con el test runner nativo de Deno, sin dependencias externas:
+```bash
+cd backend
+deno task test
+```
+Convención: un archivo `nombre.test.ts` junto al módulo que testea (no una carpeta `tests/` separada). Los tests viven cerca del código:
+- `core/ai/strategy/SCOUT/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
+- `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
+- `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`, montando una instancia propia de `HiveMicrokernel` (no el singleton global) para no pisar estado entre tests.
+
+**Mockear el LLM:** cualquier test que pase por un nodo del grafo (`ChatOllama`, `Scout.stream`, etc.) debe mockear la respuesta del modelo — no depender de que Ollama esté corriendo. El LLM es no determinístico y lento; lo que se testea es que el grafo/routing reaccione bien a una respuesta dada, no la calidad de esa respuesta.
+
+**Cuidado con los singletons:** `HiveMicrokernel` y el cliente de la base de datos (`infrastructure/db/orm.ts`) son singletons de proceso. Para tests, instanciá tu propio `new HiveMicrokernel()` en vez de `HiveMicrokernel.getInstance()`, y apuntá `dataDir` a un `Deno.makeTempDir()` — así los tests no interfieren entre sí ni tocan datos reales del usuario.
+
+**Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/context/` y `src/lib/`, no snapshots de UI.
 
 ---
 
