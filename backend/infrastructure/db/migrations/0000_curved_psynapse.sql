@@ -1,3 +1,22 @@
+CREATE TABLE `chats` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`title` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`messageCount` integer DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `messages` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`chatId` integer NOT NULL,
+	`role` text NOT NULL,
+	`content` text NOT NULL,
+	`timestamp` integer NOT NULL,
+	`metadata` text,
+	`vector` text NOT NULL,
+	FOREIGN KEY (`chatId`) REFERENCES `chats`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `execution_graphs` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`executionId` integer NOT NULL,

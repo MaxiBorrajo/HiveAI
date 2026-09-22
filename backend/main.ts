@@ -23,6 +23,11 @@ const app = new Hono<{
   Variables: { hive: HiveMicrokernel };
 }>();
 
+app.onError((err, c) => {
+    console.error(`Error: ${err}`);
+    return c.text('Internal Server Error', 500);
+});
+
 app.use("*", async (c, next) => {
   c.set("hive", hive);
   await next();

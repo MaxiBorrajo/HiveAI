@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1789860527913,
-      "tag": "0000_yellow_aqueduct",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1790041262763,
-      "tag": "0001_rare_viper",
+      "when": 1790087380615,
+      "tag": "0000_curved_psynapse",
       "breakpoints": true
     }
   ]
