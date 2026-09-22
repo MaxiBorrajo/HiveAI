@@ -12,6 +12,7 @@ import { draftsRouter } from "./modules/drafts/router.ts";
 import { modesRouter } from "./modules/modes/router.ts";
 import { modelsRouter } from "./modules/models/router.ts";
 import { initORM } from "./infrastructure/db/orm.ts";
+import { executionsRouter } from "./modules/executions/router.ts";
 
 export const homeDir: string | undefined =
   Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE")!;
@@ -43,6 +44,7 @@ app.route("/api/models", modelsRouter);
 app.route("/api/interactions", interactionsRouter);
 app.route("/api/external-plugin-callbacks", externalPluginCallbacksRouter);
 app.route("/api/drafts", draftsRouter);
+app.route("/api/executions", executionsRouter);
 
 const frontendDistPath = join(__dirname, "../frontend/dist");
 

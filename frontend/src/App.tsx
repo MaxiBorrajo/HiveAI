@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ToastProvider,
   ToastPortal,
@@ -5,10 +6,13 @@ import {
   ToastList,
 } from "@/components/ui/toast";
 import { Chat } from "@/components/Chat";
-import { ChatsSidebar } from "@/components/ChatsSidebar";
+import { AppSidebar } from "@/components/AppSidebar";
+import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
+import { ExecutionsMain } from "@/components/Executions/ExecutionsMain";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/context/ModelsContext";
-import { ChatsProvider } from "@/context/ChatsContext";
+import { ChatsProvider, useChats } from "@/context/ChatsContext";
+import { ExecutionsProvider, useExecutions } from "@/context/ExecutionsContext";
 import {
   DraftEditorProvider,
   useDraftEditor,
@@ -17,6 +21,26 @@ import { DraftEditorPage } from "@/components/PluginsManager/DraftEditorPage";
 
 function AppContent() {
   const { openDraftName, closeDraft, notifyPluginImported } = useDraftEditor();
+  const [currentView, setCurrentView] = useState<AppView>("chat");
+
+  const {
+    chats,
+    activeChatId,
+    isLoadingChats,
+    selectChat,
+    startNewChat,
+    deleteChat,
+    unreadChatIds,
+  } = useChats();
+
+  const {
+    executions,
+    activeExecutionId,
+    isLoadingExecutions,
+    selectExecution,
+    startNewExecution,
+    deleteExecution,
+  } = useExecutions();
 
   if (openDraftName) {
     return (
@@ -28,10 +52,61 @@ function AppContent() {
     );
   }
 
+  const chatProps = {
+    list: chats.map((chat) => ({
+      id: chat.id,
+      title: chat.title,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    })),
+    activeId: activeChatId,
+    isLoading: isLoadingChats,
+    selectItem: selectChat,
+    startNew: startNewChat,
+    deleteItem: deleteChat,
+    unreadItemIds: unreadChatIds,
+    sidebarTitle: "Chats",
+    entityName: "Chat",
+    loadingMessage: "Loading chats...",
+    newTitle: "New chat",
+    emptyTitle: "No chats yet",
+  };
+
+  const executionProps = {
+    list: executions.map((execution) => ({
+      id: execution.id,
+      title: execution.title,
+      createdAt: execution.createdAt,
+      updatedAt: execution.updatedAt,
+    })),
+    activeId: activeExecutionId,
+    isLoading: isLoadingExecutions,
+    selectItem: selectExecution,
+    startNew: startNewExecution,
+    deleteItem: deleteExecution,
+    unreadItemIds: new Set<string>(),
+    sidebarTitle: "Executions",
+    entityName: "Execution",
+    loadingMessage: "Loading executions...",
+    newTitle: "New execution",
+    emptyTitle: "No executions yet",
+  };
+
+  const sidebarProps = currentView === "chat" ? chatProps : executionProps;
+
   return (
-    <div className="flex h-screen">
-      <ChatsSidebar />
-      <Chat />
+    <div className="flex h-screen relative">
+      <AppSidebar
+        {...sidebarProps}
+        actions={
+          <ViewSwitcher
+            currentView={currentView}
+            onViewChange={setCurrentView}
+          />
+        }
+      />
+
+      {currentView === "chat" ? <Chat /> : <ExecutionsMain />}
     </div>
   );
 }
@@ -41,9 +116,11 @@ function App() {
     <ToastProvider toastManager={toastManager}>
       <ModelsProvider>
         <ChatsProvider>
-          <DraftEditorProvider>
-            <AppContent />
-          </DraftEditorProvider>
+          <ExecutionsProvider>
+            <DraftEditorProvider>
+              <AppContent />
+            </DraftEditorProvider>
+          </ExecutionsProvider>
         </ChatsProvider>
       </ModelsProvider>
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { Button } from "../ui/button.tsx";
-import { ScrollArea } from "../ui/scroll-area.tsx";
+import { Button } from "./ui/button.tsx";
+import { ScrollArea } from "./ui/scroll-area.tsx";
 import {
   Dialog,
   DialogContent,
@@ -9,9 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../ui/dialog.tsx";
-import { useChats } from "../../context/ChatsContext.tsx";
-import type { ChatSummary } from "../../types/chat.ts";
+} from "./ui/dialog.tsx";
 
 function formatRelativeDate(timestamp: number): string {
   const diffMs = Date.now() - timestamp;
@@ -29,24 +27,52 @@ function formatRelativeDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
-export function ChatsSidebar() {
-  const {
-    chats,
-    activeChatId,
-    isLoadingChats,
-    selectChat,
-    startNewChat,
-    deleteChat,
-    unreadChatIds,
-  } = useChats();
-  const [chatPendingDelete, setChatPendingDelete] =
-    useState<ChatSummary | null>(null);
+export interface SidebarItem {
+  id: string;
+  title?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AppSidebarProps {
+  actions?: React.ReactNode;
+  list: SidebarItem[];
+  activeId: string | null;
+  isLoading: boolean;
+  selectItem: (itemId: string) => void;
+  startNew: () => void;
+  deleteItem: (itemId: string) => Promise<void>;
+  unreadItemIds: Set<string>;
+  sidebarTitle: string;
+  entityName: string;
+  loadingMessage?: string;
+  newTitle?: string;
+  emptyTitle?: string;
+}
+
+export function AppSidebar({
+  actions,
+  activeId,
+  deleteItem,
+  isLoading,
+  list,
+  selectItem,
+  startNew,
+  unreadItemIds,
+  newTitle,
+  entityName,
+  sidebarTitle,
+  loadingMessage,
+  emptyTitle,
+}: AppSidebarProps) {
+  const [itemPendingDelete, setItemPendingDelete] =
+    useState<SidebarItem | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   async function confirmDelete() {
-    if (!chatPendingDelete) return;
-    await deleteChat(chatPendingDelete.id);
-    setChatPendingDelete(null);
+    if (!itemPendingDelete) return;
+    await deleteItem(itemPendingDelete.id);
+    setItemPendingDelete(null);
   }
 
   if (isCollapsed) {
@@ -64,8 +90,8 @@ export function ChatsSidebar() {
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={startNewChat}
-          title="New chat"
+          onClick={startNew}
+          title={newTitle || "New"}
         >
           <Plus className="size-4" />
         </Button>
@@ -76,13 +102,16 @@ export function ChatsSidebar() {
   return (
     <div className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card p-3">
       <div className="flex items-center justify-between px-2">
-        <span className="text-sm font-medium text-foreground">Chats</span>
+        <span className="text-sm font-medium text-foreground">
+          {sidebarTitle}
+        </span>
         <div className="flex items-center gap-1">
+          {actions}
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={startNewChat}
-            title="New chat"
+            onClick={startNew}
+            title={newTitle || "New"}
           >
             <Plus className="size-4" />
           </Button>
@@ -100,38 +129,40 @@ export function ChatsSidebar() {
 
       <ScrollArea className="flex-1 min-h-0 mt-2">
         <div className="flex flex-col gap-0.5">
-          {isLoadingChats && chats.length === 0 && (
+          {isLoading && list.length === 0 && (
             <p className="p-2 text-xs text-muted-foreground">
-              Loading chats...
+              {loadingMessage || "Loading..."}
             </p>
           )}
 
-          {!isLoadingChats && chats.length === 0 && (
-            <p className="p-2 text-xs text-muted-foreground">No chats yet</p>
+          {!isLoading && list.length === 0 && (
+            <p className="p-2 text-xs text-muted-foreground">
+              {emptyTitle || "Nothing yet"}
+            </p>
           )}
 
-          {chats.map((chat) => (
+          {list.map((item) => (
             <div
-              key={chat.id}
+              key={item.id}
               className={`p-2 group flex items-center gap-2 rounded-lg text-sm cursor-pointer transition-colors ${
-                chat.id === activeChatId
+                item.id === activeId
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
-              onClick={() => selectChat(chat.id)}
+              onClick={() => selectItem(item.id)}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  {unreadChatIds.has(chat.id) && chat.id !== activeChatId && (
+                  {unreadItemIds.has(item.id) && item.id !== activeId && (
                     <span
                       className="size-1.5 shrink-0 rounded-full bg-primary"
                       title="Unread response"
                     />
                   )}
-                  <p className="truncate">{chat.title || "New chat"}</p>
+                  <p className="truncate">{item.title || "New"}</p>
                 </div>
                 <p className="text-[10px] opacity-60">
-                  {formatRelativeDate(chat.updatedAt)}
+                  {formatRelativeDate(item.updatedAt)}
                 </p>
               </div>
               <Button
@@ -140,7 +171,7 @@ export function ChatsSidebar() {
                 className="opacity-0 group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setChatPendingDelete(chat);
+                  setItemPendingDelete(item);
                 }}
               >
                 <Trash2 className="size-3.5" />
@@ -151,22 +182,23 @@ export function ChatsSidebar() {
       </ScrollArea>
 
       <Dialog
-        open={!!chatPendingDelete}
-        onOpenChange={(open) => !open && setChatPendingDelete(null)}
+        open={!!itemPendingDelete}
+        onOpenChange={(open) => !open && setItemPendingDelete(null)}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete chat</DialogTitle>
+            <DialogTitle>Delete {entityName}</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete "
-              {chatPendingDelete?.title || "this chat"}
+              {itemPendingDelete?.title ||
+                "this " + entityName.toLowerCase().trim()}
               "? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setChatPendingDelete(null)}
+              onClick={() => setItemPendingDelete(null)}
             >
               Cancel
             </Button>

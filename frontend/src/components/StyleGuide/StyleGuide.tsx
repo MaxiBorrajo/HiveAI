@@ -158,7 +158,7 @@ export function StyleGuide() {
                 Text input (Chat input)
               </h3>
               <Textarea
-                placeholder="Type a message to the agent..."
+                placeholder="How can I help you?"
                 className="resize-none text-base"
                 rows={3}
               />

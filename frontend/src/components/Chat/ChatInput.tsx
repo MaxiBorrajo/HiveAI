@@ -13,11 +13,13 @@ import {
 import { reportError } from "@/lib/toastManager";
 
 interface ChatInputProps {
+  placeholder?: string;
   input: string;
   setInput: (val: string) => void;
   isThinking: boolean;
   handleSend: () => void;
   isEmpty?: boolean;
+  hidePluginsAndModes?: boolean;
 }
 
 export function ChatInput({
@@ -26,6 +28,8 @@ export function ChatInput({
   isThinking,
   handleSend,
   isEmpty,
+  hidePluginsAndModes,
+  placeholder,
 }: ChatInputProps) {
   const {
     hasModel,
@@ -163,14 +167,23 @@ export function ChatInput({
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message to the agent..."
+          placeholder={
+            placeholder ||
+            (hidePluginsAndModes
+              ? "I want a workflow that creates a report about..."
+              : "How can I help you?")
+          }
           className="min-h-14 max-h-52 w-full resize-none overflow-y-auto border-0 bg-transparent py-2 px-3 text-base shadow-none focus-visible:ring-0 placeholder:text-muted-foreground dark:bg-transparent md:text-base"
           rows={2}
         />
         <div className="mt-2 flex items-center justify-between">
           <div className="flex gap-2">
-            <PluginsManager forceOpenDownward={isEmpty} />
-            <ModesManager />
+            {!hidePluginsAndModes && (
+              <>
+                <PluginsManager forceOpenDownward={isEmpty} />
+                <ModesManager />
+              </>
+            )}
             <ModelManager forceOpenDownward={isEmpty} />
           </div>
           <Button
