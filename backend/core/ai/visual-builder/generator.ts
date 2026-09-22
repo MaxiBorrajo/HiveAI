@@ -59,30 +59,32 @@ export interface PluginInfo {
 }
 
 import { Annotation } from "@langchain/langgraph";
+import { OllamaModelOptions } from "../../../modules/modes/utils/resolve-model-options.ts";
 
 // 1. Define the internal state of our Generator Agent
 export const GeneratorStateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
+    reducer: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
     default: () => [],
   }),
   attempts: Annotation<number>({
-    reducer: (x, y) => (y !== undefined ? y : x),
+    reducer: (x: number, y: number | undefined) => (y !== undefined ? y : x),
     default: () => 0,
   }),
   draftGraph: Annotation<LangGraphAbstraction | null>({
-    reducer: (x, y) => y,
+    reducer: (x: LangGraphAbstraction | null, y: LangGraphAbstraction | null) =>
+      y,
     default: () => null,
   }),
   validationError: Annotation<string | null>({
-    reducer: (x, y) => y,
+    reducer: (x: string | null, y: string | null) => y,
     default: () => null,
   }),
   modelName: Annotation<string>({
-    reducer: (x, y) => x,
+    reducer: (x: string, y: string) => x,
   }),
   availablePlugins: Annotation<PluginInfo[]>({
-    reducer: (x, y) => x,
+    reducer: (x: PluginInfo[], y: PluginInfo[]) => x,
     default: () => [],
   }),
 });
@@ -163,6 +165,7 @@ export async function generateGraphFromPrompt(
   prompt: string,
   modelName: string,
   availablePlugins: PluginInfo[],
+  currentGraph?: LangGraphAbstraction,
 ): Promise<LangGraphAbstraction> {
   const systemPrompt = `You are the Chief Architect of an Agentic AI System.
     Your goal is to design a workflow (Graph) in JSON format that solves the user's request.
@@ -175,16 +178,18 @@ export async function generateGraphFromPrompt(
     2. You must always include a node with id "end" and type "end".
     3. For logical decisions, use a node type "condition", reading a variable from the state.
     4. The "stateSchema" must define all the variables that the nodes will share.
-    5. DO NOT invent plugin names that are not in the list.
-    6. If an LLM node needs to use plugins, add them to its "config.plugins" array.
-    7. If the prompt is very simple (1 step), generate a minimalist graph of Start -> LLM -> End.
-    8. For LLM nodes, YOU MUST define their 'config': specify 'model' (e.g., "${modelName}"), 'temperature' (0.0 to 1.0), and a detailed 'systemPrompt'. If the LLM should output structured data, define 'structuredOutput' mapping to a state property, and always set 'outputKey' indicating where the result should be saved in the state.`;
+    5. CRITICAL: The "stateSchema" MUST always include a property named "input" of type "string". This represents the user's initial prompt or query for the execution.
+    6. DO NOT invent plugin names that are not in the list.
+    7. If an LLM node needs to use plugins, add them to its "config.plugins" array.
+    8. If the prompt is very simple (1 step), generate a minimalist graph of Start -> LLM -> End.
+    9. For LLM nodes, YOU MUST define their 'config': specify 'model' (e.g., "${modelName}"), 'temperature' (0.0 to 1.0), and a detailed 'systemPrompt'. If the LLM should output structured data, define 'structuredOutput' mapping to a state property, and always set 'outputKey' indicating where the result should be saved in the state.`;
+
+  const userMessage = currentGraph
+    ? `Here is the current workflow design:\n${JSON.stringify(currentGraph, null, 2)}\n\nThe user wants to modify it: ${prompt}\n\nPlease generate the updated JSON workflow, retaining all unchanged parts.`
+    : `Design a workflow to solve this: ${prompt}`;
 
   const initialState = {
-    messages: [
-      new SystemMessage(systemPrompt),
-      new HumanMessage(`Design a workflow to solve this: ${prompt}`),
-    ],
+    messages: [new SystemMessage(systemPrompt), new HumanMessage(userMessage)],
     attempts: 0,
     draftGraph: null,
     validationError: null,
@@ -285,5 +290,20 @@ function validateGraphArchitecture(graph: any, availablePlugins: PluginInfo[]) {
         }
       }
     }
+  }
+
+  // 4. Validate State Schema requirements
+  if (!graph.stateSchema || typeof graph.stateSchema !== "object") {
+    throw new Error("The graph must define a valid 'stateSchema' object.");
+  }
+  if (!("input" in graph.stateSchema)) {
+    throw new Error(
+      "The 'stateSchema' MUST define a property named 'input'. This is the required universal entry point provided by the user.",
+    );
+  }
+  if (graph.stateSchema["input"].type !== "string") {
+    throw new Error(
+      "The 'input' property in 'stateSchema' MUST be of type 'string'.",
+    );
   }
 }

@@ -1,35 +1,53 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { VisualBuilder } from "./index";
 import type { LangGraphAbstraction } from "../../types/execution";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { useExecutions } from "../../context/ExecutionsContext";
+import { generateExecution } from "../../lib/executions/generateExecution";
+import { getExecution } from "../../lib/executions/getExecution";
+import { API_URL } from "../../lib/config";
 
 export function GraphExecutionView() {
-  const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState("qwen2.5-coder:14b"); // default for testing
+  const { activeExecutionId, onExecutionCreated } = useExecutions();
+  const [content, setContent] = useState("");
   const [graph, setGraph] = useState<LangGraphAbstraction | null>(null);
-  const [executionId, setExecutionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeNodeId, setActiveNodeId] = useState<string | undefined>(
     undefined,
   );
   const [logs, setLogs] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (!activeExecutionId) {
+      setGraph(null);
+      setLogs([]);
+      return;
+    }
+
+    getExecution(activeExecutionId)
+      .then(({ data }) => {
+        if (data?.graph?.graph) {
+          setGraph(data.graph.graph);
+        } else {
+          setGraph(null);
+        }
+        setLogs([]);
+      })
+      .catch((e) => console.error("Failed to load execution graph", e));
+  }, [activeExecutionId]);
+
   const handleGenerate = async () => {
     setLoading(true);
     setLogs([]);
+    setGraph(null);
     try {
-      const res = await fetch("http://localhost:8000/api/executions/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const { data } = await generateExecution({ content });
+      if (!data) throw new Error("No data returned");
 
-      setExecutionId(data.executionId);
       setGraph(data.graph);
       setLogs([`Generated graph ID: ${data.graphId}`]);
+      onExecutionCreated(String(data.executionId));
     } catch (e: any) {
       alert("Error: " + e.message);
     } finally {
@@ -38,13 +56,13 @@ export function GraphExecutionView() {
   };
 
   const handleRun = async () => {
-    if (!executionId) return;
+    if (!activeExecutionId) return;
     setLoading(true);
     setLogs((prev) => [...prev, "--- Starting Execution ---"]);
 
     try {
       const res = await fetch(
-        `http://localhost:8000/api/executions/${executionId}/run`,
+        `${API_URL}/api/executions/${activeExecutionId}/run`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -103,19 +121,11 @@ export function GraphExecutionView() {
       <div className="flex gap-2">
         <Input
           placeholder="I want an AI that analyzes sentiment..."
-          value={prompt}
+          value={content}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-            setPrompt(e.target.value)
+            setContent(e.target.value)
           }
           className="flex-1"
-        />
-        <Input
-          placeholder="Model name"
-          value={model}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-            setModel(e.target.value)
-          }
-          className="w-48"
         />
         <Button onClick={handleGenerate} disabled={loading}>
           Generate Graph

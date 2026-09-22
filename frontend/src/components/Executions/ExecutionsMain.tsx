@@ -3,6 +3,14 @@ import { ChatInput } from "../Chat/ChatInput";
 import { Logo } from "../Logo";
 import { VisualBuilder } from "../VisualBuilder";
 import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../ui/dialog";
 import { useExecutions } from "../../context/ExecutionsContext";
 import type { LangGraphAbstraction } from "../../types/execution";
 import { getExecution } from "../../lib/executions/getExecution";
@@ -18,6 +26,10 @@ export function ExecutionsMain() {
     undefined,
   );
   const [logs, setLogs] = useState<string[]>([]);
+
+  // Run Modal State
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [runInputs, setRunInputs] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!activeExecutionId) {
@@ -45,8 +57,8 @@ export function ExecutionsMain() {
     setGraph(null);
     try {
       const { data } = await generateExecution({
-        prompt: input,
-        model: "qwen2.5-coder:14b",
+        content: input,
+        executionId: activeExecutionId ? Number(activeExecutionId) : undefined,
       });
       if (!data) throw new Error("No data returned");
 
@@ -62,10 +74,29 @@ export function ExecutionsMain() {
     }
   };
 
+  const handleOpenRunModal = () => {
+    if (!graph) return;
+    const initialInputs: Record<string, any> = {};
+    Object.keys(graph.stateSchema || {}).forEach((key) => {
+      initialInputs[key] = "";
+    });
+    setRunInputs(initialInputs);
+    setIsRunModalOpen(true);
+  };
+
   const handleRun = async () => {
     if (!activeExecutionId) return;
+    setIsRunModalOpen(false);
     setIsThinking(true);
     setLogs((prev) => [...prev, "--- Starting Execution ---"]);
+
+    // Clean up empty strings from runInputs so we don't override defaults with ""
+    const finalInputs = { ...runInputs };
+    Object.keys(finalInputs).forEach((key) => {
+      if (finalInputs[key] === "") {
+        delete finalInputs[key];
+      }
+    });
 
     try {
       const res = await fetch(
@@ -73,7 +104,7 @@ export function ExecutionsMain() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: {} }),
+          body: JSON.stringify({ input: finalInputs }),
         },
       );
 
@@ -160,7 +191,7 @@ export function ExecutionsMain() {
               </div>
               <div className="w-80 flex flex-col gap-2">
                 <Button
-                  onClick={handleRun}
+                  onClick={handleOpenRunModal}
                   disabled={isThinking}
                   variant="default"
                 >
@@ -193,6 +224,55 @@ export function ExecutionsMain() {
           </>
         )}
       </div>
+
+      {/* Run Input Modal */}
+      <Dialog open={isRunModalOpen} onOpenChange={setIsRunModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start Execution</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            {graph?.stateSchema &&
+              Object.entries(graph.stateSchema)
+                .filter(([key]) => key === "input")
+                .map(([key, def]: [string, any]) => (
+                  <div key={key} className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-foreground">
+                      User Prompt
+                    </label>
+                    <Textarea
+                      placeholder={
+                        def.description || "What should the agent do?"
+                      }
+                      value={runInputs[key] || ""}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        setRunInputs((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }))
+                      }
+                      className="min-h-[100px]"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {def.description}
+                    </p>
+                  </div>
+                ))}
+            {graph?.stateSchema && !graph.stateSchema["input"] && (
+              <p className="text-sm text-yellow-600">
+                Warning: The graph does not have a standard 'input' property
+                defined in its state schema.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRunModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRun}>Run</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

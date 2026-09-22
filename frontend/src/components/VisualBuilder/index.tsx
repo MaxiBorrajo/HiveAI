@@ -26,7 +26,6 @@ export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
     if (!graph) return;
 
     let currentY = 50;
-
     const rfNodes: Node[] = graph.nodes.map((n) => {
       // Very basic auto-layout if no uiPosition
       const x = n.uiPosition?.x ?? 250;
