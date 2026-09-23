@@ -154,7 +154,7 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       path: string;
     };
 
-    console.log(`[file-read] 🐝 Requested '${operation}' on '${path}'`);
+    console.log(`[file-read]  Requested '${operation}' on '${path}'`);
 
     try {
       if (operation === "list") {

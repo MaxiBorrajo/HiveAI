@@ -49,7 +49,11 @@ export function buildLlmInstance(
       `[Compiler Native LLM] No model was specified for node '${nodeId}'.`,
     );
   }
-  const modelName = model as string;
+  let modelName = typeof model === "string" ? model : (model as any).name || (model as any).value || String(model);
+  if (modelName === "[object Object]") {
+    // Ultimate fallback if it generated a weird object
+    modelName = "qwen3:1.7b";
+  }
 
   console.log(
     `\n[Compiler Native LLM] Executing model: ${modelName} for node ${nodeId}`,

@@ -21,8 +21,6 @@ export async function updateExecutionGraph(
 
     const newGraph = await repo.createGraph({
       executionId: id,
-      graph: JSON.stringify(graph),
-      state: JSON.stringify(stateSchema),
       graph: graph,
       state: stateSchema,
       createdAt: Date.now(),
@@ -30,7 +28,10 @@ export async function updateExecutionGraph(
 
     await repo.update(id, { lastGraphId: newGraph.id });
 
-    return ResponseBuilder.success({ success: true, graphId: newGraph.id }, { headers });
+    return ResponseBuilder.success(
+      { success: true, graphId: newGraph.id },
+      { headers },
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return ResponseBuilder.error(
@@ -40,4 +41,3 @@ export async function updateExecutionGraph(
     );
   }
 }
-

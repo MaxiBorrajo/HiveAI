@@ -1,24 +1,31 @@
-import { useEffect } from "react";
+
+import { useEffect, useMemo } from "react";
 import Dagre from "@dagrejs/dagre";
 import {
-  ReactFlow,
-  Controls,
-  Background,
   useNodesState,
   useEdgesState,
   Position,
+  ReactFlow,
+  Controls,
+  Background,
 } from "@xyflow/react";
 import type { Node, Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { LangGraphAbstraction } from "../../types/execution";
+import { GhostNode } from "./GhostNode";
 
 interface VisualBuilderProps {
   graph?: LangGraphAbstraction | null;
   onSave?: (graph: LangGraphAbstraction) => void;
-  activeNodeId?: string; // For streaming feedback
+  activeNodeId?: string; // For streaming / running feedback
+  isGenerating?: boolean; // For showing the Ghost / thinking node
+  selectedNodeId?: string | null;
+  onNodeSelect?: (nodeId: string | null) => void;
 }
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
+  if (nodes.length === 0) return { nodes: [], edges: [] };
+
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "LR" });
 
@@ -27,8 +34,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
     g.setNode(node.id, {
       ...node,
       // Default dimensions if not measured yet
-      width: node.measured?.width ?? 150,
-      height: node.measured?.height ?? 50,
+      width: node.measured?.width ?? 180,
+      height: node.measured?.height ?? 54,
     }),
   );
 
@@ -36,8 +43,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
   const layoutedNodes = nodes.map((node) => {
     const position = g.node(node.id);
-    const x = position.x - (node.measured?.width ?? 150) / 2;
-    const y = position.y - (node.measured?.height ?? 50) / 2;
+    const x = position.x - (node.measured?.width ?? 180) / 2;
+    const y = position.y - (node.measured?.height ?? 54) / 2;
 
     return { ...node, position: { x, y } };
   });
@@ -45,50 +52,115 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   return { nodes: layoutedNodes, edges };
 };
 
-export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
+export function VisualBuilder({
+  graph,
+  activeNodeId,
+  isGenerating,
+  selectedNodeId,
+  onNodeSelect,
+}: VisualBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Convert backend graph to React Flow graph
+  const nodeTypes = useMemo(() => ({ ghost: GhostNode }), []);
+
   useEffect(() => {
-    if (!graph) {
+    if (!graph && !isGenerating) {
       setNodes([]);
       setEdges([]);
       return;
     }
+    const currentNodes = graph?.nodes || [];
+    const currentEdges = graph?.edges || [];
 
-    const rfNodes: Node[] = graph.nodes.map((n) => {
+    // Map backend nodes to ReactFlow nodes
+    const rfNodes: Node[] = currentNodes.map((n) => {
+      const isSelected = selectedNodeId === n.id;
+      const isActive = activeNodeId === n.id;
+
+      let borderColor = "#3f3f46";
+      let boxShadow = "none";
+      let bgColor = "#18181b";
+
+      if (isActive) {
+        borderColor = "#f59e0b";
+        boxShadow = "0 0 12px rgba(245, 158, 11, 0.5)";
+      } else if (isSelected) {
+        borderColor = "#e4e4e7";
+        boxShadow = "0 0 10px rgba(255, 255, 255, 0.25)";
+        bgColor = "#27272a";
+      }
+
       return {
         id: n.id,
         position: { x: 0, y: 0 },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: { label: `${n.name} (${n.type})` },
+        data: {
+          label: (
+            <div className="flex flex-col text-left">
+              <span className="font-medium text-xs text-zinc-100">{n.name}</span>
+              <span className="text-[10px] text-zinc-400 capitalize">{n.type}</span>
+            </div>
+          ),
+        },
         style: {
-          background: activeNodeId === n.id ? "#ffc107" : "#fff",
-          border: "1px solid #222",
-          padding: 10,
-          borderRadius: 5,
-          fontWeight: activeNodeId === n.id ? "bold" : "normal",
-          color: "#000",
-          width: 150,
+          background: bgColor,
+          border: `1.5px solid ${borderColor}`,
+          padding: "8px 12px",
+          borderRadius: 8,
+          color: "#fafafa",
+          width: 170,
+          cursor: "pointer",
+          boxShadow,
+          transition: "all 0.2s ease-in-out",
         },
       };
     });
 
-    const rfEdges: Edge[] = graph.edges.map((e) => ({
+    const rfEdges: Edge[] = currentEdges.map((e) => ({
       id: e.id,
       source: e.source,
       target: e.target,
       label: e.isConditional ? "Conditional" : "",
       animated: activeNodeId === e.source,
+      style: {
+        stroke: activeNodeId === e.source ? "#f59e0b" : "#71717a",
+        strokeWidth: 2,
+      },
     }));
+
+    // If generating and not yet ended with 'end' node, show Ghost Node
+    const hasEndNode = currentNodes.some((n) => n.type === "end");
+    if (isGenerating && !hasEndNode) {
+      const ghostId = "__ghost_node__";
+      rfNodes.push({
+        id: ghostId,
+        type: "ghost",
+        position: { x: 0, y: 0 },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        data: {},
+      });
+
+      if (currentNodes.length > 0) {
+        const lastNode = currentNodes[currentNodes.length - 1];
+        rfEdges.push({
+          id: `edge_${lastNode.id}_${ghostId}`,
+          source: lastNode.id,
+          target: ghostId,
+          animated: true,
+          style: { stroke: "#f59e0b", strokeWidth: 2, strokeDasharray: "5 5" },
+        });
+      }
+    }
 
     const layouted = getLayoutedElements(rfNodes, rfEdges);
 
     setNodes(layouted.nodes);
     setEdges(layouted.edges);
-  }, [graph, activeNodeId, setNodes, setEdges]);
+  }, [graph, activeNodeId, isGenerating, selectedNodeId, setNodes, setEdges]);
 
   return (
     <div
@@ -105,14 +177,21 @@ export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={(_, node) => {
+          if (node.id !== "__ghost_node__") {
+            onNodeSelect?.(node.id === selectedNodeId ? null : node.id);
+          }
+        }}
+        onPaneClick={() => onNodeSelect?.(null)}
         fitView
         colorMode="dark"
         style={{ backgroundColor: "transparent" }}
       >
         <Controls position="bottom-left" />
-        <Background gap={40} size={1} bgColor="#050403"/>
+        <Background gap={40} size={1} bgColor="#050403" />
       </ReactFlow>
     </div>
   );

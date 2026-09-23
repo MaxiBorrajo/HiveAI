@@ -291,8 +291,8 @@ export function Chat() {
           <div className="flex flex-1 flex-col items-center justify-center px-6">
             <div className="flex flex-col items-center gap-6 w-full max-w-3xl">
               <div className="flex items-center justify-center gap-2">
-                <Logo size={60} />
-                <h1 className="text-display text-6xl font-medium">
+                <Logo size={50} />
+                <h1 className="text-display text-5xl font-medium">
                   HiveAI
                 </h1>
               </div>

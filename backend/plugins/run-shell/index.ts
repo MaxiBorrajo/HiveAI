@@ -173,7 +173,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     }
 
     console.log(
-      `[run-shell] 🐝 Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
+      `[run-shell]  Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
     );
 
     const approved = await this.context.requestApproval(

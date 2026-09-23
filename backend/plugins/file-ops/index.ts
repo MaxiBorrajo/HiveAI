@@ -215,7 +215,8 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
     }
 
     console.log(
-      `[file-ops] 🐝 Requested '${operation}' on '${path}'${destination ? ` -> '${destination}'` : ""}`,
+      `[file-ops] 
+      Requested '${operation}' on '${path}'${destination ? ` -> '${destination}'` : ""}`,
     );
 
     try {

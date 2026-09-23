@@ -14,7 +14,7 @@ import {
 import { useExecutions } from "../../context/ExecutionsContext";
 import type { LangGraphAbstraction } from "../../types/execution";
 import { getExecution } from "../../lib/executions/getExecution";
-import { generateExecution } from "../../lib/executions/generateExecution";
+import { generateExecutionStream } from "../../lib/executions/generateExecution";
 import { API_URL } from "../../lib/config";
 
 export function ExecutionsMain() {
@@ -25,6 +25,7 @@ export function ExecutionsMain() {
   const [activeNodeId, setActiveNodeId] = useState<string | undefined>(
     undefined,
   );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   // Run Modal State
@@ -35,6 +36,7 @@ export function ExecutionsMain() {
     if (!activeExecutionId) {
       setGraph(null);
       setLogs([]);
+      setSelectedNodeId(null);
       return;
     }
 
@@ -46,28 +48,96 @@ export function ExecutionsMain() {
           setGraph(null);
         }
         setLogs([]);
+        setSelectedNodeId(null);
       })
       .catch((e) => console.error("Failed to load execution graph", e));
   }, [activeExecutionId]);
 
   const handleGenerate = async () => {
     if (!input.trim()) return;
+    const userPrompt = input;
+    setInput("");
     setIsThinking(true);
     setLogs([]);
     setGraph(null);
-    try {
-      const { data } = await generateExecution({
-        content: input,
-        executionId: activeExecutionId ? Number(activeExecutionId) : undefined,
-      });
-      if (!data) throw new Error("No data returned");
+    setLogs(["Pollinating flow: starting design..."]);
 
-      setGraph(data.graph);
-      setLogs([`Generated graph ID: ${data.graphId}`]);
-      onExecutionCreated(String(data.executionId));
+    // If starting a brand new execution, reset graph so canvas displays incremental stream
+    if (!activeExecutionId && !selectedNodeId) {
+      setGraph(null);
+    }
+
+    try {
+      await generateExecutionStream(
+        {
+          content: userPrompt,
+          executionId: activeExecutionId
+            ? Number(activeExecutionId)
+            : undefined,
+          targetNodeId: selectedNodeId ?? undefined,
+        },
+        {
+          onExecutionCreated: (id) => {
+            onExecutionCreated(id);
+          },
+          onPlanning: (thoughts) => {
+            setLogs((prev) => [...prev, ` ${thoughts}`]);
+          },
+          onNodeAdded: ({ node, edge, stateProperties }) => {
+            setGraph((prev) => {
+              const current = prev || { nodes: [], edges: [], stateSchema: {} };
+              if (current.nodes.some((n) => n.id === node.id)) {
+                return current;
+              }
+              const updatedNodes = [...current.nodes, node];
+              const updatedEdges = edge
+                ? [...current.edges, edge]
+                : current.edges;
+              const updatedSchema = {
+                ...current.stateSchema,
+                ...(stateProperties || {}),
+              };
+              return {
+                nodes: updatedNodes,
+                edges: updatedEdges,
+                stateSchema: updatedSchema,
+              };
+            });
+            setLogs((prev) => [
+              ...prev,
+              `+ Built node: ${node.name} (${node.type})`,
+            ]);
+          },
+          onNodeUpdated: ({ node, stateProperties }) => {
+            setGraph((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                nodes: prev.nodes.map((n) => (n.id === node.id ? node : n)),
+                stateSchema: {
+                  ...prev.stateSchema,
+                  ...(stateProperties || {}),
+                },
+              };
+            });
+            setLogs((prev) => [...prev, `* Node updated: ${node.name}`]);
+            setSelectedNodeId(null);
+          },
+          onDone: (data) => {
+            setGraph(data.graph);
+            setLogs((prev) => [...prev, "✨ Flow assembled successfully!"]);
+            setIsThinking(false);
+          },
+          onError: (message) => {
+            setLogs((prev) => [...prev, `❌ Error: ${message}`]);
+            setIsThinking(false);
+          },
+        },
+      );
     } catch (e: any) {
       // The API client already toasts errors if we don't silence them.
       // alert("Error: " + e.message);
+      setLogs((prev) => [...prev, `❌ Streaming error: ${e.message}`]);
     } finally {
       setIsThinking(false);
       setInput("");
@@ -137,10 +207,18 @@ export function ExecutionsMain() {
                 `[${data.event}] ${data.name || ""}`,
               ]);
 
-              if (data.event === "on_node_start") {
+              if (
+                data.event === "on_chain_start" &&
+                data.name &&
+                data.name !== "LangGraph"
+              ) {
                 setActiveNodeId(data.name);
-              } else if (data.event === "on_node_end") {
-                setActiveNodeId(undefined);
+              } else if (
+                data.event === "on_chain_end" &&
+                data.name &&
+                data.name === activeNodeId
+              ) {
+                // Keep the last active node visible briefly or let the next chain_start override it
               }
             }
           }
@@ -154,7 +232,8 @@ export function ExecutionsMain() {
     }
   };
 
-  const isEmpty = !graph;
+  const isEmpty = !graph && !isThinking;
+  const selectedNode = graph?.nodes.find((n) => n.id === selectedNodeId);
 
   return (
     <div className="flex flex-1 min-w-0 h-screen bg-background text-foreground font-sans overflow-hidden">
@@ -162,26 +241,30 @@ export function ExecutionsMain() {
         {/* Background Canvas Layer */}
         <div className="absolute inset-0 z-0">
           <VisualBuilder graph={graph} activeNodeId={activeNodeId} />
+          <VisualBuilder
+            graph={graph}
+            activeNodeId={activeNodeId}
+            isGenerating={isThinking}
+            selectedNodeId={selectedNodeId}
+            onNodeSelect={setSelectedNodeId}
+          />
         </div>
 
         {/* Foreground UI Layer */}
         <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between">
           {/* Top/Center section (Welcome message if empty) */}
-          <div className="flex items-center justify-end m-4">
+          <div className="flex items-center justify-end my-3 mx-4">
             {isEmpty && (
-              <div className="flex flex-col items-center gap-6 pointer-events-auto bg-background/80 px-4 py-2 rounded-lg backdrop-blur-sm border shadow-lg">
-                <div className="flex items-center justify-center gap-1">
+              <div className="flex items-center justify-center gap-1">
                   <Logo size={20} />
-                  <h1 className="text-display text-lg font-medium">
-                    HiveAI
-                  </h1>
+                  <h1 className="text-display text-lg font-medium">HiveAI</h1>
                 </div>
-              </div>
             )}
           </div>
 
           {/* Floating panel for Run/Logs (when not empty) */}
-          {!isEmpty && (
+
+          {(!isEmpty || isThinking) && (
             <div className="absolute top-6 right-6 w-80 flex flex-col gap-2 pointer-events-auto max-h-[calc(100vh-200px)]">
               <Button
                 onClick={handleOpenRunModal}
@@ -192,7 +275,7 @@ export function ExecutionsMain() {
                 ▶ Run Execution
               </Button>
               {logs.length > 0 && (
-                <div className="bg-black/90 text-green-400 p-2 text-xs overflow-auto font-mono rounded shadow-lg max-h-64">
+                <div className="bg-black/90 text-green-400 p-2 text-xs overflow-auto font-mono rounded shadow-lg max-h-64 border border-zinc-800">
                   {logs.map((l, i) => (
                     <div key={i}>{l}</div>
                   ))}
@@ -201,24 +284,80 @@ export function ExecutionsMain() {
             </div>
           )}
 
-          {/* Bottom section with Chat Input */}
-          <div className="w-full px-6 pt-12 pb-8">
-            <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 pointer-events-auto">
-              <ChatInput
-                input={input}
-                setInput={setInput}
-                isThinking={isThinking}
-                handleSend={handleGenerate}
-                isEmpty={isEmpty}
-                hidePluginsAndModes
-                placeholder="I want a workflow that creates a report about..."
-              />
-              <p className="text-center text-xs text-muted-foreground mt-2">
-                HiveAI can make mistakes. Consider verifying important
-                information.
-              </p>
+          {/* Node Details Panel */}
+          {selectedNode && (
+            <div className="absolute top-6 left-6 w-80 flex flex-col gap-2 pointer-events-auto max-h-[calc(100vh-200px)] bg-background/95 p-4 rounded-xl shadow-lg border border-border backdrop-blur-sm overflow-auto">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-medium text-foreground text-sm">
+                  Node Details
+                </h3>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                  {selectedNode.type}
+                </span>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    ID
+                  </label>
+                  <p className="text-sm font-mono">{selectedNode.id}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    Name
+                  </label>
+                  <p className="text-sm">{selectedNode.name}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    Config
+                  </label>
+                  <pre className="text-xs bg-black/50 p-2 rounded border border-white/5 overflow-x-auto text-zinc-300 mt-1">
+                    {JSON.stringify(selectedNode.config, null, 2)}
+                  </pre>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Bottom section with Chat Input */}
+          {(isEmpty || selectedNodeId) && (
+            <div className="w-full px-6 pt-12 pb-8">
+              <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 pointer-events-auto">
+                {selectedNode && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-primary/20 border border-primary/40 rounded-full text-xs text-primary shadow">
+                    <span>
+                      Editing node: <strong>{selectedNode.name}</strong> (
+                      {selectedNode.type})
+                    </span>
+                    <button
+                      onClick={() => setSelectedNodeId(null)}
+                      className="hover:text-white ml-1 font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  isThinking={isThinking}
+                  handleSend={handleGenerate}
+                  isEmpty={isEmpty}
+                  hidePluginsAndModes
+                  placeholder={
+                    selectedNode
+                      ? `Specify how you want to modify "${selectedNode.name}"...`
+                      : "I want a flow that researches a topic and generates a report..."
+                  }
+                />
+                <p className="text-center text-xs text-muted-foreground mt-2">
+                  HiveAI can make mistakes. Consider verifying important
+                  information.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

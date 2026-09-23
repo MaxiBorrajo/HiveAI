@@ -30,6 +30,7 @@ executionsRouter.post("/generate", async (c) => {
     hive,
     body.content,
     body.executionId ? parseInt(body.executionId) : undefined,
+    body.targetNodeId,
     headers,
   );
 });

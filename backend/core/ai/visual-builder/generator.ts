@@ -1,11 +1,11 @@
 import { ChatOllama } from "@langchain/ollama";
+import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import {
-  SystemMessage,
-  HumanMessage,
-  BaseMessage,
-} from "@langchain/core/messages";
-import { StateGraph, START, END, StateGraphArgs } from "@langchain/langgraph";
-import { LangGraphAbstraction } from "./types.ts";
+  LangGraphAbstraction,
+  GraphNode,
+  GraphEdge,
+  NodeType,
+} from "./types.ts";
 import { z } from "zod";
 
 // Zod schema to force the LLM to return exactly this structure
@@ -13,44 +13,10 @@ const statePropertyDefinitionSchema = z.object({
   type: z.enum(["string", "number", "boolean", "object", "array"]),
   description: z.string().optional(),
   default: z.any().optional(),
-  reducerStrategy: z.enum(["overwrite", "append", "merge", "sum"]).optional(),
-});
-
-const nodeConfigSchema = z.record(z.string(), z.unknown());
-
-const nodeSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.enum(["start", "end", "llm", "plugin", "condition"]),
-  config: nodeConfigSchema,
-});
-
-const edgeSchema = z.object({
-  source: z.string(),
-  target: z.string().optional(),
-  condition: z
-    .object({
-      variable: z.string(),
-      operator: z.enum([
-        "==",
-        "!=",
-        ">",
-        "<",
-        ">=",
-        "<=",
-        "contains",
-        "exists",
-      ]),
-      value: z.any().optional(),
-      targetNode: z.string(),
-    })
+  required: z.boolean().default(false),
+  reducerStrategy: z
+    .enum(["overwrite", "append", "merge_dict", "sum"])
     .optional(),
-});
-
-const langGraphAbstractionSchema = z.object({
-  stateSchema: z.record(z.string(), statePropertyDefinitionSchema),
-  nodes: z.array(nodeSchema),
-  edges: z.array(edgeSchema),
 });
 
 export interface PluginInfo {
@@ -58,252 +24,445 @@ export interface PluginInfo {
   description: string;
 }
 
-import { Annotation } from "@langchain/langgraph";
-import { OllamaModelOptions } from "../../../modules/modes/utils/resolve-model-options.ts";
+// ============================================================================
+// INCREMENTAL NODE-BY-NODE WORKFLOW GENERATION
+// ============================================================================
 
-// 1. Define the internal state of our Generator Agent
-export const GeneratorStateAnnotation = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
-    default: () => [],
+const nodeProposalSchema = z.discriminatedUnion("type", [
+  z.object({
+    id: z
+      .string()
+      .describe(
+        "Unique lowercase alphanumeric identifier (e.g. 'web_search_topics', 'filter_articles')",
+      ),
+    name: z.string().describe("Human-readable title for the node UI"),
+    type: z.literal("llm"),
+    config: z.object({
+      model: z.string().describe("Model name to use"),
+      temperature: z
+        .number()
+        .min(0)
+        .max(1)
+        .describe("Temperature from 0.0 to 1.0"),
+      systemPrompt: z.string().describe("The instructions for the LLM"),
+      plugins: z
+        .array(z.string())
+        .optional()
+        .describe("List of plugin names this LLM can use as tools"),
+      outputKey: z
+        .string()
+        .optional()
+        .describe("State property where the output should be saved"),
+    }),
   }),
-  attempts: Annotation<number>({
-    reducer: (x: number, y: number | undefined) => (y !== undefined ? y : x),
-    default: () => 0,
+  z.object({
+    id: z.string().describe("Unique lowercase alphanumeric identifier"),
+    name: z.string().describe("Human-readable title for the node UI"),
+    type: z.literal("plugin"),
+    config: z.object({
+      pluginId: z.string().describe("The name of the plugin to execute"),
+      inputMapping: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe("Map of plugin inputs to state property keys"),
+      outputKey: z
+        .string()
+        .optional()
+        .describe("State property where the output should be saved"),
+    }),
   }),
-  draftGraph: Annotation<LangGraphAbstraction | null>({
-    reducer: (x: LangGraphAbstraction | null, y: LangGraphAbstraction | null) =>
-      y,
-    default: () => null,
+  z.object({
+    id: z.string().describe("Unique lowercase alphanumeric identifier"),
+    name: z.string().describe("Human-readable title for the node UI"),
+    type: z.literal("compute"),
+    config: z
+      .object({
+        script: z
+          .string()
+          .describe("JavaScript expression or script to execute"),
+        outputKey: z
+          .string()
+          .optional()
+          .describe("State property where the output should be saved"),
+      })
+      .catchall(z.unknown()),
   }),
-  validationError: Annotation<string | null>({
-    reducer: (x: string | null, y: string | null) => y,
-    default: () => null,
-  }),
-  modelName: Annotation<string>({
-    reducer: (x: string, y: string) => x,
-  }),
-  availablePlugins: Annotation<PluginInfo[]>({
-    reducer: (x: PluginInfo[], y: PluginInfo[]) => x,
-    default: () => [],
-  }),
+]);
+
+const nextNodeProposalSchema = z.object({
+  thought: z
+    .string()
+    .describe(
+      "Brief chain-of-thought explaining what this specific step accomplishes towards the user objective",
+    ),
+  node: nodeProposalSchema,
+  sourceNodeId: z
+    .string()
+    .describe(
+      "ID of the node in the current graph that connects into this new node",
+    ),
+  edgeCondition: z
+    .object({
+      field: z.string().describe("State property to evaluate"),
+      operator: z.enum([
+        "equals",
+        "not_equals",
+        "greater_than",
+        "greater_than_or_equals",
+        "less_than",
+        "less_than_or_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "is_empty",
+        "is_not_empty",
+        "in",
+        "not_in",
+        "regex_match",
+      ]),
+      value: z.unknown(),
+    })
+    .optional()
+    .describe(
+      "If this new node is part of a conditional branch from the source node, specify the condition required to traverse the edge to this node.",
+    ),
+  newStateProperties: z
+    .record(z.string(), statePropertyDefinitionSchema)
+    .optional()
+    .describe(
+      "Any new variables written by this node that need to be added to stateSchema",
+    ),
+  isFinalStepBeforeEnd: z
+    .boolean()
+    .describe(
+      "True if this step completes the workflow objective and the next node should be End",
+    ),
 });
 
-type GeneratorState = typeof GeneratorStateAnnotation.State;
+const updateNodeProposalSchema = z.object({
+  thought: z
+    .string()
+    .describe("Brief explanation of the changes made to the node"),
+  updatedNode: nodeProposalSchema,
+  newStateProperties: z
+    .record(z.string(), statePropertyDefinitionSchema)
+    .optional()
+    .describe("Any state properties added or modified for this node"),
+});
 
-// 2. Node 1: The LLM Generator
-async function generateNode(
-  state: GeneratorState,
-): Promise<Partial<GeneratorState>> {
-  const llm = new ChatOllama({ model: state.modelName, temperature: 0.1 });
-  const structuredLlm = llm.withStructuredOutput(langGraphAbstractionSchema);
-
-  console.log(
-    `[Generator Agent] Attempt ${state.attempts + 1}: Requesting design from LLM...`,
-  );
-
-  try {
-    const draft = await structuredLlm.invoke(state.messages);
-    return {
-      draftGraph: draft as unknown as LangGraphAbstraction,
-      attempts: state.attempts + 1,
+export type IncrementalEvent =
+  | {
+      type: "node_added";
+      node: GraphNode;
+      edge?: GraphEdge;
+      stateProperties?: Record<string, any>;
+    }
+  | {
+      type: "node_updated";
+      node: GraphNode;
+      stateProperties?: Record<string, any>;
+    }
+  | {
+      type: "planning";
+      thoughts: string;
     };
-  } catch (e: unknown) {
-    const err = e instanceof Error ? e.message : String(e);
-    return {
-      validationError: `Critical failure in the model's structured output: ${err}`,
-      attempts: state.attempts + 1,
-    };
-  }
-}
 
-// 3. Node 2: The Architectural Validator
-async function validateNode(
-  state: GeneratorState,
-): Promise<Partial<GeneratorState>> {
-  if (!state.draftGraph) return {};
-
-  try {
-    validateGraphArchitecture(state.draftGraph, state.availablePlugins);
-    console.log(`[Generator Agent] Validation successful.`);
-    return { validationError: null };
-  } catch (e: unknown) {
-    const errorMsg = e instanceof Error ? e.message : String(e);
-    console.warn(`[Generator Agent] Validation failed: ${errorMsg}`);
-
-    // If it fails, we add the error to the history so the LLM reads it on the next attempt
-    return {
-      validationError: errorMsg,
-      messages: [
-        new HumanMessage(
-          `Your design failed the internal validation with this error:\n${errorMsg}\n\nPlease fix the JSON and regenerate it.`,
-        ),
-      ],
-    };
-  }
-}
-
-// 4. Routing condition
-function routeAfterValidation(state: GeneratorState): "generate" | typeof END {
-  if (state.validationError && state.attempts < 3) {
-    return "generate"; // Retry
-  }
-  return END; // End if successful or out of attempts
-}
-
-// 5. Assemble the Generator Agent Graph
-const generatorWorkflow = new StateGraph(GeneratorStateAnnotation)
-  .addNode("generate", generateNode)
-  .addNode("validate", validateNode)
-  .addEdge(START, "generate")
-  .addEdge("generate", "validate")
-  .addConditionalEdges("validate", routeAfterValidation);
-
-const compiledGenerator = generatorWorkflow.compile();
-
-export async function generateGraphFromPrompt(
+/**
+ * Incrementally generates a workflow graph node-by-node, yielding events
+ * for each validated node and edge so the frontend can render them in real time.
+ */
+export async function* generateIncrementalGraph(
   prompt: string,
   modelName: string,
   availablePlugins: PluginInfo[],
   currentGraph?: LangGraphAbstraction,
-): Promise<LangGraphAbstraction> {
-  const systemPrompt = `You are the Chief Architect of an Agentic AI System.
-    Your goal is to design a workflow (Graph) in JSON format that solves the user's request.
-
-    Available plugins in the system:
-    ${JSON.stringify(availablePlugins, null, 2)}
-
-    STRICT DESIGN RULES:
-    1. You must always include a node with id "start" and type "start".
-    2. You must always include a node with id "end" and type "end".
-    3. For logical decisions, use a node type "condition", reading a variable from the state.
-    4. The "stateSchema" must define all the variables that the nodes will share.
-    5. CRITICAL: The "stateSchema" MUST always include a property named "input" of type "string". This represents the user's initial prompt or query for the execution.
-    6. DO NOT invent plugin names that are not in the list.
-    7. If an LLM node needs to use plugins, add them to its "config.plugins" array.
-    8. If the prompt is very simple (1 step), generate a minimalist graph of Start -> LLM -> End.
-    9. For LLM nodes, YOU MUST define their 'config': specify 'model' (e.g., "${modelName}"), 'temperature' (0.0 to 1.0), and a detailed 'systemPrompt'. If the LLM should output structured data, define 'structuredOutput' mapping to a state property, and always set 'outputKey' indicating where the result should be saved in the state.`;
-
-  const userMessage = currentGraph
-    ? `Here is the current workflow design:\n${JSON.stringify(currentGraph, null, 2)}\n\nThe user wants to modify it: ${prompt}\n\nPlease generate the updated JSON workflow, retaining all unchanged parts.`
-    : `Design a workflow to solve this: ${prompt}`;
-
-  const initialState = {
-    messages: [new SystemMessage(systemPrompt), new HumanMessage(userMessage)],
-    attempts: 0,
-    draftGraph: null,
-    validationError: null,
-    modelName,
-    availablePlugins,
-  };
-
-  const finalState = (await compiledGenerator.invoke(initialState)) as Record<
-    string,
-    any
-  >;
-
-  if (finalState.validationError || !finalState.draftGraph) {
-    throw new Error(
-      `[Generator] Failed after ${finalState.attempts} attempts. Last error: ${finalState.validationError}`,
-    );
-  }
-
-  return finalState.draftGraph as LangGraphAbstraction;
-}
-
-/**
- * Pure function to validate that the Graph is mathematically executable
- * before returning it to the Frontend to be rendered or saved.
- */
-function validateGraphArchitecture(graph: any, availablePlugins: PluginInfo[]) {
-  const nodeIds = new Set<string>();
-  let startCount = 0;
-  let endCount = 0;
-
-  for (const node of graph.nodes) {
-    if (nodeIds.has(node.id)) {
-      throw new Error(
-        `Duplicate node ID found: '${node.id}'. All node IDs must be unique.`,
-      );
-    }
-    nodeIds.add(node.id);
-
-    if (node.type === "start") startCount++;
-    if (node.type === "end") endCount++;
-  }
-
+  targetNodeId?: string,
+): AsyncGenerator<IncrementalEvent, LangGraphAbstraction, unknown> {
   const pluginNames = new Set(availablePlugins.map((p) => p.name));
+  const llm = new ChatOllama({ model: modelName, temperature: 0.1 });
 
-  // 1. Validate Start and End
-  if (startCount !== 1)
-    throw new Error(
-      `The graph must have exactly one node of type 'start'. Found: ${startCount}`,
+  // CASE 1: Updating a specific targeted node
+  if (currentGraph && targetNodeId) {
+    const existingNodeIndex = currentGraph.nodes.findIndex(
+      (n) => n.id === targetNodeId,
     );
-  if (endCount !== 1)
-    throw new Error(
-      `The graph must have exactly one node of type 'end'. Found: ${endCount}`,
-    );
-  if (!nodeIds.has("start"))
-    throw new Error(`The graph must have a node with id 'start'.`);
-  if (!nodeIds.has("end"))
-    throw new Error(`The graph must have a node with id 'end'.`);
+    if (existingNodeIndex === -1) {
+      throw new Error(`Target node '${targetNodeId}' not found in graph.`);
+    }
 
-  // 2. Validate Edges and Orphan Nodes
-  for (const edge of graph.edges) {
-    if (!nodeIds.has(edge.source)) {
-      throw new Error(
-        `The edge references a source '${edge.source}' that does not exist.`,
-      );
+    const targetNode = currentGraph.nodes[existingNodeIndex];
+    const updateLlm = llm.withStructuredOutput(updateNodeProposalSchema);
+
+    const updateMessages = [
+      new SystemMessage(`You are an Agentic AI Workflow Architect.
+Your task is to update a specific node in an existing workflow according to user instructions.
+
+Available plugins:
+${JSON.stringify(availablePlugins, null, 2)}
+
+Current Workflow State Schema:
+${JSON.stringify(currentGraph.stateSchema, null, 2)}
+
+Target Node to Update:
+${JSON.stringify(targetNode, null, 2)}
+`),
+      new HumanMessage(
+        `User instruction to update this node: "${prompt}".\nReturn the updated node configuration.`,
+      ),
+    ];
+
+    const proposal = (await updateLlm.invoke(updateMessages)) as z.infer<
+      typeof updateNodeProposalSchema
+    >;
+
+    yield {
+      type: "planning",
+      thoughts: proposal.thought,
+    };
+
+    // Update node in graph
+    currentGraph.nodes[existingNodeIndex] = {
+      ...proposal.updatedNode,
+      id: targetNode.id,
+      type: proposal.updatedNode.type as NodeType,
+    };
+
+    if (proposal.newStateProperties) {
+      currentGraph.stateSchema = {
+        ...currentGraph.stateSchema,
+        ...proposal.newStateProperties,
+      };
     }
-    if (edge.target && !nodeIds.has(edge.target)) {
-      throw new Error(
-        `The edge references a target '${edge.target}' that does not exist.`,
-      );
-    }
-    if (edge.condition && !nodeIds.has(edge.condition.targetNode)) {
-      throw new Error(
-        `An edge's condition references a targetNode '${edge.condition.targetNode}' that does not exist.`,
-      );
-    }
+
+    yield {
+      type: "node_updated",
+      node: currentGraph.nodes[existingNodeIndex],
+      stateProperties: proposal.newStateProperties,
+    };
+
+    return currentGraph;
   }
 
-  // 3. Validate Plugins
-  for (const node of graph.nodes) {
-    if (node.type === "plugin") {
-      const requestedPlugin = node.config?.pluginId;
-      if (!requestedPlugin || !pluginNames.has(requestedPlugin)) {
-        throw new Error(
-          `Node '${node.id}' attempts to use plugin '${requestedPlugin}', which is not installed. Valid options: ${Array.from(pluginNames).join(", ")}`,
-        );
+  // CASE 2: Node-by-Node Incremental Graph Generation
+  const graph: LangGraphAbstraction = currentGraph
+    ? JSON.parse(JSON.stringify(currentGraph))
+    : {
+        nodes: [],
+        edges: [],
+        stateSchema: {
+          input: {
+            type: "string",
+            description: "User initial query or prompt for this execution",
+            required: true,
+          },
+        },
+      };
+
+  // If new graph, create and emit Start node first
+  if (graph.nodes.length === 0) {
+    const startNode: GraphNode = {
+      id: "start",
+      name: "Start",
+      type: "start",
+      config: {},
+    };
+    graph.nodes.push(startNode);
+    yield {
+      type: "node_added",
+      node: startNode,
+      stateProperties: graph.stateSchema,
+    };
+  }
+
+  const stepLlm = llm.withStructuredOutput(nextNodeProposalSchema);
+  const maxSteps = 8;
+  let currentStep = 0;
+  let lastNodeId = graph.nodes[graph.nodes.length - 1].id;
+
+  const systemInstructions = `You are the Chief Architect of an Agentic AI System.
+Your job is to construct an autonomous multi-step workflow incrementally, step by step.
+
+Available Plugins:
+${JSON.stringify(availablePlugins, null, 2)}
+
+DESIGN PRINCIPLES:
+1. Break down complex tasks into logical consecutive nodes.
+   - For web investigations: (1) Web search query -> (2) Analyze/filter links -> (3) Read content -> (4) Synthesize report.
+2. Node Types:
+   - "llm": For analysis, reasoning, decision making, or final report writing. Config MUST define 'model' ("${modelName}"), 'temperature', 'systemPrompt', and 'outputKey'.
+   - "plugin": To execute an external tool directly. Config MUST define 'pluginId', 'inputMapping', and 'outputKey'.
+   - "compute": For simple data transformations. If branching logic is needed, DO NOT create a condition node. Instead, use 'edgeCondition' to set the requirement for entering the newly proposed node.
+3. Every node must connect from an existing node ('sourceNodeId').
+4. If a node outputs a new variable, you must declare it in 'newStateProperties' so it is added to the stateSchema.
+5. When the user's objective is fully accomplished by the workflow, set 'isFinalStepBeforeEnd' to true.`;
+
+  while (currentStep < maxSteps) {
+    currentStep++;
+
+    const stepMessages = [
+      new SystemMessage(systemInstructions),
+      new HumanMessage(`Overall User Objective: "${prompt}"
+
+Current Graph State:
+- Existing Nodes: ${JSON.stringify(
+        graph.nodes.map((n) => ({ id: n.id, name: n.name, type: n.type })),
+      )}
+- Existing Edges: ${JSON.stringify(
+        graph.edges.map((e) => ({ source: e.source, target: e.target })),
+      )}
+- Current State Schema Variables: ${JSON.stringify(Object.keys(graph.stateSchema))}
+- Latest Node: "${lastNodeId}"
+
+What is the next single logical step/node to build towards completing the user's objective?`),
+    ];
+
+    let proposal: z.infer<typeof nextNodeProposalSchema> | null = null;
+    let attempts = 0;
+    let validationError: string | null = null;
+
+    while (attempts < 2) {
+      attempts++;
+      try {
+        if (validationError) {
+          stepMessages.push(
+            new HumanMessage(
+              `Your previous proposal had an error: ${validationError}. Please fix it and propose the step again.`,
+            ),
+          );
+        }
+
+        proposal = (await stepLlm.invoke(stepMessages)) as z.infer<
+          typeof nextNodeProposalSchema
+        >;
+
+        if (!proposal.node || !proposal.node.id) {
+          throw new Error("Missing node or node.id in proposal");
+        }
+
+        // Clean node ID
+        let cleanId = proposal.node.id
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, "_");
+        if (graph.nodes.some((n) => n.id === cleanId)) {
+          cleanId = `${cleanId}_${currentStep}`;
+        }
+        proposal.node.id = cleanId;
+
+        // Validate source exists
+        let source = proposal.sourceNodeId;
+        if (!graph.nodes.some((n) => n.id === source)) {
+          source = lastNodeId;
+        }
+
+        // Validate plugin if plugin type
+        if (proposal.node.type === "plugin") {
+          const pId = proposal.node.config?.pluginId as string;
+          if (!pId || !pluginNames.has(pId)) {
+            // Fallback to llm node if plugin not found
+            proposal.node = {
+              id: proposal.node.id,
+              name: proposal.node.name,
+              type: "llm",
+              config: {
+                model: modelName,
+                temperature: 0.1,
+                systemPrompt: `Process the previous step and handle ${proposal.node.name}`,
+                outputKey:
+                  ((proposal.node.config as any)?.outputKey as string) ||
+                  "output",
+              },
+            };
+          }
+        }
+
+        validationError = null;
+        break;
+      } catch (err: any) {
+        validationError = err.message || String(err);
       }
     }
-    if (
-      node.type === "llm" &&
-      node.config?.plugins &&
-      Array.isArray(node.config.plugins)
-    ) {
-      for (const p of node.config.plugins) {
-        if (!pluginNames.has(p)) {
-          throw new Error(
-            `LLM node '${node.id}' attempts to inject tool '${p}', which is not installed.`,
-          );
+
+    if (!proposal) {
+      console.warn(
+        `[Incremental Generator] Could not generate step ${currentStep}`,
+      );
+      break;
+    }
+
+    yield {
+      type: "planning",
+      thoughts: proposal.thought,
+    };
+
+    // Add state variables to graph stateSchema
+    if (proposal.newStateProperties) {
+      for (const [key, def] of Object.entries(proposal.newStateProperties)) {
+        if (!graph.stateSchema[key]) {
+          graph.stateSchema[key] = def as any;
         }
       }
     }
+
+    // Add node
+    const newNode: GraphNode = {
+      id: proposal.node.id,
+      name: proposal.node.name,
+      type: proposal.node.type as NodeType,
+      config: proposal.node.config,
+    };
+    graph.nodes.push(newNode);
+
+    // Add edge
+    const sourceNode =
+      graph.nodes.find((n) => n.id === proposal?.sourceNodeId)?.id ||
+      lastNodeId;
+    const newEdge: GraphEdge = {
+      id: `edge_${sourceNode}_${newNode.id}`,
+      source: sourceNode,
+      target: newNode.id,
+      isConditional: !!proposal.edgeCondition,
+      condition: proposal.edgeCondition,
+    };
+    graph.edges.push(newEdge);
+
+    lastNodeId = newNode.id;
+
+    // Emit event to stream
+    yield {
+      type: "node_added",
+      node: newNode,
+      edge: newEdge,
+      stateProperties: proposal.newStateProperties,
+    };
+
+    if (proposal.isFinalStepBeforeEnd || currentStep >= maxSteps) {
+      break;
+    }
   }
 
-  // 4. Validate State Schema requirements
-  if (!graph.stateSchema || typeof graph.stateSchema !== "object") {
-    throw new Error("The graph must define a valid 'stateSchema' object.");
-  }
-  if (!("input" in graph.stateSchema)) {
-    throw new Error(
-      "The 'stateSchema' MUST define a property named 'input'. This is the required universal entry point provided by the user.",
-    );
-  }
-  if (graph.stateSchema["input"].type !== "string") {
-    throw new Error(
-      "The 'input' property in 'stateSchema' MUST be of type 'string'.",
-    );
-  }
+  // Connect to End node
+  const endNode: GraphNode = {
+    id: "end",
+    name: "End",
+    type: "end",
+    config: {},
+  };
+  graph.nodes.push(endNode);
+
+  const endEdge: GraphEdge = {
+    id: `edge_${lastNodeId}_end`,
+    source: lastNodeId,
+    target: "end",
+    isConditional: false,
+  };
+  graph.edges.push(endEdge);
+
+  yield {
+    type: "node_added",
+    node: endNode,
+    edge: endEdge,
+  };
+
+  return graph;
 }
