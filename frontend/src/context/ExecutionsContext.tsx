@@ -7,6 +7,7 @@ import {
 } from "react";
 import { listExecutions as listExecutionsRequest } from "@/lib/executions/listExecutions";
 import { deleteExecution as deleteExecutionRequest } from "@/lib/executions/deleteExecution";
+import { updateExecution as updateExecutionRequest } from "@/lib/executions/updateExecution";
 import type { ExecutionSummary } from "@/types/execution";
 
 interface ExecutionsContextValue {
@@ -18,6 +19,11 @@ interface ExecutionsContextValue {
   selectExecution: (id: string) => void;
   startNewExecution: () => void;
   deleteExecution: (id: string) => Promise<void>;
+  updateExecution: (
+    id: string,
+    nameOrDto: string | { name: string },
+  ) => Promise<void>;
+  renameExecution: (id: string, name: string) => Promise<void>;
   onExecutionCreated: (id: string) => void;
   touchExecution: (id: string) => void;
 }
@@ -77,6 +83,29 @@ export function ExecutionsProvider({ children }: { children: ReactNode }) {
     refreshExecutions();
   }
 
+  async function updateExecution(
+    id: string,
+    nameOrDto: string | { name: string },
+  ) {
+    const name = typeof nameOrDto === "string" ? nameOrDto : nameOrDto.name;
+    const { data } = await updateExecutionRequest(id, { name });
+    if (data) {
+      setExecutions((prev) =>
+        prev.map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                name: data.name ?? name,
+                updatedAt: data.updatedAt ?? Date.now(),
+              }
+            : e,
+        ),
+      );
+    } else {
+      refreshExecutions();
+    }
+  }
+
   const value: ExecutionsContextValue = {
     executions,
     activeExecutionId,
@@ -86,6 +115,8 @@ export function ExecutionsProvider({ children }: { children: ReactNode }) {
     selectExecution,
     startNewExecution,
     deleteExecution,
+    updateExecution,
+    renameExecution: (id: string, name: string) => updateExecution(id, name),
     onExecutionCreated,
     touchExecution,
   };

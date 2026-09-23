@@ -26,6 +26,7 @@ export function ExecutionsMain() {
     undefined,
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [planningThought, setPlanningThought] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   // Run Modal State
@@ -58,6 +59,7 @@ export function ExecutionsMain() {
     const userPrompt = input;
     setInput("");
     setIsThinking(true);
+    setPlanningThought(null);
     setLogs([]);
     setGraph(null);
     setLogs(["Pollinating flow: starting design..."]);
@@ -81,9 +83,11 @@ export function ExecutionsMain() {
             onExecutionCreated(id);
           },
           onPlanning: (thoughts) => {
+            setPlanningThought(thoughts);
             setLogs((prev) => [...prev, ` ${thoughts}`]);
           },
           onNodeAdded: ({ node, edge, stateProperties }) => {
+            setPlanningThought(null);
             setGraph((prev) => {
               const current = prev || { nodes: [], edges: [], stateSchema: {} };
               if (current.nodes.some((n) => n.id === node.id)) {
@@ -109,6 +113,7 @@ export function ExecutionsMain() {
             ]);
           },
           onNodeUpdated: ({ node, stateProperties }) => {
+            setPlanningThought(null);
             setGraph((prev) => {
               if (!prev) return prev;
               return {
@@ -124,11 +129,13 @@ export function ExecutionsMain() {
             setSelectedNodeId(null);
           },
           onDone: (data) => {
+            setPlanningThought(null);
             setGraph(data.graph);
             setLogs((prev) => [...prev, "✨ Flow assembled successfully!"]);
             setIsThinking(false);
           },
           onError: (message) => {
+            setPlanningThought(null);
             setLogs((prev) => [...prev, `❌ Error: ${message}`]);
             setIsThinking(false);
           },
@@ -137,9 +144,11 @@ export function ExecutionsMain() {
     } catch (e: any) {
       // The API client already toasts errors if we don't silence them.
       // alert("Error: " + e.message);
+      setPlanningThought(null);
       setLogs((prev) => [...prev, `❌ Streaming error: ${e.message}`]);
     } finally {
       setIsThinking(false);
+      setPlanningThought(null);
       setInput("");
     }
   };
@@ -245,6 +254,7 @@ export function ExecutionsMain() {
             graph={graph}
             activeNodeId={activeNodeId}
             isGenerating={isThinking}
+            planningThought={planningThought}
             selectedNodeId={selectedNodeId}
             onNodeSelect={setSelectedNodeId}
           />

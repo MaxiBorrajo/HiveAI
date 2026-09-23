@@ -3,6 +3,7 @@ import { ExecutionRepository } from "../../../../infrastructure/db/repositories/
 import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { generateIncrementalGraph } from "../../../../core/ai/visual-builder/generator.ts";
 import type { LangGraphAbstraction } from "../../../../core/ai/visual-builder/types.ts";
+import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
 
 export async function generateExecution(
   db: AppDatabase,
@@ -36,6 +37,20 @@ export async function generateExecution(
           return;
         }
 
+        console.log(
+          `/executions/generate received. Active bees right now: [${hive
+            .getRegisteredPlugins()
+            .filter((p: BeePlugin) => hive.isActive(p.name))
+            .map((p: BeePlugin) => p.name)
+            .join(", ")}]`,
+        );
+        console.log(
+          `[Executions Generator] Model: "${model}" | Execution ID: ${executionId ?? "new"} | Target Node: ${targetNodeId ?? "none"}`,
+        );
+        console.log(
+          `[Executions Generator] Prompt: "${content.length > 100 ? content.slice(0, 97) + "..." : content}"`,
+        );
+
         const availablePlugins = hive.getTools().map((t) => ({
           name: t.name,
           description: t.description,
@@ -46,8 +61,14 @@ export async function generateExecution(
         let targetExecutionId = executionId;
 
         if (executionId) {
+          console.log(
+            `[Executions Generator] Looking up existing execution ID: ${executionId}`,
+          );
           const existing = await repo.findById(executionId);
           if (existing && existing.lastGraphId) {
+            console.log(
+              `[Executions Generator] Found existing execution #${executionId} with lastGraphId: ${existing.lastGraphId}`,
+            );
             const dbGraph = await repo.findGraphById(existing.lastGraphId);
             if (dbGraph) {
               let parsedGraph = dbGraph.graph;
@@ -57,6 +78,9 @@ export async function generateExecution(
                 } catch (e) {}
               }
               currentGraph = parsedGraph as LangGraphAbstraction;
+              console.log(
+                `[Executions Generator] Loaded existing graph with ${currentGraph.nodes?.length ?? 0} nodes and ${currentGraph.edges?.length ?? 0} edges.`,
+              );
             }
           }
         }
@@ -68,9 +92,16 @@ export async function generateExecution(
             updatedAt: Date.now(),
           });
           targetExecutionId = newExecution.id;
+          console.log(
+            `[Executions Generator] Created new execution record #${targetExecutionId}: "${newExecution.name}"`,
+          );
         }
 
         send("execution_created", { executionId: targetExecutionId });
+
+        console.log(
+          `[Executions Generator] Initializing incremental graph generation stream...`,
+        );
 
         const generator = generateIncrementalGraph(
           content,
@@ -86,12 +117,34 @@ export async function generateExecution(
           const result = await generator.next();
           if (result.done) {
             finalGraph = result.value as LangGraphAbstraction;
+            console.log(
+              `[Executions Generator] Incremental generation completed. Final graph contains ${finalGraph?.nodes?.length ?? 0} nodes and ${finalGraph?.edges?.length ?? 0} edges.`,
+            );
             break;
           }
-          send(result.value.type, result.value);
+
+          const event = result.value;
+          if (event.type === "planning") {
+            console.log(
+              `[Executions Generator] [Stream event: planning] Thought: "${event.thoughts}"`,
+            );
+          } else if (event.type === "node_added") {
+            console.log(
+              `[Executions Generator] [Stream event: node_added] Node: "${event.node.name}" (${event.node.id}, type: ${event.node.type})${event.edge ? ` <- connected from "${event.edge.source}"` : ""}`,
+            );
+          } else if (event.type === "node_updated") {
+            console.log(
+              `[Executions Generator] [Stream event: node_updated] Node: "${event.node.name}" (${event.node.id}, type: ${event.node.type})`,
+            );
+          }
+
+          send(event.type, event);
         }
 
         if (finalGraph) {
+          console.log(
+            `[Executions Generator] Persisting new graph for execution #${targetExecutionId}...`,
+          );
           const newGraph = await repo.createGraph({
             executionId: targetExecutionId,
             graph: finalGraph,
@@ -100,6 +153,9 @@ export async function generateExecution(
           });
 
           await repo.update(targetExecutionId, { lastGraphId: newGraph.id });
+          console.log(
+            `[Executions Generator] Successfully saved graph #${newGraph.id} for execution #${targetExecutionId}. Emitting 'done' event.`,
+          );
 
           send("done", {
             executionId: targetExecutionId,
@@ -110,7 +166,10 @@ export async function generateExecution(
 
         controller.close();
       } catch (error) {
-        console.error("[Executions API] Error in streaming generation:", error);
+        console.error(
+          "[Executions Generator] Error in streaming generation:",
+          error,
+        );
         const detail = error instanceof Error ? error.message : String(error);
         send("error", { message: detail });
         controller.close();

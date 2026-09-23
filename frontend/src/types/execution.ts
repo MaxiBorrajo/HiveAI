@@ -50,7 +50,7 @@ export interface Execution {
 
 export interface ExecutionSummary {
   id: string;
-  title: string;
+  name: string;
   createdAt: number;
   updatedAt: number;
 }

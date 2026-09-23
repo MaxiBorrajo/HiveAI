@@ -7,6 +7,7 @@ import {
 } from "react";
 import { listChats as listChatsRequest } from "@/lib/chats/listChats";
 import { deleteChat as deleteChatRequest } from "@/lib/chats/deleteChat";
+import { updateChat as updateChatRequest } from "@/lib/chats/updateChat";
 import type { ChatSummary } from "@/types/chat";
 
 interface ChatsContextValue {
@@ -18,6 +19,11 @@ interface ChatsContextValue {
   selectChat: (chatId: string) => void;
   startNewChat: () => void;
   deleteChat: (chatId: string) => Promise<void>;
+  updateChat: (
+    chatId: string,
+    titleOrDto: string | { title: string },
+  ) => Promise<void>;
+  renameChat: (chatId: string, title: string) => Promise<void>;
   onChatCreated: (chatId: string) => void;
   touchChat: (chatId: string) => void;
   unreadChatIds: Set<string>;
@@ -95,6 +101,30 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     refreshChats();
   }
 
+  async function updateChat(
+    chatId: string,
+    titleOrDto: string | { title: string },
+  ) {
+    const title =
+      typeof titleOrDto === "string" ? titleOrDto : titleOrDto.title;
+    const { data } = await updateChatRequest(chatId, { title });
+    if (data) {
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === chatId
+            ? {
+                ...c,
+                title: data.title ?? title,
+                updatedAt: data.updatedAt ?? Date.now(),
+              }
+            : c,
+        ),
+      );
+    } else {
+      refreshChats();
+    }
+  }
+
   const value: ChatsContextValue = {
     chats,
     activeChatId,
@@ -104,6 +134,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     selectChat,
     startNewChat,
     deleteChat,
+    updateChat,
+    renameChat: (chatId: string, title: string) => updateChat(chatId, title),
     onChatCreated,
     touchChat,
     unreadChatIds,

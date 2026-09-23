@@ -184,14 +184,28 @@ export async function* generateIncrementalGraph(
 
   // CASE 1: Updating a specific targeted node
   if (currentGraph && targetNodeId) {
+    console.log(`\n[Visual Builder - Generator] === Target Node Update ===`);
+    console.log(
+      `[Visual Builder - Generator] Target Node ID: "${targetNodeId}"`,
+    );
+    console.log(`[Visual Builder - Generator] Instruction: "${prompt}"`);
+
     const existingNodeIndex = currentGraph.nodes.findIndex(
       (n) => n.id === targetNodeId,
     );
     if (existingNodeIndex === -1) {
+      console.error(
+        `[Visual Builder - Generator] Target node '${targetNodeId}' not found in graph.`,
+      );
       throw new Error(`Target node '${targetNodeId}' not found in graph.`);
     }
 
     const targetNode = currentGraph.nodes[existingNodeIndex];
+    console.log(
+      `[Visual Builder - Generator] Current Node Config:`,
+      JSON.stringify(targetNode, null, 2),
+    );
+
     const updateLlm = llm.withStructuredOutput(updateNodeProposalSchema);
 
     const updateMessages = [
@@ -212,9 +226,23 @@ ${JSON.stringify(targetNode, null, 2)}
       ),
     ];
 
+    console.log(
+      `[Visual Builder - Generator] Invoking model "${modelName}" for node update proposal...`,
+    );
+    const start = performance.now();
     const proposal = (await updateLlm.invoke(updateMessages)) as z.infer<
       typeof updateNodeProposalSchema
     >;
+    const duration = Math.round(performance.now() - start);
+
+    console.log(
+      `[Visual Builder - Generator] Node update proposal received in ${duration}ms:`,
+      JSON.stringify(proposal, null, 2),
+    );
+    console.log(`[Visual Builder - Generator] Thought: "${proposal.thought}"`);
+    console.log(
+      `[Visual Builder - Generator] Updated Node: [${proposal.updatedNode.type}] "${proposal.updatedNode.name}" (${proposal.updatedNode.id})`,
+    );
 
     yield {
       type: "planning",
@@ -233,6 +261,10 @@ ${JSON.stringify(targetNode, null, 2)}
         ...currentGraph.stateSchema,
         ...proposal.newStateProperties,
       };
+      console.log(
+        `[Visual Builder - Generator] Updated state properties in schema:`,
+        Object.keys(proposal.newStateProperties),
+      );
     }
 
     yield {
@@ -241,10 +273,22 @@ ${JSON.stringify(targetNode, null, 2)}
       stateProperties: proposal.newStateProperties,
     };
 
+    console.log(
+      `[Visual Builder - Generator] Target node update complete for "${targetNodeId}".`,
+    );
     return currentGraph;
   }
 
   // CASE 2: Node-by-Node Incremental Graph Generation
+  console.log(
+    `\n[Visual Builder - Generator] === Starting Incremental Graph Generation ===`,
+  );
+  console.log(`[Visual Builder - Generator] Model: "${modelName}"`);
+  console.log(`[Visual Builder - Generator] User Objective: "${prompt}"`);
+  console.log(
+    `[Visual Builder - Generator] Available plugins (${availablePlugins.length}): [${availablePlugins.map((p) => p.name).join(", ")}]`,
+  );
+
   const graph: LangGraphAbstraction = currentGraph
     ? JSON.parse(JSON.stringify(currentGraph))
     : {
@@ -259,8 +303,15 @@ ${JSON.stringify(targetNode, null, 2)}
         },
       };
 
+  console.log(
+    `[Visual Builder - Generator] Initial nodes in graph: ${graph.nodes.length}${graph.nodes.length > 0 ? ` ([${graph.nodes.map((n) => n.id).join(", ")}])` : ""}`,
+  );
+
   // If new graph, create and emit Start node first
   if (graph.nodes.length === 0) {
+    console.log(
+      `[Visual Builder - Generator] Initializing new workflow with 'Start' node`,
+    );
     const startNode: GraphNode = {
       id: "start",
       name: "Start",
@@ -299,6 +350,15 @@ DESIGN PRINCIPLES:
 
   while (currentStep < maxSteps) {
     currentStep++;
+    console.log(
+      `\n[Visual Builder - Generator] --- Generating Step ${currentStep} of max ${maxSteps} ---`,
+    );
+    console.log(
+      `[Visual Builder - Generator] Last node in chain: "${lastNodeId}"`,
+    );
+    console.log(
+      `[Visual Builder - Generator] Current workflow nodes: [${graph.nodes.map((n) => n.id).join(", ")}]`,
+    );
 
     const stepMessages = [
       new SystemMessage(systemInstructions),
@@ -325,20 +385,40 @@ What is the next single logical step/node to build towards completing the user's
       attempts++;
       try {
         if (validationError) {
+          console.warn(
+            `[Visual Builder - Generator] Step ${currentStep} attempt ${attempts} retrying due to error: ${validationError}`,
+          );
           stepMessages.push(
             new HumanMessage(
               `Your previous proposal had an error: ${validationError}. Please fix it and propose the step again.`,
             ),
           );
+        } else {
+          console.log(
+            `[Visual Builder - Generator] Invoking model for next step proposal (attempt ${attempts}/2)...`,
+          );
         }
 
+        const stepStart = performance.now();
         proposal = (await stepLlm.invoke(stepMessages)) as z.infer<
           typeof nextNodeProposalSchema
         >;
+        const stepDuration = Math.round(performance.now() - stepStart);
 
         if (!proposal.node || !proposal.node.id) {
           throw new Error("Missing node or node.id in proposal");
         }
+
+        console.log(
+          `[Visual Builder - Generator] Step ${currentStep} proposal received in ${stepDuration}ms:`,
+          JSON.stringify(proposal, null, 2),
+        );
+        console.log(
+          `[Visual Builder - Generator] Thought: "${proposal.thought}"`,
+        );
+        console.log(
+          `[Visual Builder - Generator] Proposed Node: [${proposal.node.type}] "${proposal.node.name}" (${proposal.node.id}) connected from "${proposal.sourceNodeId}"`,
+        );
 
         // Clean node ID
         let cleanId = proposal.node.id
@@ -347,11 +427,19 @@ What is the next single logical step/node to build towards completing the user's
         if (graph.nodes.some((n) => n.id === cleanId)) {
           cleanId = `${cleanId}_${currentStep}`;
         }
+        if (cleanId !== proposal.node.id) {
+          console.log(
+            `[Visual Builder - Generator] Adjusted node ID: "${proposal.node.id}" -> "${cleanId}"`,
+          );
+        }
         proposal.node.id = cleanId;
 
         // Validate source exists
         let source = proposal.sourceNodeId;
         if (!graph.nodes.some((n) => n.id === source)) {
+          console.log(
+            `[Visual Builder - Generator] Source node "${proposal.sourceNodeId}" not found in graph; defaulted to last node "${lastNodeId}"`,
+          );
           source = lastNodeId;
         }
 
@@ -359,6 +447,9 @@ What is the next single logical step/node to build towards completing the user's
         if (proposal.node.type === "plugin") {
           const pId = proposal.node.config?.pluginId as string;
           if (!pId || !pluginNames.has(pId)) {
+            console.warn(
+              `[Visual Builder - Generator] Plugin "${pId}" not found in available plugins. Converting node to LLM fallback.`,
+            );
             // Fallback to llm node if plugin not found
             proposal.node = {
               id: proposal.node.id,
@@ -385,7 +476,7 @@ What is the next single logical step/node to build towards completing the user's
 
     if (!proposal) {
       console.warn(
-        `[Incremental Generator] Could not generate step ${currentStep}`,
+        `[Visual Builder - Generator] Could not generate step ${currentStep} after ${attempts} attempts. Ending generation loop.`,
       );
       break;
     }
@@ -397,10 +488,17 @@ What is the next single logical step/node to build towards completing the user's
 
     // Add state variables to graph stateSchema
     if (proposal.newStateProperties) {
+      const addedKeys: string[] = [];
       for (const [key, def] of Object.entries(proposal.newStateProperties)) {
         if (!graph.stateSchema[key]) {
           graph.stateSchema[key] = def as any;
+          addedKeys.push(key);
         }
+      }
+      if (addedKeys.length > 0) {
+        console.log(
+          `[Visual Builder - Generator] Added state variables to schema: [${addedKeys.join(", ")}]`,
+        );
       }
     }
 
@@ -426,6 +524,10 @@ What is the next single logical step/node to build towards completing the user's
     };
     graph.edges.push(newEdge);
 
+    console.log(
+      `[Visual Builder - Generator] Added node "${newNode.id}" and edge "${newEdge.id}" (${newEdge.source} -> ${newEdge.target}${newEdge.isConditional ? " [conditional]" : ""})`,
+    );
+
     lastNodeId = newNode.id;
 
     // Emit event to stream
@@ -436,12 +538,24 @@ What is the next single logical step/node to build towards completing the user's
       stateProperties: proposal.newStateProperties,
     };
 
-    if (proposal.isFinalStepBeforeEnd || currentStep >= maxSteps) {
+    if (proposal.isFinalStepBeforeEnd) {
+      console.log(
+        `[Visual Builder - Generator] Model marked step ${currentStep} as final step before End. Finishing workflow.`,
+      );
+      break;
+    }
+    if (currentStep >= maxSteps) {
+      console.log(
+        `[Visual Builder - Generator] Reached maximum allowed steps (${maxSteps}). Finishing workflow.`,
+      );
       break;
     }
   }
 
   // Connect to End node
+  console.log(
+    `[Visual Builder - Generator] Connecting workflow to 'End' node from "${lastNodeId}"`,
+  );
   const endNode: GraphNode = {
     id: "end",
     name: "End",
@@ -457,6 +571,13 @@ What is the next single logical step/node to build towards completing the user's
     isConditional: false,
   };
   graph.edges.push(endEdge);
+
+  console.log(
+    `[Visual Builder - Generator] === Workflow Generation Complete ===`,
+  );
+  console.log(
+    `[Visual Builder - Generator] Total nodes: ${graph.nodes.length}, total edges: ${graph.edges.length}, state keys: [${Object.keys(graph.stateSchema).join(", ")}]`,
+  );
 
   yield {
     type: "node_added",

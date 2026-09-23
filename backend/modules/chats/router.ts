@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { listChats } from "./useCases/listChats/index.ts";
 import { getChatMessages } from "./useCases/getChatMessages/index.ts";
 import { deleteChat } from "./useCases/deleteChat/index.ts";
+import { updateChat } from "./useCases/updateChat/index.ts";
 import { sendMessage } from "./useCases/sendMessage/index.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
@@ -25,8 +26,16 @@ chatsRouter.post("/", async (c) => {
 
   const config = hive.getConfig();
   const body = await c.req.json().catch(() => ({}));
-  
-  return sendMessage(db, body.chatId || null, body.message || "", hive, config.get("model"), c.req.raw, headers);
+
+  return sendMessage(
+    db,
+    body.chatId || null,
+    body.message || "",
+    hive,
+    config.get("model"),
+    c.req.raw,
+    headers,
+  );
 });
 
 chatsRouter.get("/", async (c) => {
@@ -45,4 +54,18 @@ chatsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   return deleteChat(db, parseInt(c.req.param("id")), headers);
+});
+
+chatsRouter.patch("/:id", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  const body = await c.req.json().catch(() => ({}));
+  return updateChat(db, parseInt(c.req.param("id")), body, headers);
+});
+
+chatsRouter.put("/:id", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  const body = await c.req.json().catch(() => ({}));
+  return updateChat(db, parseInt(c.req.param("id")), body, headers);
 });

@@ -7,6 +7,7 @@ import { generateExecution } from "./useCases/generateExecution/index.ts";
 import { listExecutions } from "./useCases/listExecutions/index.ts";
 import { getExecution } from "./useCases/getExecution/index.ts";
 import { deleteExecution } from "./useCases/deleteExecution/index.ts";
+import { updateExecution } from "./useCases/updateExecution/index.ts";
 import { updateExecutionGraph } from "./useCases/updateExecutionGraph/index.ts";
 import { runExecution } from "./useCases/runExecution/index.ts";
 
@@ -51,6 +52,20 @@ executionsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   return deleteExecution(db, parseInt(c.req.param("id")), headers);
+});
+
+executionsRouter.patch("/:id", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  const body = await c.req.json().catch(() => ({}));
+  return updateExecution(db, parseInt(c.req.param("id")), body, headers);
+});
+
+executionsRouter.put("/:id", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  const body = await c.req.json().catch(() => ({}));
+  return updateExecution(db, parseInt(c.req.param("id")), body, headers);
 });
 
 executionsRouter.put("/:id/graph", async (c) => {

@@ -1,9 +1,9 @@
-
 import { useEffect, useMemo } from "react";
 import Dagre from "@dagrejs/dagre";
 import {
   useNodesState,
   useEdgesState,
+  useReactFlow,
   Position,
   ReactFlow,
   Controls,
@@ -19,6 +19,7 @@ interface VisualBuilderProps {
   onSave?: (graph: LangGraphAbstraction) => void;
   activeNodeId?: string; // For streaming / running feedback
   isGenerating?: boolean; // For showing the Ghost / thinking node
+  planningThought?: string | null; // For displaying current thought in ghost node
   selectedNodeId?: string | null;
   onNodeSelect?: (nodeId: string | null) => void;
 }
@@ -56,6 +57,7 @@ export function VisualBuilder({
   graph,
   activeNodeId,
   isGenerating,
+  planningThought,
   selectedNodeId,
   onNodeSelect,
 }: VisualBuilderProps) {
@@ -100,8 +102,12 @@ export function VisualBuilder({
         data: {
           label: (
             <div className="flex flex-col text-left">
-              <span className="font-medium text-xs text-zinc-100">{n.name}</span>
-              <span className="text-[10px] text-zinc-400 capitalize">{n.type}</span>
+              <span className="font-medium text-xs text-zinc-100">
+                {n.name}
+              </span>
+              <span className="text-[10px] text-zinc-400 capitalize">
+                {n.type}
+              </span>
             </div>
           ),
         },
@@ -141,7 +147,9 @@ export function VisualBuilder({
         position: { x: 0, y: 0 },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: {},
+        data: {
+          label: planningThought || undefined,
+        },
       });
 
       if (currentNodes.length > 0) {
@@ -160,7 +168,15 @@ export function VisualBuilder({
 
     setNodes(layouted.nodes);
     setEdges(layouted.edges);
-  }, [graph, activeNodeId, isGenerating, selectedNodeId, setNodes, setEdges]);
+  }, [
+    graph,
+    activeNodeId,
+    isGenerating,
+    planningThought,
+    selectedNodeId,
+    setNodes,
+    setEdges,
+  ]);
 
   return (
     <div
@@ -190,9 +206,34 @@ export function VisualBuilder({
         colorMode="dark"
         style={{ backgroundColor: "transparent" }}
       >
+        <AutoFitOnUpdate
+          nodesCount={nodes.length}
+          isGenerating={isGenerating}
+        />
         <Controls position="bottom-left" />
         <Background gap={40} size={1} bgColor="#050403" />
       </ReactFlow>
     </div>
   );
+}
+
+function AutoFitOnUpdate({
+  nodesCount,
+  isGenerating,
+}: {
+  nodesCount: number;
+  isGenerating?: boolean;
+}) {
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    if (nodesCount > 0) {
+      const timer = setTimeout(() => {
+        fitView({ duration: 400, padding: 0.2 });
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [nodesCount, isGenerating, fitView]);
+
+  return null;
 }
