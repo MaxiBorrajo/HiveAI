@@ -159,21 +159,57 @@ export function ExecutionsMain() {
   return (
     <div className="flex flex-1 min-w-0 h-screen bg-background text-foreground font-sans overflow-hidden">
       <div className="flex flex-1 flex-col min-w-0 min-h-0 relative w-full">
-        {isEmpty ? (
-          <div className="flex flex-1 flex-col items-center justify-center px-6">
-            <div className="flex flex-col items-center gap-6 w-full max-w-3xl">
-              <div className="flex items-center justify-center gap-3">
-                <Logo size={40} />
-                <h1 className="text-display text-3xl font-medium">
-                  Welcome to the hive
-                </h1>
+        {/* Background Canvas Layer */}
+        <div className="absolute inset-0 z-0">
+          <VisualBuilder graph={graph} activeNodeId={activeNodeId} />
+        </div>
+
+        {/* Foreground UI Layer */}
+        <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between">
+          {/* Top/Center section (Welcome message if empty) */}
+          <div className="flex items-center justify-end m-4">
+            {isEmpty && (
+              <div className="flex flex-col items-center gap-6 pointer-events-auto bg-background/80 px-4 py-2 rounded-lg backdrop-blur-sm border shadow-lg">
+                <div className="flex items-center justify-center gap-1">
+                  <Logo size={20} />
+                  <h1 className="text-display text-lg font-medium">
+                    HiveAI
+                  </h1>
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Floating panel for Run/Logs (when not empty) */}
+          {!isEmpty && (
+            <div className="absolute top-6 right-6 w-80 flex flex-col gap-2 pointer-events-auto max-h-[calc(100vh-200px)]">
+              <Button
+                onClick={handleOpenRunModal}
+                disabled={isThinking}
+                variant="default"
+                className="shadow-lg"
+              >
+                ▶ Run Execution
+              </Button>
+              {logs.length > 0 && (
+                <div className="bg-black/90 text-green-400 p-2 text-xs overflow-auto font-mono rounded shadow-lg max-h-64">
+                  {logs.map((l, i) => (
+                    <div key={i}>{l}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bottom section with Chat Input */}
+          <div className="w-full px-6 pt-12 pb-8">
+            <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 pointer-events-auto">
               <ChatInput
                 input={input}
                 setInput={setInput}
                 isThinking={isThinking}
                 handleSend={handleGenerate}
-                isEmpty
+                isEmpty={isEmpty}
                 hidePluginsAndModes
                 placeholder="I want a workflow that creates a report about..."
               />
@@ -183,46 +219,7 @@ export function ExecutionsMain() {
               </p>
             </div>
           </div>
-        ) : (
-          <>
-            <div className="flex-1 flex gap-4 p-6 min-h-0">
-              <div className="flex-1 border rounded bg-white overflow-hidden relative">
-                <VisualBuilder graph={graph} activeNodeId={activeNodeId} />
-              </div>
-              <div className="w-80 flex flex-col gap-2">
-                <Button
-                  onClick={handleOpenRunModal}
-                  disabled={isThinking}
-                  variant="default"
-                >
-                  ▶ Run Execution
-                </Button>
-                <div className="flex-1 bg-black text-green-400 p-2 text-xs overflow-auto font-mono rounded">
-                  {logs.map((l, i) => (
-                    <div key={i}>{l}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 pb-6 bg-background">
-              <div className="mx-auto flex max-w-3xl flex-col items-center gap-2">
-                <ChatInput
-                  input={input}
-                  setInput={setInput}
-                  isThinking={isThinking}
-                  handleSend={handleGenerate}
-                  hidePluginsAndModes
-                  placeholder="I want a workflow that creates a report about..."
-                />
-                <p className="text-center text-xs text-muted-foreground">
-                  HiveAI can make mistakes. Consider verifying important
-                  information.
-                </p>
-              </div>
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
       {/* Run Input Modal */}

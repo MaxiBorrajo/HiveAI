@@ -1,21 +1,49 @@
 import { useEffect } from "react";
+import Dagre from "@dagrejs/dagre";
 import {
   ReactFlow,
-  MiniMap,
   Controls,
   Background,
   useNodesState,
   useEdgesState,
+  Position,
 } from "@xyflow/react";
 import type { Node, Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { LangGraphAbstraction } from "../../types/execution";
 
 interface VisualBuilderProps {
-  graph: LangGraphAbstraction;
+  graph?: LangGraphAbstraction | null;
   onSave?: (graph: LangGraphAbstraction) => void;
   activeNodeId?: string; // For streaming feedback
 }
+
+const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
+  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "LR" });
+
+  edges.forEach((edge) => g.setEdge(edge.source, edge.target));
+  nodes.forEach((node) =>
+    g.setNode(node.id, {
+      ...node,
+      // Default dimensions if not measured yet
+      width: node.measured?.width ?? 150,
+      height: node.measured?.height ?? 50,
+    }),
+  );
+
+  Dagre.layout(g);
+
+  const layoutedNodes = nodes.map((node) => {
+    const position = g.node(node.id);
+    const x = position.x - (node.measured?.width ?? 150) / 2;
+    const y = position.y - (node.measured?.height ?? 50) / 2;
+
+    return { ...node, position: { x, y } };
+  });
+
+  return { nodes: layoutedNodes, edges };
+};
 
 export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -23,17 +51,18 @@ export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
 
   // Convert backend graph to React Flow graph
   useEffect(() => {
-    if (!graph) return;
+    if (!graph) {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
 
-    let currentY = 50;
     const rfNodes: Node[] = graph.nodes.map((n) => {
-      // Very basic auto-layout if no uiPosition
-      const x = n.uiPosition?.x ?? 250;
-      const y = n.uiPosition?.y ?? (currentY += 100);
-
       return {
         id: n.id,
-        position: { x, y },
+        position: { x: 0, y: 0 },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
         data: { label: `${n.name} (${n.type})` },
         style: {
           background: activeNodeId === n.id ? "#ffc107" : "#fff",
@@ -41,6 +70,8 @@ export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
           padding: 10,
           borderRadius: 5,
           fontWeight: activeNodeId === n.id ? "bold" : "normal",
+          color: "#000",
+          width: 150,
         },
       };
     });
@@ -53,22 +84,35 @@ export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
       animated: activeNodeId === e.source,
     }));
 
-    setNodes(rfNodes);
-    setEdges(rfEdges);
+    const layouted = getLayoutedElements(rfNodes, rfEdges);
+
+    setNodes(layouted.nodes);
+    setEdges(layouted.edges);
   }, [graph, activeNodeId, setNodes, setEdges]);
 
   return (
-    <div style={{ width: "100%", height: "500px", border: "1px solid #ccc" }}>
+    <div
+      className="bg-background"
+      style={{
+        width: "100%",
+        height: "100%",
+        border: "none",
+        display: "flex",
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
+        colorMode="dark"
+        style={{ backgroundColor: "transparent" }}
       >
-        <Controls />
-        <MiniMap />
-        <Background gap={12} size={1} />
+        <Controls position="bottom-left" />
+        <Background gap={40} size={1} />
       </ReactFlow>
     </div>
   );
