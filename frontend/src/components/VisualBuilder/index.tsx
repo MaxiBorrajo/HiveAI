@@ -112,7 +112,7 @@ export function VisualBuilder({ graph, activeNodeId }: VisualBuilderProps) {
         style={{ backgroundColor: "transparent" }}
       >
         <Controls position="bottom-left" />
-        <Background gap={40} size={1} />
+        <Background gap={40} size={1} bgColor="#050403"/>
       </ReactFlow>
     </div>
   );
