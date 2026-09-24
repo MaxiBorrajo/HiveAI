@@ -44,8 +44,10 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
   const layoutedNodes = nodes.map((node) => {
     const position = g.node(node.id);
-    const x = position.x - (node.measured?.width ?? 180) / 2;
-    const y = position.y - (node.measured?.height ?? 54) / 2;
+    const width = node.measured?.width ?? 180;
+    const height = node.measured?.height ?? 54;
+    const x = position ? position.x - width / 2 : 0;
+    const y = position ? position.y - height / 2 : 0;
 
     return { ...node, position: { x, y } };
   });
@@ -80,18 +82,19 @@ export function VisualBuilder({
     const rfNodes: Node[] = currentNodes.map((n) => {
       const isSelected = selectedNodeId === n.id;
       const isActive = activeNodeId === n.id;
+      const isUpdating = isGenerating && isSelected;
 
-      let borderColor = "#3f3f46";
+      let borderColor = "var(--border, #3f3f46)";
       let boxShadow = "none";
-      let bgColor = "#18181b";
+      let bgColor = "var(--card, #18181b)";
 
-      if (isActive) {
-        borderColor = "#f59e0b";
-        boxShadow = "0 0 12px rgba(245, 158, 11, 0.5)";
+      if (isActive || isUpdating) {
+        borderColor = "var(--primary)";
+        boxShadow = "0 0 14px var(--primary)";
       } else if (isSelected) {
-        borderColor = "#e4e4e7";
-        boxShadow = "0 0 10px rgba(255, 255, 255, 0.25)";
-        bgColor = "#27272a";
+        borderColor = "var(--primary)";
+        boxShadow = "0 0 10px var(--primary)";
+        bgColor = "var(--accent, #27272a)";
       }
 
       return {
@@ -102,11 +105,16 @@ export function VisualBuilder({
         data: {
           label: (
             <div className="flex flex-col text-left">
-              <span className="font-medium text-xs text-zinc-100">
-                {n.name}
-              </span>
+              <div className="flex items-center gap-1.5">
+                {isUpdating && (
+                  <span className="size-2 rounded-full bg-primary animate-ping shrink-0" />
+                )}
+                <span className="font-medium text-xs text-zinc-100">
+                  {n.name}
+                </span>
+              </div>
               <span className="text-[10px] text-zinc-400 capitalize">
-                {n.type}
+                {isUpdating ? "Updating..." : n.type}
               </span>
             </div>
           ),
@@ -132,14 +140,17 @@ export function VisualBuilder({
       label: e.isConditional ? "Conditional" : "",
       animated: activeNodeId === e.source,
       style: {
-        stroke: activeNodeId === e.source ? "#f59e0b" : "#71717a",
+        stroke:
+          activeNodeId === e.source
+            ? "var(--primary)"
+            : "var(--border, #71717a)",
         strokeWidth: 2,
       },
     }));
 
-    // If generating and not yet ended with 'end' node, show Ghost Node
+    // If generating and not yet ended with 'end' node, show Ghost Node (unless updating an existing node)
     const hasEndNode = currentNodes.some((n) => n.type === "end");
-    if (isGenerating && !hasEndNode) {
+    if (isGenerating && !hasEndNode && !selectedNodeId) {
       const ghostId = "__ghost_node__";
       rfNodes.push({
         id: ghostId,
@@ -159,7 +170,10 @@ export function VisualBuilder({
           source: lastNode.id,
           target: ghostId,
           animated: true,
-          style: { stroke: "#f59e0b", strokeWidth: 2, strokeDasharray: "5 5" },
+          style: {
+            stroke: "var(--primary)",
+            strokeWidth: 2,
+          },
         });
       }
     }
@@ -203,6 +217,7 @@ export function VisualBuilder({
         }}
         onPaneClick={() => onNodeSelect?.(null)}
         fitView
+        fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
         colorMode="dark"
         style={{ backgroundColor: "transparent" }}
       >
@@ -229,7 +244,7 @@ function AutoFitOnUpdate({
   useEffect(() => {
     if (nodesCount > 0) {
       const timer = setTimeout(() => {
-        fitView({ duration: 400, padding: 0.2 });
+        fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
       }, 60);
       return () => clearTimeout(timer);
     }

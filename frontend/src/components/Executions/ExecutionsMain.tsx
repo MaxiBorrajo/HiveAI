@@ -60,8 +60,6 @@ export function ExecutionsMain() {
     setInput("");
     setIsThinking(true);
     setPlanningThought(null);
-    setLogs([]);
-    setGraph(null);
     setLogs(["Pollinating flow: starting design..."]);
 
     // If starting a brand new execution, reset graph so canvas displays incremental stream
@@ -249,7 +247,6 @@ export function ExecutionsMain() {
       <div className="flex flex-1 flex-col min-w-0 min-h-0 relative w-full">
         {/* Background Canvas Layer */}
         <div className="absolute inset-0 z-0">
-          <VisualBuilder graph={graph} activeNodeId={activeNodeId} />
           <VisualBuilder
             graph={graph}
             activeNodeId={activeNodeId}
@@ -266,9 +263,9 @@ export function ExecutionsMain() {
           <div className="flex items-center justify-end my-3 mx-4">
             {isEmpty && (
               <div className="flex items-center justify-center gap-1">
-                  <Logo size={20} />
-                  <h1 className="text-display text-lg font-medium">HiveAI</h1>
-                </div>
+                <Logo size={20} />
+                <h1 className="text-display text-lg font-medium">HiveAI</h1>
+              </div>
             )}
           </div>
 

@@ -30,25 +30,24 @@ export function GhostNode({ data }: { data?: { label?: string } }) {
       <Handle
         type="target"
         position={Position.Left}
-        className="bg-primary! w-2.5! h-2.5!"
+        style={{ backgroundColor: "var(--primary)" }}
+        className="!w-2.5 !h-2.5 !bg-primary border-none"
       />
 
-      <div className="px-3.5 py-2.5 rounded-lg border-2 border-dashed border-primary/70 bg-background/95 text-primary font-sans shadow-[0_0_16px_rgba(245,158,11,0.2)] flex items-center justify-center min-w-45 max-w-64 transition-all duration-300 animate-pulse">
+      <div className="px-3.5 py-2.5 rounded-lg border-[1.5px] border-primary/60 bg-card/95 text-primary font-sans shadow-[0_0_8px_var(--primary)] flex items-center justify-center min-w-[170px] max-w-[260px] transition-all duration-300 animate-pulse">
         {data?.label ? (
           <div className="flex flex-col text-left w-full overflow-hidden">
             <div className="flex items-center gap-1.5 mb-0.5">
-              <span className="size-2 rounded-full bg-primary animate-ping shrink-0" />
               <span className="text-[10px] uppercase font-semibold text-primary/90 tracking-wider">
                 Forming node...
               </span>
             </div>
-            <span className="text-[11px] text-zinc-300 line-clamp-2 leading-snug">
+            <span className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">
               {data.label}
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 py-0.5">
-            <span className="size-2 rounded-full bg-primary animate-ping shrink-0" />
+          <div className="flex items-center justify-center py-0.5 w-full">
             <span className="text-xs font-medium tracking-wide">
               {displayPhrase}
             </span>
@@ -59,7 +58,8 @@ export function GhostNode({ data }: { data?: { label?: string } }) {
       <Handle
         type="source"
         position={Position.Right}
-        className="bg-primary! w-2.5! h-2.5!"
+        style={{ backgroundColor: "var(--primary)" }}
+        className="!w-2.5 !h-2.5 !bg-primary border-none"
       />
     </div>
   );

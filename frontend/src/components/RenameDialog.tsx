@@ -67,12 +67,6 @@ export function RenameDialog({
               onChange={(e) => setTitle(e.target.value)}
               placeholder={`Enter ${entityName.toLowerCase().trim()} name...`}
               autoFocus
-              ref={(el) => {
-                if (el && open) {
-                  el.focus();
-                  el.select();
-                }
-              }}
               disabled={isSaving}
             />
           </div>
