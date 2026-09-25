@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { ListTreeIcon } from "lucide-react";
+import { ListTreeIcon, OctagonXIcon } from "lucide-react";
 import { Button } from "../ui/button.tsx";
 import type { Message } from "../../types/chat.ts";
 import { MessageMarkdown } from "./MessageMarkdown.tsx";
@@ -40,6 +40,12 @@ export const ChatMessage = memo(function ChatMessage({
             <MessageMarkdown content={message.content} />
           )}
         </div>
+        {message.wasStopped && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <OctagonXIcon className="size-3.5 shrink-0" />
+            <span>Execution stopped.</span>
+          </div>
+        )}
         <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground justify-start">
           <span>
             {new Date(message.timestamp).toLocaleTimeString([], {

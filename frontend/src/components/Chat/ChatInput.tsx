@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
+import { Loader2Icon, SquareIcon, TriangleAlertIcon } from "lucide-react";
 import { PluginsManager } from "../PluginsManager/PluginsManager.tsx";
 import { ModesManager } from "../ModesManager/ModesManager.tsx";
 import { ModelManager } from "../ModelManager/ModelManager.tsx";
@@ -17,6 +17,7 @@ interface ChatInputProps {
   setInput: (val: string) => void;
   isThinking: boolean;
   handleSend: () => void;
+  handleStop: () => void;
   isEmpty?: boolean;
 }
 
@@ -25,6 +26,7 @@ export function ChatInput({
   setInput,
   isThinking,
   handleSend,
+  handleStop,
   isEmpty,
 }: ChatInputProps) {
   const {
@@ -173,19 +175,26 @@ export function ChatInput({
             <ModesManager />
             <ModelManager forceOpenDownward={isEmpty} />
           </div>
-          <Button
-            onClick={handleSend}
-            disabled={isThinking || !input.trim() || !canSend}
-            title={
-              !hasModel
-                ? "Select a model before sending a message"
-                : embeddingModelMissing
-                  ? `Run 'ollama pull ${embeddingModelStatus?.model}' before sending a message`
-                  : undefined
-            }
-          >
-            Send
-          </Button>
+          {isThinking ? (
+            <Button variant="secondary" onClick={handleStop} title="Stop">
+              <SquareIcon className="size-3 fill-current" />
+              Stop
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || !canSend}
+              title={
+                !hasModel
+                  ? "Select a model before sending a message"
+                  : embeddingModelMissing
+                    ? `Run 'ollama pull ${embeddingModelStatus?.model}' before sending a message`
+                    : undefined
+              }
+            >
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

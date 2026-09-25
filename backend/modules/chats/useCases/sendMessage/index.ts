@@ -222,7 +222,7 @@ export async function sendMessage(
 
         const streamIterable = await Scout.stream(
           { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
-          { streamMode: ["messages", "values"] },
+          { streamMode: ["messages", "values"], signal: req.signal },
         );
 
         const { fullContent, steps, thinkingRuns } = await consumeStream(

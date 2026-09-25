@@ -17,7 +17,7 @@ import {
 import { MAX_AGENT_ITERATIONS, MAX_AGENT_DURATION_MS } from "../constants.ts";
 import { buildNativeTools } from "../../shared/native-tools.ts";
 
-export const Agent: GraphNode<typeof ScoutState> = async (state) => {
+export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
   const start = performance.now();
   const microkernel = HiveMicrokernel.getInstance();
 
@@ -54,8 +54,8 @@ export const Agent: GraphNode<typeof ScoutState> = async (state) => {
 
   const invoke = (messages: BaseMessage[]) =>
     outOfIterations
-      ? agentModel.invoke(messages)
-      : agentModel.bindTools(tools).invoke(messages);
+      ? agentModel.invoke(messages, { signal: config.signal })
+      : agentModel.bindTools(tools).invoke(messages, { signal: config.signal });
 
   let response = await invoke([...systemMessages, ...state.messages]);
 

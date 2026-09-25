@@ -1,12 +1,22 @@
 export async function readSseStream(
   body: ReadableStream<Uint8Array>,
   onEvent: (eventName: string, payload: any) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
+  if (signal) {
+    signal.addEventListener("abort", () => {
+      reader.cancel().catch(() => {});
+    });
+  }
+
   while (true) {
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
     const { done, value } = await reader.read();
     if (done) break;
 
@@ -23,5 +33,9 @@ export async function readSseStream(
 
       onEvent(eventMatch[1], JSON.parse(dataMatch[1]));
     }
+  }
+
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
   }
 }

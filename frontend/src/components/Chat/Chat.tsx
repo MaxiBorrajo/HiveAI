@@ -67,6 +67,7 @@ export function Chat() {
   >({});
 
   const justCreatedChatIdRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const displayKeyRef = useRef<string>(
     activeChatId ?? newChatKey(newChatToken),
@@ -156,6 +157,9 @@ export function Chat() {
     let streamStarted = false;
     let capturedThinkingRuns: ThinkingRun[] = [];
 
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     function appendAgentMessage(k: string, message: Message) {
       setMessagesByChat((prev) => ({
         ...prev,
@@ -173,113 +177,147 @@ export function Chat() {
     }
 
     try {
-      await sendMessage(activeChatId, content, {
-        onChatCreated: (chatId) => {
-          justCreatedChatIdRef.current = chatId;
-          setMessagesByChat((prev) => {
-            const { [startKey]: draft, ...rest } = prev;
-            return { ...rest, [chatId]: draft ?? [] };
-          });
-          setThinkingByChat((prev) => {
-            const { [startKey]: draft, ...rest } = prev;
-            return { ...rest, [chatId]: draft ?? IDLE_THINKING };
-          });
-          key = chatId;
-          onChatCreated(chatId);
-        },
-        onThinking: () => {},
-        onThinkingDelta: (delta, node) => {
-          setThinkingByChat((prev) => {
-            const current = prev[key] ?? IDLE_THINKING;
-            const thinkingRuns = appendThinkingDelta(
-              current.thinkingRuns,
-              delta,
-              node,
-            );
-            capturedThinkingRuns = thinkingRuns;
-            return {
-              ...prev,
-              [key]: {
-                isThinking: current.isThinking,
-                thinkingText: current.thinkingText + delta,
-                thinkingRuns,
-              },
-            };
-          });
-        },
-        onToken: (token) => {
-          if (!streamStarted) {
-            streamStarted = true;
-            setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
-            appendAgentMessage(key, {
-              id: agentMessageId,
-              role: "agent",
-              content: token,
-              timestamp: Date.now(),
+      await sendMessage(
+        activeChatId,
+        content,
+        {
+          onChatCreated: (chatId) => {
+            justCreatedChatIdRef.current = chatId;
+            setMessagesByChat((prev) => {
+              const { [startKey]: draft, ...rest } = prev;
+              return { ...rest, [chatId]: draft ?? [] };
             });
-            return;
-          }
+            setThinkingByChat((prev) => {
+              const { [startKey]: draft, ...rest } = prev;
+              return { ...rest, [chatId]: draft ?? IDLE_THINKING };
+            });
+            key = chatId;
+            onChatCreated(chatId);
+          },
+          onThinking: () => {},
+          onThinkingDelta: (delta, node) => {
+            setThinkingByChat((prev) => {
+              const current = prev[key] ?? IDLE_THINKING;
+              const thinkingRuns = appendThinkingDelta(
+                current.thinkingRuns,
+                delta,
+                node,
+              );
+              capturedThinkingRuns = thinkingRuns;
+              return {
+                ...prev,
+                [key]: {
+                  isThinking: current.isThinking,
+                  thinkingText: current.thinkingText + delta,
+                  thinkingRuns,
+                },
+              };
+            });
+          },
+          onToken: (token) => {
+            if (!streamStarted) {
+              streamStarted = true;
+              setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
+              appendAgentMessage(key, {
+                id: agentMessageId,
+                role: "agent",
+                content: token,
+                timestamp: Date.now(),
+              });
+              return;
+            }
 
-          setMessagesByChat((prev) => ({
-            ...prev,
-            [key]: (prev[key] ?? []).map((message) =>
-              message.id === agentMessageId
-                ? { ...message, content: message.content + token }
-                : message,
-            ),
-          }));
-        },
-        onDone: (finalContent, usedTools, steps) => {
-          updateAgentMessage(key, {
-            content: finalContent,
-            usedTools,
-            steps,
-            thinkingRuns: capturedThinkingRuns,
-          });
-          refreshChats();
+            setMessagesByChat((prev) => ({
+              ...prev,
+              [key]: (prev[key] ?? []).map((message) =>
+                message.id === agentMessageId
+                  ? { ...message, content: message.content + token }
+                  : message,
+              ),
+            }));
+          },
+          onDone: (finalContent, usedTools, steps) => {
+            updateAgentMessage(key, {
+              content: finalContent,
+              usedTools,
+              steps,
+              thinkingRuns: capturedThinkingRuns,
+            });
+            refreshChats();
 
-          const isBeingViewed =
-            displayKeyRef.current === key && isWindowFocused();
-          if (!isBeingViewed) {
-            markChatUnread(key);
-            const chatTitle =
-              chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
-            notifyChatResponse(
-              chatTitle,
-              finalContent.slice(0, 120) || "Nueva respuesta disponible",
-            );
-          }
+            const isBeingViewed =
+              displayKeyRef.current === key && isWindowFocused();
+            if (!isBeingViewed) {
+              markChatUnread(key);
+              const chatTitle =
+                chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
+              notifyChatResponse(
+                chatTitle,
+                finalContent.slice(0, 120) || "Nueva respuesta disponible",
+              );
+            }
+          },
+          onError: (errorMessage) => {
+            reportError([errorMessage]);
+            throw new Error(errorMessage);
+          },
         },
-        onError: (errorMessage) => {
-          reportError([errorMessage]);
-          throw new Error(errorMessage);
-        },
-      });
+        abortController.signal,
+      );
     } catch (error) {
-      setMessagesByChat((prev) => {
-        const withoutPartial = (prev[key] ?? []).filter(
-          (m) => m.id !== agentMessageId,
-        );
-        return {
-          ...prev,
-          [key]: [
-            ...withoutPartial,
-            {
-              id: crypto.randomUUID(),
-              role: "agent",
-              content:
-                error instanceof Error
-                  ? `Could not get a response: ${error.message}`
-                  : "Could not get a response from the agent.",
-              isError: true,
-              timestamp: Date.now(),
-            },
-          ],
-        };
-      });
+      if (abortController.signal.aborted) {
+        setMessagesByChat((prev) => {
+          const existing = prev[key] ?? [];
+          const hasPartial = existing.some((m) => m.id === agentMessageId);
+          return {
+            ...prev,
+            [key]: hasPartial
+              ? existing.map((m) =>
+                  m.id === agentMessageId ? { ...m, wasStopped: true } : m,
+                )
+              : [
+                  ...existing,
+                  {
+                    id: agentMessageId,
+                    role: "agent",
+                    content: "",
+                    wasStopped: true,
+                    timestamp: Date.now(),
+                  },
+                ],
+          };
+        });
+      } else {
+        setMessagesByChat((prev) => {
+          const withoutPartial = (prev[key] ?? []).filter(
+            (m) => m.id !== agentMessageId,
+          );
+          return {
+            ...prev,
+            [key]: [
+              ...withoutPartial,
+              {
+                id: crypto.randomUUID(),
+                role: "agent",
+                content:
+                  error instanceof Error
+                    ? `Could not get a response: ${error.message}`
+                    : "Could not get a response from the agent.",
+                isError: true,
+                timestamp: Date.now(),
+              },
+            ],
+          };
+        });
+      }
     } finally {
+      abortControllerRef.current = null;
       setThinkingByChat((prev) => ({ ...prev, [key]: IDLE_THINKING }));
     }
+  }
+
+  function handleStop() {
+    abortControllerRef.current?.abort();
   }
 
   const isEmpty = messages.length === 0;
@@ -301,6 +339,7 @@ export function Chat() {
                 setInput={setInput}
                 isThinking={isThinking}
                 handleSend={handleSend}
+                handleStop={handleStop}
                 isEmpty
               />
               <p className="text-center text-xs text-muted-foreground mt-2">
@@ -344,6 +383,7 @@ export function Chat() {
                   setInput={setInput}
                   isThinking={isThinking}
                   handleSend={handleSend}
+                  handleStop={handleStop}
                 />
                 <p className="text-center text-xs text-muted-foreground">
                   HiveAI can make mistakes. Consider verifying important

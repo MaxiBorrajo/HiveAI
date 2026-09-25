@@ -24,6 +24,7 @@ export interface Message {
   role: "user" | "agent";
   content: string;
   isError?: boolean;
+  wasStopped?: boolean;
   timestamp: number;
   usedTools?: string[];
   steps?: ChatStep[];
