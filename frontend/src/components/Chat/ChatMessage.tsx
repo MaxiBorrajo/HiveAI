@@ -40,7 +40,7 @@ export const ChatMessage = memo(function ChatMessage({
             <MessageMarkdown content={message.content} />
           )}
         </div>
-        <div className="mt-1 flex items-center gap-1.5 text-[10px] opacity-50 justify-start">
+        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground justify-start">
           <span>
             {new Date(message.timestamp).toLocaleTimeString([], {
               hour: "2-digit",
@@ -68,7 +68,7 @@ export const ChatMessage = memo(function ChatMessage({
     <div className="flex w-full justify-end">
       <div className="max-w-[75%] rounded-2xl bg-card border border-border px-5 py-3 text-sm text-foreground whitespace-pre-wrap break-words">
         {message.content}
-        <div className="mt-1 flex items-center gap-1.5 text-[10px] opacity-40 justify-end">
+        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground justify-end">
           <span>
             {new Date(message.timestamp).toLocaleTimeString([], {
               hour: "2-digit",

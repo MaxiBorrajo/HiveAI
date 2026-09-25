@@ -326,7 +326,7 @@ export function Chat() {
                       </span>
                     </div>
                     {thinkingText && (
-                      <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-xs italic opacity-60">
+                      <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-xs italic text-muted-foreground">
                         {thinkingText}
                       </p>
                     )}

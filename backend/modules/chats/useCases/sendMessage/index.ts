@@ -69,7 +69,7 @@ async function persistAssistantMessage(
   });
 }
 
-function appendThinkingDelta(
+export function appendThinkingDelta(
   runs: ThinkingRun[],
   content: string,
   node: string | undefined,
@@ -82,7 +82,7 @@ function appendThinkingDelta(
   }
 }
 
-async function consumeStream(
+export async function consumeStream(
   streamIterable: AsyncIterable<unknown>,
   finalNodeName: string,
   send: (event: string, data: unknown) => void,

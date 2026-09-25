@@ -1,3 +1,4 @@
+import { ThemeProvider } from "next-themes";
 import {
   ToastProvider,
   ToastPortal,
@@ -38,21 +39,23 @@ function AppContent() {
 
 function App() {
   return (
-    <ToastProvider toastManager={toastManager}>
-      <ModelsProvider>
-        <ChatsProvider>
-          <DraftEditorProvider>
-            <AppContent />
-          </DraftEditorProvider>
-        </ChatsProvider>
-      </ModelsProvider>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+      <ToastProvider toastManager={toastManager}>
+        <ModelsProvider>
+          <ChatsProvider>
+            <DraftEditorProvider>
+              <AppContent />
+            </DraftEditorProvider>
+          </ChatsProvider>
+        </ModelsProvider>
 
-      <ToastPortal>
-        <ToastViewport>
-          <ToastList />
-        </ToastViewport>
-      </ToastPortal>
-    </ToastProvider>
+        <ToastPortal>
+          <ToastViewport>
+            <ToastList />
+          </ToastViewport>
+        </ToastPortal>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
 

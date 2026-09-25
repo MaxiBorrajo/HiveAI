@@ -77,8 +77,8 @@ export function ChatInput({
   return (
     <div className="flex w-full max-w-3xl flex-col gap-2">
       {!hasModel && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-          <TriangleAlertIcon className="size-4 shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
+          <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
           {hasAvailableModels ? (
             <span>
               No models selected. Choose a respond &amp; verify model and a tool
@@ -102,12 +102,12 @@ export function ChatInput({
       )}
 
       {(embeddingModelMissing || isDownloading) && (
-        <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
           <div className="flex items-center gap-2">
             {isDownloading ? (
-              <Loader2Icon className="size-4 shrink-0 animate-spin" />
+              <Loader2Icon className="size-4 shrink-0 animate-spin text-muted-foreground" />
             ) : (
-              <TriangleAlertIcon className="size-4 shrink-0" />
+              <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
             )}
             {isDownloading ? (
               <span>
@@ -139,9 +139,9 @@ export function ChatInput({
           </div>
 
           {isDownloading && (
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-500/20">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-amber-500 transition-all"
+                className="h-full rounded-full bg-primary transition-all"
                 style={{
                   width: downloadProgress?.total
                     ? `${Math.min(

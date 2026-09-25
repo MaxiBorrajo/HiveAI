@@ -54,7 +54,7 @@ export type RuntimeHints = Exclude<
   null
 >;
 
-function applyRuntimeHints(mode: ChatMode, hints: RuntimeHints) {
+export function applyRuntimeHints(mode: ChatMode, hints: RuntimeHints) {
   if (mode.name === "default") return;
 
   if (mode.name === "light" && hints.modelFitsComfortably) {

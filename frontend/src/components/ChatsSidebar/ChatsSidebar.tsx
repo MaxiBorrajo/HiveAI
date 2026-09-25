@@ -1,5 +1,13 @@
-import { useState } from "react";
-import { Plus, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Plus,
+  Trash2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sun,
+  Moon,
+} from "lucide-react";
+import { useTheme } from "next-themes";
 import { Button } from "../ui/button.tsx";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import {
@@ -42,6 +50,16 @@ export function ChatsSidebar() {
   const [chatPendingDelete, setChatPendingDelete] =
     useState<ChatSummary | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  function toggleTheme() {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }
 
   async function confirmDelete() {
     if (!chatPendingDelete) return;
@@ -69,6 +87,20 @@ export function ChatsSidebar() {
         >
           <Plus className="size-4" />
         </Button>
+
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={toggleTheme}
+          title="Toggle theme"
+          className="mt-auto"
+        >
+          {mounted && resolvedTheme === "dark" ? (
+            <Sun className="size-4" />
+          ) : (
+            <Moon className="size-4" />
+          )}
+        </Button>
       </div>
     );
   }
@@ -85,6 +117,19 @@ export function ChatsSidebar() {
             title="New chat"
           >
             <Plus className="size-4" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={toggleTheme}
+            title="Toggle theme"
+          >
+            {mounted && resolvedTheme === "dark" ? (
+              <Sun className="size-4" />
+            ) : (
+              <Moon className="size-4" />
+            )}
           </Button>
 
           <Button
@@ -113,12 +158,21 @@ export function ChatsSidebar() {
           {chats.map((chat) => (
             <div
               key={chat.id}
-              className={`p-2 group flex items-center gap-2 rounded-lg text-sm cursor-pointer transition-colors ${
+              role="button"
+              tabIndex={0}
+              aria-current={chat.id === activeChatId}
+              className={`p-2 group flex items-center gap-2 rounded-lg text-sm cursor-pointer transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
                 chat.id === activeChatId
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
               onClick={() => selectChat(chat.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  selectChat(chat.id);
+                }
+              }}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -130,7 +184,7 @@ export function ChatsSidebar() {
                   )}
                   <p className="truncate">{chat.title || "New chat"}</p>
                 </div>
-                <p className="text-[10px] opacity-60">
+                <p className="text-[10px] text-muted-foreground">
                   {formatRelativeDate(chat.updatedAt)}
                 </p>
               </div>

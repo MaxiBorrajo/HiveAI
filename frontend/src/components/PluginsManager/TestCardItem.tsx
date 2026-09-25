@@ -36,17 +36,17 @@ export function TestCardItem({
   onToggle,
   isRunning,
 }: TestCardItemProps) {
-  let kindColor = "bg-slate-100 text-slate-700 border-slate-200";
+  let kindColor = "bg-muted text-muted-foreground border-border";
   let KindIcon: LucideIcon = Box;
 
   if (test.kind === "positive" || test.kind === "happy") {
-    kindColor = "bg-green-50 text-green-700 border-green-200";
+    kindColor = "bg-muted text-foreground border-border";
     KindIcon = CheckCircle2;
   } else if (test.kind === "negative" || test.kind === "edge") {
-    kindColor = "bg-orange-50 text-orange-700 border-orange-200";
+    kindColor = "bg-muted text-foreground border-border";
     KindIcon = AlertTriangle;
   } else if (test.kind === "ambiguous" || test.kind === "error") {
-    kindColor = "bg-red-50 text-red-700 border-red-200";
+    kindColor = "bg-destructive/10 text-destructive border-destructive/20";
     KindIcon = XCircle;
   }
 
@@ -76,11 +76,7 @@ export function TestCardItem({
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span
                 title="Test category: whether it tests LLM tool selection or direct execution"
-                className={`text-[0.625rem] cursor-help font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                  test.type === "selection"
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-purple-50 text-purple-700 border-purple-200"
-                }`}
+                className="text-[0.625rem] cursor-help font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border"
               >
                 {test.type}
               </span>
@@ -97,7 +93,7 @@ export function TestCardItem({
                   res?.metrics?.outputTokens !== undefined && (
                     <span
                       title="Tokens (Input / Output)"
-                      className="flex items-center gap-1 text-[0.625rem] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
+                      className="flex items-center gap-1 text-[0.625rem] cursor-help bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm font-mono border border-border"
                     >
                       <Coins size={11} />
                       {res.metrics.inputTokens} / {res.metrics.outputTokens}
@@ -106,7 +102,7 @@ export function TestCardItem({
                 {res?.metrics?.tokensPerSecond ? (
                   <span
                     title="Tokens generated per second"
-                    className="flex items-center gap-1 text-[0.625rem] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
+                    className="flex items-center gap-1 text-[0.625rem] cursor-help bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm font-mono border border-border"
                   >
                     <Zap size={11} />
                     {res.metrics.tokensPerSecond} t/s
@@ -115,7 +111,7 @@ export function TestCardItem({
                 {res?.metrics?.durationMs !== undefined && (
                   <span
                     title="Execution duration in seconds"
-                    className="flex items-center gap-1 text-[0.625rem] cursor-help bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-sm font-mono border border-slate-200"
+                    className="flex items-center gap-1 text-[0.625rem] cursor-help bg-muted text-muted-foreground px-1.5 py-0.5 rounded-sm font-mono border border-border"
                   >
                     <Clock size={11} />
                     {(res.metrics.durationMs / 1000).toFixed(2)}s
@@ -137,7 +133,7 @@ export function TestCardItem({
 
             {res?.failureCategory && (
               <div className="mt-2 mb-1">
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-[0.625rem] font-bold uppercase tracking-wider rounded-md border border-red-200">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-destructive/10 text-destructive text-[0.625rem] font-bold uppercase tracking-wider rounded-md border border-destructive/20">
                   <AlertTriangle size={11} />
                   Failure: {res.failureCategory}
                 </span>
@@ -214,7 +210,7 @@ export function TestCardItem({
               <Loader2 size={18} className="animate-spin text-primary" />
             )}
             {res?.status === "success" && (
-              <Check size={18} className="text-green-500" />
+              <Check size={18} className="text-foreground" />
             )}
             {res?.status === "error" && (
               <X size={18} className="text-destructive" />

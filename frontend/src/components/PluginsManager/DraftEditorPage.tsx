@@ -212,6 +212,9 @@ export function DraftEditorPage({
           {files.map((f) => (
             <button
               key={f.name}
+              type="button"
+              role="tab"
+              aria-selected={activeFile === f.name}
               onClick={() => setActiveFile(f.name)}
               className={`rounded px-2 py-1 text-xs font-mono ${
                 activeFile === f.name
@@ -221,7 +224,7 @@ export function DraftEditorPage({
             >
               {f.name}
               {f.name === "bee-plugin.ts" && (
-                <span className="ml-1 opacity-60">(read-only)</span>
+                <span className="ml-1 text-muted-foreground">(read-only)</span>
               )}
             </button>
           ))}
@@ -277,7 +280,7 @@ export function DraftEditorPage({
             </span>
           ) : validation ? (
             validation.valid ? (
-              <span className="flex items-center gap-1.5 text-xs text-emerald-500">
+              <span className="flex items-center gap-1.5 text-xs text-foreground">
                 <CheckCircle2 size={12} /> Ready to import.
               </span>
             ) : (

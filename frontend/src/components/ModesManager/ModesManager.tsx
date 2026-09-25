@@ -151,7 +151,7 @@ export function ModesManager() {
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent sideOffset={10}>
                       {mode.performanceNote && (
-                        <div className="flex w-0 min-w-full items-start gap-1.5 rounded-md bg-blue-500/10 p-2 text-xs text-blue-600 dark:text-blue-400">
+                        <div className="flex w-0 min-w-full items-start gap-1.5 rounded-md bg-muted p-2 text-xs text-muted-foreground">
                           <Info className="size-3.5 shrink-0 translate-y-0.5" />
                           <span>{mode.performanceNote}</span>
                         </div>
@@ -239,7 +239,7 @@ export function ParameterOption({
     >
       <span className="text-sm font-mono truncate">{parameter.name}</span>
       {parameter.requiresServiceRestart && (
-        <TriangleAlert className="size-3.5 shrink-0 text-amber-500" />
+        <TriangleAlert className="size-3.5 shrink-0 text-muted-foreground" />
       )}
       {parameter.type === "boolean" && (
         <ParameterOptionBoolean
@@ -343,7 +343,7 @@ export function ModeOption({ mode }: { mode: ChatMode }) {
       {mode.icon}
       <span className="text-sm font-mono truncate capitalize">{mode.name}</span>
       {mode.performanceNote && (
-        <Info className="size-3.5 shrink-0 text-blue-500" />
+        <Info className="size-3.5 shrink-0 text-muted-foreground" />
       )}
     </div>
   );
