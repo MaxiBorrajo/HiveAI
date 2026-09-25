@@ -4,6 +4,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  MarkerType,
   Position,
   ReactFlow,
   Controls,
@@ -22,6 +23,8 @@ interface VisualBuilderProps {
   planningThought?: string | null; // For displaying current thought in ghost node
   selectedNodeId?: string | null;
   onNodeSelect?: (nodeId: string | null) => void;
+  selectedEdgeId?: string | null;
+  onEdgeSelect?: (edgeId: string | null) => void;
 }
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
@@ -62,6 +65,8 @@ export function VisualBuilder({
   planningThought,
   selectedNodeId,
   onNodeSelect,
+  selectedEdgeId,
+  onEdgeSelect,
 }: VisualBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -86,15 +91,17 @@ export function VisualBuilder({
 
       let borderColor = "var(--border, #3f3f46)";
       let boxShadow = "none";
-      let bgColor = "var(--card, #18181b)";
+      // Lighter background for better contrast against #050403
+      let bgColor = "var(--muted, #27272a)";
 
       if (isActive || isUpdating) {
         borderColor = "var(--primary)";
         boxShadow = "0 0 14px var(--primary)";
+        bgColor = "var(--secondary, #3f3f46)";
       } else if (isSelected) {
         borderColor = "var(--primary)";
         boxShadow = "0 0 10px var(--primary)";
-        bgColor = "var(--accent, #27272a)";
+        bgColor = "var(--secondary, #3f3f46)";
       }
 
       return {
@@ -103,7 +110,15 @@ export function VisualBuilder({
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         data: {
-          label: (
+          label: n.type === "condition" ? (
+            <div className="relative w-32 h-32 flex items-center justify-center">
+              <div className="absolute inset-0 bg-yellow-950/40 border-2 border-yellow-600 rounded-xl transform rotate-45 transition-all shadow-[0_0_15px_rgba(202,138,4,0.4)]"></div>
+              <div className="relative z-10 transform -rotate-45 flex flex-col items-center justify-center text-center">
+                {isUpdating && <span className="size-2 rounded-full bg-yellow-500 animate-ping shrink-0 mb-1" />}
+                <strong className="text-[11px] font-semibold text-yellow-100 tracking-wide break-words leading-tight">{n.name}</strong>
+              </div>
+            </div>
+          ) : (
             <div className="flex flex-col text-left">
               <div className="flex items-center gap-1.5">
                 {isUpdating && (
@@ -119,7 +134,18 @@ export function VisualBuilder({
             </div>
           ),
         },
-        style: {
+        style: n.type === "condition" ? {
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          width: 130,
+          height: 130,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          zIndex: isSelected || isUpdating ? 10 : 1,
+        } : {
           background: bgColor,
           border: `1.5px solid ${borderColor}`,
           padding: "8px 12px",
@@ -129,24 +155,37 @@ export function VisualBuilder({
           cursor: "pointer",
           boxShadow,
           transition: "all 0.2s ease-in-out",
+          zIndex: isSelected || isUpdating ? 10 : 1,
         },
       };
     });
 
-    const rfEdges: Edge[] = currentEdges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.isConditional ? "Conditional" : "",
-      animated: activeNodeId === e.source,
-      style: {
-        stroke:
-          activeNodeId === e.source
-            ? "var(--primary)"
-            : "var(--border, #71717a)",
-        strokeWidth: 2,
-      },
-    }));
+    const rfEdges: Edge[] = currentEdges.map((e) => {
+      const isAnimated = activeNodeId === e.source || selectedEdgeId === e.id;
+      const strokeColor = "var(--primary)";
+      
+      const sourceNode = currentNodes.find(n => n.id === e.source);
+      const isFromCondition = sourceNode?.type === "condition";
+      const isActive = activeNodeId === e.source || activeNodeId === e.target;
+      const edgeColor = (selectedEdgeId === e.id) ? "#3b82f6" : ((isFromCondition && e.path === "true") ? "#22c55e" : (isFromCondition && e.path === "false") ? "#ef4444" : (isActive ? strokeColor : "var(--border)"));
+      
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        type: "step",
+        label: (isFromCondition && e.path) ? (e.path === "true" ? "True" : "False") : "",
+        animated: isAnimated,
+        style: {
+          stroke: edgeColor,
+          strokeWidth: (isActive || selectedEdgeId === e.id) ? 3 : 1,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: edgeColor,
+        },
+      };
+    });
 
     // If generating and not yet ended with 'end' node, show Ghost Node (unless updating an existing node)
     const hasEndNode = currentNodes.some((n) => n.type === "end");
@@ -169,10 +208,17 @@ export function VisualBuilder({
           id: `edge_${lastNode.id}_${ghostId}`,
           source: lastNode.id,
           target: ghostId,
+          type: "step",
           animated: true,
           style: {
             stroke: "var(--primary)",
-            strokeWidth: 2,
+            strokeWidth: 1.5,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 12,
+            height: 12,
+            color: "var(--primary)",
           },
         });
       }
@@ -190,6 +236,7 @@ export function VisualBuilder({
     selectedNodeId,
     setNodes,
     setEdges,
+    selectedEdgeId,
   ]);
 
   return (
@@ -214,6 +261,9 @@ export function VisualBuilder({
           if (node.id !== "__ghost_node__") {
             onNodeSelect?.(node.id === selectedNodeId ? null : node.id);
           }
+        }}
+        onEdgeClick={(_, edge) => {
+          onNodeSelect?.(edge.id === selectedNodeId ? null : edge.id);
         }}
         onPaneClick={() => onNodeSelect?.(null)}
         fitView

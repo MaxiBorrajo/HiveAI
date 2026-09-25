@@ -123,7 +123,7 @@ export async function generateExecution(
             break;
           }
 
-          const event = result.value;
+          const event = result.value as any;
           if (event.type === "planning") {
             console.log(
               `[Executions Generator] [Stream event: planning] Thought: "${event.thoughts}"`,
@@ -132,9 +132,13 @@ export async function generateExecution(
             console.log(
               `[Executions Generator] [Stream event: node_added] Node: "${event.node.name}" (${event.node.id}, type: ${event.node.type})${event.edge ? ` <- connected from "${event.edge.source}"` : ""}`,
             );
-          } else if (event.type === "node_updated") {
+          } else if (event.type === "edge_added") {
             console.log(
-              `[Executions Generator] [Stream event: node_updated] Node: "${event.node.name}" (${event.node.id}, type: ${event.node.type})`,
+              `[Executions Generator] [Stream event: edge_added] Edge: "${event.edge.id}" from "${event.edge.source}" to "${event.edge.target}"`,
+            );
+          } else if (event.type === "edge_added") {
+            console.log(
+              `[Executions Generator] [Stream event: edge_added] Edge: from "${event.edge.source}" to "${event.edge.target}"`,
             );
           }
 
@@ -152,7 +156,7 @@ export async function generateExecution(
             createdAt: Date.now(),
           });
 
-          await repo.update(targetExecutionId, { lastGraphId: newGraph.id });
+          await repo.update(targetExecutionId!, { lastGraphId: newGraph.id });
           console.log(
             `[Executions Generator] Successfully saved graph #${newGraph.id} for execution #${targetExecutionId}. Emitting 'done' event.`,
           );

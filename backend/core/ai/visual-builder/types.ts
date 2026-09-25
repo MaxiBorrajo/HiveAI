@@ -39,7 +39,7 @@ export interface StatePropertyDefinition {
 // ==========================================
 // 2. NODOS
 // ==========================================
-export type NodeType = "start" | "end" | "llm" | "tool" | "compute";
+export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
 
 export interface GraphNode {
   id: string; // ID interno (ej. "node_123")
@@ -92,7 +92,8 @@ export type ConditionOperator =
 export interface GraphEdge {
   id: string; // ID de la conexión (ej. "edge_1")
   source: string; // ID del nodo de origen
-  target: string; // ID del nodo de destino (o "__end__")
+  target: string;
+  path?: "true" | "false"; // Used if source is a condition node // ID del nodo de destino (o "__end__")
 
   isConditional: boolean;
 

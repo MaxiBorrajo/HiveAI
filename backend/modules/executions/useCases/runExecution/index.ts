@@ -64,7 +64,42 @@ export async function runExecution(
     const schema = buildStateSchema(abstraction.stateSchema);
 
     // Custom logic registry
-    const registry: NodeRegistry = {};
+    const registry: NodeRegistry = {
+      plugin: async (state, config) => {
+        const toolName = config.pluginId as string;
+        const tool = hive.getTool(toolName);
+        if (!tool) throw new Error(`Tool ${toolName} not found`);
+        
+        const inputMapping = (config.inputMapping as Record<string, string>) || {};
+        let inputToTool: any = {};
+        
+        for (const [key, mapping] of Object.entries(inputMapping)) {
+           if (typeof mapping === "string" && mapping.startsWith("${") && mapping.endsWith("}")) {
+              const varName = mapping.slice(2, -1);
+              inputToTool[key] = state[varName];
+           } else if (typeof mapping === "string" && state[mapping] !== undefined) {
+              inputToTool[key] = state[mapping];
+           } else {
+              inputToTool[key] = mapping;
+           }
+        }
+        
+        // If tool takes a single primitive, pass it directly if we have exactly one key
+        const keys = Object.keys(inputToTool);
+        let finalInput = inputToTool;
+        if (keys.length === 1 && typeof inputToTool[keys[0]] === "string") {
+           // We'll pass the object, LangChain's DynamicTool usually handles JSON or string.
+           // Let's pass the single string if that's what tools expect in this codebase
+           finalInput = inputToTool[keys[0]];
+        }
+        
+        console.log(`[Plugin Executor] Running ${toolName} with input:`, finalInput);
+        const result = await tool.invoke(inputToTool); // passing the object just in case
+        
+        const outputKey = (config.outputKey as string) || toolName;
+        return { [outputKey]: result };
+      }
+    };
     const toolProvider: ToolProvider = {
       getTool: (name: string) => {
         const tool = hive.getTool(name);

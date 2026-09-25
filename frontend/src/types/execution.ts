@@ -11,7 +11,7 @@ export interface StatePropertyDefinition {
   reducerStrategy?: ReducerStrategy;
 }
 
-export type NodeType = "start" | "end" | "llm" | "tool" | "compute" | "condition";
+export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
 
 export interface GraphNode {
   id: string;
@@ -25,6 +25,7 @@ export interface GraphEdge {
   id: string;
   source: string;
   target: string;
+  path?: "true" | "false"; // Used if source is a condition node
   isConditional: boolean;
   condition?: {
     field: string;

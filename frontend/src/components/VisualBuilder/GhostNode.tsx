@@ -34,7 +34,7 @@ export function GhostNode({ data }: { data?: { label?: string } }) {
         className="!w-2.5 !h-2.5 !bg-primary border-none"
       />
 
-      <div className="px-3.5 py-2.5 rounded-lg border-[1.5px] border-primary/60 bg-card/95 text-primary font-sans shadow-[0_0_8px_var(--primary)] flex items-center justify-center min-w-[170px] max-w-[260px] transition-all duration-300 animate-pulse">
+      <div className="px-3.5 py-2.5 rounded-lg border-[1.5px] border-primary/60 bg-muted/95 text-primary font-sans shadow-[0_0_8px_var(--primary)] flex items-center justify-center min-w-[170px] max-w-[260px] transition-all duration-300 animate-pulse">
         {data?.label ? (
           <div className="flex flex-col text-left w-full overflow-hidden">
             <div className="flex items-center gap-1.5 mb-0.5">
