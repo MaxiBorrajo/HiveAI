@@ -79,8 +79,14 @@ const pluginConfigSchema = z.object({
   nodeId: z
     .string()
     .describe("Unique lowercase alphanumeric ID for this new node"),
-  nodeName: z.string().describe("Beautiful human readable name (e.g. 'Search Google', 'Read Webpage')"),
-  pluginId: z.string().describe("The EXACT id of the plugin to use from the provided list."),
+  nodeName: z
+    .string()
+    .describe(
+      "Beautiful human readable name (e.g. 'Search Google', 'Read Webpage')",
+    ),
+  pluginId: z
+    .string()
+    .describe("The EXACT id of the plugin to use from the provided list."),
   inputMapping: z
     .record(z.string(), z.string())
     .optional()
@@ -102,8 +108,14 @@ const llmConfigSchema = z.object({
   nodeId: z
     .string()
     .describe("Unique lowercase alphanumeric ID for this new node"),
-  nodeName: z.string().describe("Beautiful human readable name (e.g. 'Search Google', 'Read Webpage')"),
-  pluginId: z.string().describe("The EXACT id of the plugin to use from the provided list."),
+  nodeName: z
+    .string()
+    .describe(
+      "Beautiful human readable name (e.g. 'Search Google', 'Read Webpage')",
+    ),
+  pluginId: z
+    .string()
+    .describe("The EXACT id of the plugin to use from the provided list."),
   systemPrompt: z.string().describe("The prompt instructions for the LLM node"),
   outputKey: z
     .string()
@@ -232,6 +244,12 @@ Rules:
 4. "connect_existing_nodes": to draw an edge between two existing nodes (e.g. for loops). You must provide 'targetNodeId'.
 5. "finish": if the workflow has fully accomplished the user's objective.
 6. If 'sourceNodeId' points to a condition node, you MUST specify 'conditionPath' ("true" or "false").
+4. "connect_existing_nodes": to draw an edge between two existing nodes (e.g. for loops or convergence). You must provide 'targetNodeId'.
+5. "finish": if the workflow has fully accomplished the user's objective AND all condition nodes have BOTH "true" and "false" paths connected.
+6. MANDATORY FOR CONDITION NODES: Every single condition node MUST have TWO outgoing branches: one "true" path and one "false" path!
+   - When connecting FROM a condition node, you MUST specify 'conditionPath' ("true" or "false").
+   - You MUST define the "true" path (what to do if condition holds) AND the "false" path (alternative path or fallback).
+   - Never leave a condition node with only one path!
 7. DO NOT repeat identical nodes in a row. Use loops ("connect_existing_nodes") if repetitive work is needed based on condition paths.`;
 
   while (currentStep < maxSteps) {
@@ -240,20 +258,37 @@ Rules:
       `\n[Visual Builder - Generator] --- Generating Step ${currentStep} of max ${maxSteps} ---`,
     );
 
+    const conditionNodes = graph.nodes.filter((n) => n.type === "condition");
+    const missingBranches: string[] = [];
+    for (const cn of conditionNodes) {
+      const edgesFromCn = graph.edges.filter((e) => e.source === cn.id);
+      const hasTrue = edgesFromCn.some((e) => e.path === "true");
+      const hasFalse = edgesFromCn.some((e) => e.path === "false");
+      if (!hasTrue)
+        missingBranches.push(`${cn.id} ("${cn.name}"): MISSING "true" branch`);
+      if (!hasFalse)
+        missingBranches.push(`${cn.id} ("${cn.name}"): MISSING "false" branch`);
+    }
+
     const graphStateText = `Current Graph State:
 - Existing Nodes:
-${graph.nodes.length > 0 ? graph.nodes.map((n) => `  [${n.type}] ${n.id} ("${n.name}")`).join("\\n") : "  (none)"}
+${graph.nodes.length > 0 ? graph.nodes.map((n) => `  [${n.type}] ${n.id} ("${n.name}")`).join("\n") : "  (none)"}
 - Existing Connections:
-${graph.edges.length > 0 ? graph.edges.map((e) => `  ${e.source} ➔ ${e.target} ${e.isConditional ? `(conditional)` : ""}`).join("\\n") : "  (none)"}
+${graph.edges.length > 0 ? graph.edges.map((e) => `  ${e.source} ➔ ${e.target} ${e.path ? `[${e.path.toUpperCase()}]` : ""}`).join("\n") : "  (none)"}
 - Current Memory Variables (State):
 ${
   Object.keys(graph.stateSchema).length > 0
     ? Object.entries(graph.stateSchema)
         .map(([k, v]) => `  - ${k} (${(v as any).type})`)
-        .join("\\n")
+        .join("\n")
     : "  (none)"
 }
-- Latest Node Added: "${lastNodeId}"`;
+- Latest Node Added: "${lastNodeId}"
+${
+  missingBranches.length > 0
+    ? `- ⚠️ UNRESOLVED CONDITION BRANCHES (YOU MUST CONNECT THESE WITH conditionPath):\n${missingBranches.map((m) => `  * ${m}`).join("\n")}`
+    : "- Condition Nodes Status: All condition branches are satisfied."
+}`;
 
     const plannerMessages = [
       new SystemMessage(plannerInstructions),
@@ -475,6 +510,7 @@ Evaluate conditions using the memory variables defined in the Current Graph Stat
   // Connect to End node
   console.log(
     `[Visual Builder - Generator] Connecting workflow to 'End' node from "${lastNodeId}"`,
+    `[Visual Builder - Generator] Connecting workflow to 'End' node`,
   );
   const endNode: GraphNode = {
     id: "end",
@@ -491,10 +527,63 @@ Evaluate conditions using the memory variables defined in the Current Graph Stat
     isConditional: false,
   };
   graph.edges.push(endEdge);
+  // If lastNodeId is not a condition node, connect it to end normally
+  const lastNode = graph.nodes.find((n) => n.id === lastNodeId);
+  if (lastNode && lastNode.type !== "condition" && lastNode.id !== "end") {
+    if (
+      !graph.edges.some((e) => e.source === lastNode.id && e.target === "end")
+    ) {
+      const endEdge: GraphEdge = {
+        id: `edge_${lastNode.id}_end`,
+        source: lastNode.id,
+        target: "end",
+        isConditional: false,
+      };
+      graph.edges.push(endEdge);
+      yield { type: "edge_added", edge: endEdge };
+    }
+  }
+
+  // MANDATORY ENFORCEMENT: Every condition node MUST have BOTH a "true" and a "false" branch
+  for (const cn of graph.nodes.filter((n) => n.type === "condition")) {
+    const edgesFromCn = graph.edges.filter((e) => e.source === cn.id);
+    const hasTrue = edgesFromCn.some((e) => e.path === "true");
+    const hasFalse = edgesFromCn.some((e) => e.path === "false");
+
+    if (!hasTrue) {
+      console.log(
+        `[Visual Builder - Generator] Auto-connecting missing TRUE branch for condition "${cn.id}" ➔ end`,
+      );
+      const trueEdge: GraphEdge = {
+        id: `edge_${cn.id}_end_true`,
+        source: cn.id,
+        target: "end",
+        isConditional: false,
+        path: "true",
+      };
+      graph.edges.push(trueEdge);
+      yield { type: "edge_added", edge: trueEdge };
+    }
+
+    if (!hasFalse) {
+      console.log(
+        `[Visual Builder - Generator] Auto-connecting missing FALSE branch for condition "${cn.id}" ➔ end`,
+      );
+      const falseEdge: GraphEdge = {
+        id: `edge_${cn.id}_end_false`,
+        source: cn.id,
+        target: "end",
+        isConditional: false,
+        path: "false",
+      };
+      graph.edges.push(falseEdge);
+      yield { type: "edge_added", edge: falseEdge };
+    }
+  }
 
   console.log(
     `[Visual Builder - Generator] === Workflow Generation Complete ===`,
   );
-  yield { type: "node_added", node: endNode, edge: endEdge };
+  yield { type: "node_added", node: endNode };
   return graph;
 }

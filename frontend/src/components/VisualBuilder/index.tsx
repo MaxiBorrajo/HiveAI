@@ -14,6 +14,7 @@ import type { Node, Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { LangGraphAbstraction } from "../../types/execution";
 import { GhostNode } from "./GhostNode";
+import { ConditionNode } from "./ConditionNode";
 
 interface VisualBuilderProps {
   graph?: LangGraphAbstraction | null;
@@ -34,14 +35,15 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   g.setGraph({ rankdir: "LR" });
 
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
-  nodes.forEach((node) =>
+  nodes.forEach((node) => {
+    const isCondition = node.type === "condition";
     g.setNode(node.id, {
       ...node,
-      // Default dimensions if not measured yet
-      width: node.measured?.width ?? 180,
-      height: node.measured?.height ?? 54,
-    }),
-  );
+      // Condition nodes are square 110x110; regular nodes are 180x54
+      width: isCondition ? 110 : (node.measured?.width ?? 180),
+      height: isCondition ? 110 : (node.measured?.height ?? 54),
+    });
+  });
 
   Dagre.layout(g);
 
@@ -72,7 +74,10 @@ export function VisualBuilder({
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Convert backend graph to React Flow graph
-  const nodeTypes = useMemo(() => ({ ghost: GhostNode }), []);
+  const nodeTypes = useMemo(
+    () => ({ ghost: GhostNode, condition: ConditionNode }),
+    [],
+  );
 
   useEffect(() => {
     if (!graph && !isGenerating) {
@@ -88,6 +93,26 @@ export function VisualBuilder({
       const isSelected = selectedNodeId === n.id;
       const isActive = activeNodeId === n.id;
       const isUpdating = isGenerating && isSelected;
+
+      if (n.type === "condition") {
+        return {
+          id: n.id,
+          type: "condition",
+          position: { x: 0, y: 0 },
+          data: {
+            name: n.name,
+            config: n.config,
+            isActive,
+            isUpdating,
+            isSelected,
+          },
+          style: {
+            width: 110,
+            height: 110,
+            zIndex: isSelected || isUpdating ? 10 : 1,
+          },
+        };
+      }
 
       let borderColor = "var(--border, #3f3f46)";
       let boxShadow = "none";
@@ -110,15 +135,7 @@ export function VisualBuilder({
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         data: {
-          label: n.type === "condition" ? (
-            <div className="relative w-32 h-32 flex items-center justify-center">
-              <div className="absolute inset-0 bg-yellow-950/40 border-2 border-yellow-600 rounded-xl transform rotate-45 transition-all shadow-[0_0_15px_rgba(202,138,4,0.4)]"></div>
-              <div className="relative z-10 transform -rotate-45 flex flex-col items-center justify-center text-center">
-                {isUpdating && <span className="size-2 rounded-full bg-yellow-500 animate-ping shrink-0 mb-1" />}
-                <strong className="text-[11px] font-semibold text-yellow-100 tracking-wide break-words leading-tight">{n.name}</strong>
-              </div>
-            </div>
-          ) : (
+          label: (
             <div className="flex flex-col text-left">
               <div className="flex items-center gap-1.5">
                 {isUpdating && (
@@ -134,18 +151,7 @@ export function VisualBuilder({
             </div>
           ),
         },
-        style: n.type === "condition" ? {
-          background: "transparent",
-          border: "none",
-          padding: 0,
-          width: 130,
-          height: 130,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          zIndex: isSelected || isUpdating ? 10 : 1,
-        } : {
+        style: {
           background: bgColor,
           border: `1.5px solid ${borderColor}`,
           padding: "8px 12px",
@@ -163,22 +169,41 @@ export function VisualBuilder({
     const rfEdges: Edge[] = currentEdges.map((e) => {
       const isAnimated = activeNodeId === e.source || selectedEdgeId === e.id;
       const strokeColor = "var(--primary)";
-      
-      const sourceNode = currentNodes.find(n => n.id === e.source);
+
+      const sourceNode = currentNodes.find((n) => n.id === e.source);
       const isFromCondition = sourceNode?.type === "condition";
       const isActive = activeNodeId === e.source || activeNodeId === e.target;
-      const edgeColor = (selectedEdgeId === e.id) ? "#3b82f6" : ((isFromCondition && e.path === "true") ? "#22c55e" : (isFromCondition && e.path === "false") ? "#ef4444" : (isActive ? strokeColor : "var(--border)"));
-      
+      const edgeColor =
+        selectedEdgeId === e.id
+          ? "#3b82f6"
+          : isFromCondition && e.path === "true"
+            ? "#22c55e"
+            : isFromCondition && e.path === "false"
+              ? "#ef4444"
+              : isActive
+                ? strokeColor
+                : "var(--border)";
+
       return {
         id: e.id,
         source: e.source,
         target: e.target,
-        type: "step",
-        label: (isFromCondition && e.path) ? (e.path === "true" ? "True" : "False") : "",
+        sourceHandle: isFromCondition
+          ? e.path === "false"
+            ? "false"
+            : "true"
+          : undefined,
+        type: "smoothstep",
+        label:
+          isFromCondition && e.path
+            ? e.path === "true"
+              ? "True"
+              : "False"
+            : "",
         animated: isAnimated,
         style: {
           stroke: edgeColor,
-          strokeWidth: (isActive || selectedEdgeId === e.id) ? 3 : 1,
+          strokeWidth: isActive || selectedEdgeId === e.id ? 3 : 1.5,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
@@ -204,11 +229,13 @@ export function VisualBuilder({
 
       if (currentNodes.length > 0) {
         const lastNode = currentNodes[currentNodes.length - 1];
+        const isLastCondition = lastNode.type === "condition";
         rfEdges.push({
           id: `edge_${lastNode.id}_${ghostId}`,
           source: lastNode.id,
           target: ghostId,
-          type: "step",
+          sourceHandle: isLastCondition ? "true" : undefined,
+          type: "smoothstep",
           animated: true,
           style: {
             stroke: "var(--primary)",
@@ -263,9 +290,12 @@ export function VisualBuilder({
           }
         }}
         onEdgeClick={(_, edge) => {
-          onNodeSelect?.(edge.id === selectedNodeId ? null : edge.id);
+          onEdgeSelect?.(edge.id === selectedEdgeId ? null : edge.id);
         }}
-        onPaneClick={() => onNodeSelect?.(null)}
+        onPaneClick={() => {
+          onNodeSelect?.(null);
+          onEdgeSelect?.(null);
+        }}
         fitView
         fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
         colorMode="dark"

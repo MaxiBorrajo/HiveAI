@@ -7,10 +7,7 @@ import {
   NodeExecutorFunction,
   StatePropertyDefinition,
 } from "./types.ts";
-import {
-  getReducerFunction,
-  evaluateCondition,
-} from "./utils.ts";
+import { getReducerFunction, evaluateCondition } from "./utils.ts";
 import {
   buildLlmInstance,
   buildPromptMessages,
@@ -59,15 +56,23 @@ export function compileGraph(
 
   for (const node of abstraction.nodes) {
     if (nodeIds.has(node.id)) {
-      throw new Error(`Compiler Error: Duplicate node ID found: '${node.id}'. All node IDs must be unique.`);
+      throw new Error(
+        `Compiler Error: Duplicate node ID found: '${node.id}'. All node IDs must be unique.`,
+      );
     }
     nodeIds.add(node.id);
     if (node.type === "start") startCount++;
     if (node.type === "end") endCount++;
   }
 
-  if (startCount !== 1) throw new Error(`Compiler Error: The graph must have exactly one node of type 'start'. Found: ${startCount}`);
-  if (endCount !== 1) throw new Error(`Compiler Error: The graph must have exactly one node of type 'end'. Found: ${endCount}`);
+  if (startCount !== 1)
+    throw new Error(
+      `Compiler Error: The graph must have exactly one node of type 'start'. Found: ${startCount}`,
+    );
+  if (endCount !== 1)
+    throw new Error(
+      `Compiler Error: The graph must have exactly one node of type 'end'. Found: ${endCount}`,
+    );
 
   const workflow = new StateGraph<any, any, any, any>({
     channels: stateSchema as any,
@@ -96,6 +101,11 @@ export function compileGraph(
           return handleLlmError(err, node.id, node.config);
         }
       };
+    } else if (node.type === "condition") {
+      // Condition nodes are decision gateways; they pass state through without mutation
+      nodeRunnable = async (_state: Record<string, unknown>) => {
+        return {};
+      };
     } else {
       const executor =
         registry[node.config.pluginId as string] || registry[node.type];
@@ -122,55 +132,99 @@ export function compileGraph(
 
   const normalEdges: GraphEdge[] = [];
   const conditionalEdgesBySource: Record<string, GraphEdge[]> = {};
+  const conditionNodesMap = new Map(
+    abstraction.nodes
+      .filter((n) => n.type === "condition")
+      .map((n) => [n.id, n]),
+  );
 
   for (const edge of abstraction.edges) {
     if (!edge.isConditional) {
       normalEdges.push(edge);
     } else {
-      if (!conditionalEdgesBySource[edge.source]) {
-        conditionalEdgesBySource[edge.source] = [];
+      if (conditionNodesMap.has(edge.source) || edge.isConditional) {
+        if (!conditionalEdgesBySource[edge.source]) {
+          conditionalEdgesBySource[edge.source] = [];
+        }
+        conditionalEdgesBySource[edge.source].push(edge);
+      } else {
+        normalEdges.push(edge);
       }
-      conditionalEdgesBySource[edge.source].push(edge);
     }
-  }
 
-  for (const edge of normalEdges) {
-    const sourceId = edge.source === "start" ? START : edge.source;
-    const targetId = edge.target === "end" ? END : edge.target;
-    workflow.addEdge(sourceId as any, targetId as any);
-  }
+    for (const edge of normalEdges) {
+      const sourceId = edge.source === "start" ? START : edge.source;
+      const targetId = edge.target === "end" ? END : edge.target;
+      workflow.addEdge(sourceId as any, targetId as any);
+    }
 
-  for (const [source, edges] of Object.entries(conditionalEdgesBySource)) {
-    const sourceId = source === "start" ? START : source;
+    for (const [source, edges] of Object.entries(conditionalEdgesBySource)) {
+      const sourceId = source === "start" ? START : source;
+      const condNode = conditionNodesMap.get(source);
 
-    workflow.addConditionalEdges(
-      sourceId as any,
-      (state: Record<string, unknown>): string => {
-        for (const edge of edges) {
-          if (!edge.condition) continue;
+      workflow.addConditionalEdges(
+        sourceId as any,
+        (state: Record<string, unknown>): string => {
+          if (condNode) {
+            const cond = condNode.config?.condition as any;
+            let isMatch = false;
+            if (cond && cond.field) {
+              const fieldParts = cond.field.split(".");
+              let fieldValue: unknown = state;
+              for (const part of fieldParts) {
+                fieldValue = (fieldValue as Record<string, unknown>)?.[part];
+              }
+              isMatch = evaluateCondition(
+                fieldValue,
+                cond.operator,
+                cond.value,
+              );
+            }
 
-          const targetId = edge.target === "end" ? END : edge.target;
+            const trueEdge = edges.find((e) => e.path === "true");
+            const falseEdge = edges.find((e) => e.path === "false");
 
-          const fieldParts = edge.condition.field.split(".");
-          let fieldValue: unknown = state;
-          for (const part of fieldParts) {
-            fieldValue = (fieldValue as Record<string, unknown>)?.[part];
+            if (isMatch && trueEdge) {
+              return trueEdge.target === "end" ? END : trueEdge.target;
+            }
+            if (!isMatch && falseEdge) {
+              return falseEdge.target === "end" ? END : falseEdge.target;
+            }
+
+            const fallback = trueEdge || falseEdge || edges[0];
+            return fallback
+              ? fallback.target === "end"
+                ? END
+                : fallback.target
+              : END;
           }
 
-          const match = evaluateCondition(
-            fieldValue,
-            edge.condition.operator,
-            edge.condition.value,
+          for (const edge of edges) {
+            if (!edge.condition) continue;
+
+            const targetId = edge.target === "end" ? END : edge.target;
+
+            const fieldParts = edge.condition.field.split(".");
+            let fieldValue: unknown = state;
+            for (const part of fieldParts) {
+              fieldValue = (fieldValue as Record<string, unknown>)?.[part];
+            }
+
+            const match = evaluateCondition(
+              fieldValue,
+              edge.condition.operator,
+              edge.condition.value,
+            );
+            if (match) return targetId as string;
+          }
+
+          throw new Error(
+            `No matching conditional edge found for source node: ${sourceId}`,
           );
-          if (match) return targetId as string;
-        }
+        },
+      );
+    }
 
-        throw new Error(
-          `No matching conditional edge found for source node: ${sourceId}`,
-        );
-      },
-    );
+    return workflow.compile();
   }
-
-  return workflow.compile();
 }
