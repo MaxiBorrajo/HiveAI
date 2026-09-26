@@ -5,7 +5,13 @@ export interface ApprovalPayload {
   details?: Record<string, string>;
 }
 
-export type InteractionPayload = ApprovalPayload;
+export interface ClarifyPayload {
+  kind: "clarify";
+  question: string;
+  options?: string[];
+}
+
+export type InteractionPayload = ApprovalPayload | ClarifyPayload;
 
 export interface PendingInteraction {
   id: string;
@@ -14,7 +20,9 @@ export interface PendingInteraction {
   payload: InteractionPayload;
 }
 
-export type InteractionResult = { kind: "approval"; approved: boolean };
+export type InteractionResult =
+  | { kind: "approval"; approved: boolean }
+  | { kind: "clarify"; answer: string };
 
 interface PendingEntry extends PendingInteraction {
   resolve: (result: InteractionResult) => void;
@@ -51,6 +59,33 @@ class HumanInteractionQueue {
         resolve: (result) => {
           clearTimeout(timer);
           resolve(result.kind === "approval" ? result.approved : false);
+        },
+      });
+    });
+
+    return { id, wait };
+  }
+
+  requestClarification(
+    pluginName: string,
+    payload: ClarifyPayload,
+  ): { id: string; wait: Promise<string> } {
+    const id = crypto.randomUUID();
+
+    const wait = new Promise<string>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        resolve("");
+      }, INTERACTION_TIMEOUT_MS);
+
+      this.pending.set(id, {
+        id,
+        pluginName,
+        payload,
+        requestedAt: Date.now(),
+        resolve: (result) => {
+          clearTimeout(timer);
+          resolve(result.kind === "clarify" ? result.answer : "");
         },
       });
     });

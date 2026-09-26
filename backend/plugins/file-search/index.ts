@@ -39,7 +39,7 @@ const schema = z.object({
     .string()
     .optional()
     .describe(
-      "Absolute path of a specific folder to search in. If omitted, it searches in the user's common folders (Desktop, Documents, Downloads, and home).",
+      "Absolute path of a specific folder to search in, ONLY if the user explicitly named one. Omit this field otherwise — do NOT ask the user where to search first; the default already covers their home folder, Desktop, Documents, and Downloads, which is enough for most requests like 'find my X file/folder'.",
     ),
   maxResults: z
     .number()
@@ -54,7 +54,7 @@ type FileSearchSchema = typeof schema;
 export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
   name = "file_search";
   description =
-    "Locates files and folders anywhere in the filesystem by matching partial names. USE CASES: Use this when the user asks to find a lost file, locate where a specific configuration or document is stored, or when you need the exact absolute path of a file before you can read it. It is optimized for substring matching (e.g., use 'config' instead of '*.config'). Do NOT use this tool if you already know the absolute path of the file. It only matches by file/folder name — it cannot tell whether a file was modified, its content, or its version-control status; for anything about a file's history or changes, this tool does not apply.";
+    "Locates a FILE OR A FOLDER anywhere in the filesystem by matching partial names — this is the tool to use any time the user wants to find where something lives on disk, whether it's a document or an entire directory. USE CASES: find a lost file ('where did I save report.pdf?'), locate a folder by name ('find my Projects folder', 'where is the folder called Programacion on my system'), locate where a specific configuration or document is stored, or get the exact absolute path of a file or folder before reading it or passing it to another tool. It is optimized for substring matching (e.g., use 'config' instead of '*.config'). Do NOT use this tool if you already know the absolute path. It only matches by file/folder name — it cannot tell whether a file was modified, its content, or its version-control status; for anything about a file's history or changes, this tool does not apply.";
 
   schema = schema;
 
@@ -71,6 +71,16 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
     },
     {
       query: "find the backend folder on my machine",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "search for a folder called Programacion on my system",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
+      query: "where is my Projects directory located?",
       kind: "positive",
       shouldInvoke: true,
     },

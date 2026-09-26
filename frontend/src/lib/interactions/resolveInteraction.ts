@@ -10,3 +10,14 @@ export async function resolveInteraction(
   );
   return result.data;
 }
+
+export async function resolveClarification(
+  id: string,
+  answer: string,
+): Promise<ResponseEntity<string>> {
+  const result = await apiClient.post(
+    `/api/interactions/${encodeURIComponent(id)}/answer`,
+    { answer },
+  );
+  return result.data;
+}
