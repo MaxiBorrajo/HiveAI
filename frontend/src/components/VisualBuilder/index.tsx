@@ -15,11 +15,13 @@ import "@xyflow/react/dist/style.css";
 import type { LangGraphAbstraction } from "../../types/execution";
 import { GhostNode } from "./GhostNode";
 import { ConditionNode } from "./ConditionNode";
+import { StandardNode } from "./StandardNode";
 
 interface VisualBuilderProps {
   graph?: LangGraphAbstraction | null;
   onSave?: (graph: LangGraphAbstraction) => void;
   activeNodeId?: string; // For streaming / running feedback
+  activeToolName?: string | null; // For displaying currently executing tool
   isGenerating?: boolean; // For showing the Ghost / thinking node
   planningThought?: string | null; // For displaying current thought in ghost node
   selectedNodeId?: string | null;
@@ -32,16 +34,30 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   if (nodes.length === 0) return { nodes: [], edges: [] };
 
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "LR" });
+  g.setGraph({
+    rankdir: "LR",
+    align: "UL",
+    nodesep: 90,
+    ranksep: 120,
+    edgesep: 40,
+    marginx: 40,
+    marginy: 40,
+  });
 
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
   nodes.forEach((node) => {
     const isCondition = node.type === "condition";
+    const plugins = Array.isArray((node.data as any)?.config?.plugins)
+      ? (node.data as any).config.plugins
+      : [];
+    const hasTools = plugins.length > 0;
+    const defaultWidth = 260;
+    const defaultHeight = isCondition ? 136 : (hasTools ? 135 : 76);
+
     g.setNode(node.id, {
       ...node,
-      // Condition nodes are square 110x110; regular nodes are 180x54
-      width: isCondition ? 110 : (node.measured?.width ?? 180),
-      height: isCondition ? 110 : (node.measured?.height ?? 54),
+      width: node.measured?.width ?? defaultWidth,
+      height: isCondition ? 136 : (node.measured?.height ?? defaultHeight),
     });
   });
 
@@ -49,8 +65,16 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
   const layoutedNodes = nodes.map((node) => {
     const position = g.node(node.id);
-    const width = node.measured?.width ?? 180;
-    const height = node.measured?.height ?? 54;
+    const isCondition = node.type === "condition";
+    const plugins = Array.isArray((node.data as any)?.config?.plugins)
+      ? (node.data as any).config.plugins
+      : [];
+    const hasTools = plugins.length > 0;
+    const defaultWidth = 260;
+    const defaultHeight = isCondition ? 136 : (hasTools ? 135 : 76);
+
+    const width = node.measured?.width ?? defaultWidth;
+    const height = node.measured?.height ?? defaultHeight;
     const x = position ? position.x - width / 2 : 0;
     const y = position ? position.y - height / 2 : 0;
 
@@ -63,6 +87,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 export function VisualBuilder({
   graph,
   activeNodeId,
+  activeToolName,
   isGenerating,
   planningThought,
   selectedNodeId,
@@ -75,7 +100,11 @@ export function VisualBuilder({
 
   // Convert backend graph to React Flow graph
   const nodeTypes = useMemo(
-    () => ({ ghost: GhostNode, condition: ConditionNode }),
+    () => ({
+      ghost: GhostNode,
+      condition: ConditionNode,
+      standard: StandardNode,
+    }),
     [],
   );
 
@@ -109,103 +138,27 @@ export function VisualBuilder({
             isSelected,
           },
           style: {
-            width: 110,
-            height: 110,
             zIndex: isSelected || isUpdating || isExecuting ? 10 : 1,
           },
         };
       }
 
-      let borderColor = "var(--border, #3f3f46)";
-      let boxShadow = "none";
-      let bgColor = "var(--muted, #27272a)";
-
-      if (isUpdating) {
-        borderColor = "#f59e0b";
-        boxShadow = "0 0 20px rgba(245, 158, 11, 0.65)";
-        bgColor = "rgba(245, 158, 11, 0.15)";
-      } else if (isExecuting) {
-        borderColor = "#10b981";
-        boxShadow = "0 0 24px rgba(16, 185, 129, 0.75)";
-        bgColor = "rgba(16, 185, 129, 0.15)";
-      } else if (isActive) {
-        borderColor = "var(--primary)";
-        boxShadow = "0 0 14px var(--primary)";
-        bgColor = "var(--secondary, #3f3f46)";
-      } else if (isSelected) {
-        borderColor = "var(--primary)";
-        boxShadow = "0 0 10px var(--primary)";
-        bgColor = "var(--secondary, #3f3f46)";
-      }
-
-      const plugins = Array.isArray(n.config?.plugins)
-        ? (n.config.plugins as string[])
-        : [];
-      const hasTools = n.type === "llm" && plugins.length > 0;
-      const isPlugin = n.type === "plugin" && n.config?.pluginId;
-
       return {
         id: n.id,
+        type: "standard",
         position: { x: 0, y: 0 },
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
         data: {
-          label: (
-            <div className="flex flex-col text-left gap-1">
-              <div className="flex items-center gap-1.5">
-                {isUpdating && (
-                  <span className="size-2 rounded-full bg-amber-400 animate-ping shrink-0" />
-                )}
-                {isExecuting && (
-                  <span className="size-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                )}
-                <span className="font-medium text-xs text-zinc-100 truncate">
-                  {n.name}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className="text-[10px] text-zinc-400 capitalize">
-                  {isUpdating
-                    ? "Updating..."
-                    : isExecuting
-                      ? "Executing..."
-                      : hasTools
-                        ? "AI Agent"
-                        : n.type}
-                </span>
-                {isPlugin && (
-                  <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono">
-                    🔧 {String(n.config.pluginId)}
-                  </span>
-                )}
-              </div>
-              {hasTools && (
-                <div className="flex gap-1 flex-wrap mt-0.5">
-                  {plugins.map((p) => (
-                    <span
-                      key={p}
-                      className="px-1 py-0.5 rounded text-[8.5px] bg-amber-500/15 text-amber-300 border border-amber-500/25 font-mono"
-                    >
-                      ⚡{p}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ),
+          name: n.name,
+          type: n.type,
+          config: n.config,
+          isActive,
+          isUpdating,
+          isExecuting,
+          isSelected,
+          activeTool: activeToolName,
         },
         style: {
-          background: bgColor,
-          border: `1.5px solid ${borderColor}`,
-          padding: "8px 12px",
-          borderRadius: 8,
-          color: "#fafafa",
-          minWidth: 170,
-          maxWidth: 220,
-          cursor: "pointer",
-          boxShadow,
-          transition: "all 0.2s ease-in-out",
-          zIndex: isSelected || isUpdating ? 10 : 1,
+          zIndex: isSelected || isUpdating || isExecuting ? 10 : 1,
         },
       };
     });
@@ -216,6 +169,7 @@ export function VisualBuilder({
 
       const sourceNode = currentNodes.find((n) => n.id === e.source);
       const isFromCondition = sourceNode?.type === "condition";
+      const isFalseBranch = isFromCondition && e.path === "false";
       const isActive = activeNodeId === e.source || activeNodeId === e.target;
       const edgeColor =
         selectedEdgeId === e.id
@@ -238,6 +192,9 @@ export function VisualBuilder({
             : "true"
           : undefined,
         type: "smoothstep",
+        pathOptions: isFalseBranch
+          ? { offset: 50, borderRadius: 16 }
+          : { offset: 25, borderRadius: 12 },
         label:
           isFromCondition && e.path
             ? e.path === "true"

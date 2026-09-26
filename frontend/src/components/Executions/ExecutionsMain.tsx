@@ -43,6 +43,7 @@ export function ExecutionsMain() {
   const [logsMap, setLogsMap] = useState<Record<string, string[]>>({});
   const [executionResultMap, setExecutionResultMap] = useState<Record<string, ExecutionResultData | null>>({});
   const [activeStatusMessageMap, setActiveStatusMessageMap] = useState<Record<string, string | null>>({});
+  const [activeToolNameMap, setActiveToolNameMap] = useState<Record<string, string | null>>({});
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
 
   const isThinking = isThinkingMap[key] || false;
@@ -56,12 +57,16 @@ export function ExecutionsMain() {
   const logs = logsMap[key] || [];
   const executionResult = executionResultMap[key] || null;
   const activeStatusMessage = activeStatusMessageMap[key] || null;
+  const activeToolName = activeToolNameMap[key] || null;
 
   const setIsThinking = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
     setIsThinkingMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || false) : val }));
   };
   const setIsRunning = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
     setIsRunningMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || false) : val }));
+  };
+  const setActiveToolName = (val: string | null | ((prev: string | null) => string | null), targetKey = key) => {
+    setActiveToolNameMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
   };
   const setGraph = (val: LangGraphAbstraction | null | ((prev: LangGraphAbstraction | null) => LangGraphAbstraction | null), targetKey = key) => {
     setGraphMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
@@ -169,6 +174,7 @@ export function ExecutionsMain() {
             setLogsMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setExecutionResultMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setActiveStatusMessageMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
+            setActiveToolNameMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             
             currentKey = newId;
             onExecutionCreated(newId);
@@ -344,14 +350,17 @@ export function ExecutionsMain() {
 
                 if (evtType === "on_chain_start" && nodeName) {
                   setActiveNodeId(nodeName, currentKey);
+                  setActiveToolName(null, currentKey);
                   setActiveStatusMessage(`⚡ Running node: ${nodeName}`, currentKey);
                   setLogs((prev) => [...prev, `⚡ [start] Node: ${nodeName}`], currentKey);
                 } else if (evtType === "on_tool_start") {
+                  setActiveToolName(data.name || null, currentKey);
                   setActiveStatusMessage(`🔧 Tool: ${data.name || "running"}...`, currentKey);
                   setLogs((prev) => [...prev, `🔧 [tool] ${data.name}`], currentKey);
                 } else if (evtType === "on_chat_model_start") {
                   setActiveStatusMessage(`🧠 Reasoning with AI model...`, currentKey);
                 } else if (evtType === "on_tool_end") {
+                  setActiveToolName(null, currentKey);
                   setLogs((prev) => [...prev, `✓ [tool done] ${data.name || ""}`], currentKey);
                 }
               }
@@ -365,6 +374,7 @@ export function ExecutionsMain() {
     } finally {
       setIsRunning(false, currentKey);
       setActiveNodeId(undefined, currentKey);
+      setActiveToolName(null, currentKey);
       setActiveStatusMessage(null, currentKey);
     }
   };
@@ -381,6 +391,7 @@ export function ExecutionsMain() {
           <VisualBuilder
             graph={graph}
             activeNodeId={activeNodeId}
+            activeToolName={activeToolName}
             isGenerating={isThinking}
             planningThought={planningThought}
             selectedNodeId={selectedNodeId}
