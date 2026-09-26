@@ -12,6 +12,27 @@ function launchBash(command: string): { bin: string; args: string[] } {
   return { bin: "bash", args: ["-c", command] };
 }
 
+function isSafeInspectionCommand(command: string): boolean {
+  const trimmed = command.trim();
+  // Disallow file output redirections or dangerous write commands
+  if (/>|\brm\s|\bmv\s|\bsudo\b|\bchmod\b|\bchown\b|\bkill\b|\bpkill\b|\bmkfs\b|\bdd\b|\btruncate\b/i.test(trimmed)) {
+    return false;
+  }
+  // Allow common inspection and test commands
+  const safePatterns = [
+    /^(ps|top|df|free|head|tail|ls|grep|cat|uptime|wc|pwd|date|uname|whoami|echo|which|du)\b/i,
+    /^git\s+(status|log|diff|branch|show)\b/i,
+    /^(npm|yarn|pnpm|bun)\s+(test|run\s+test)\b/i,
+    /^deno\s+(test|check)\b/i,
+  ];
+
+  // If piped or chained (e.g. ps aux | head -n 5 && df -h), check each sub-command
+  const subcommands = trimmed.split(/&&|\|\||\||;/).map((s) => s.trim()).filter(Boolean);
+  return subcommands.length > 0 && subcommands.every((sub) =>
+    safePatterns.some((pattern) => pattern.test(sub))
+  );
+}
+
 const schema = z.object({
   command: z
     .string()
@@ -172,15 +193,23 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       }
     }
 
-    console.log(
-      `[run-shell]  Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
-    );
+    let approved = false;
+    if (isSafeInspectionCommand(command)) {
+      console.log(
+        `[run-shell] ⚡ Safe read-only inspection command detected. Auto-approving: "${command}"`,
+      );
+      approved = true;
+    } else {
+      console.log(
+        `[run-shell]  Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
+      );
 
-    const approved = await this.context.requestApproval(
-      "El agente quiere ejecutar un comando",
-      `Esta acción usa una shell real (bash), sin restricciones de comandos. Revisá el comando antes de aprobarlo.`,
-      { command, ...(cwd ? { cwd } : {}) },
-    );
+      approved = await this.context.requestApproval(
+        "The agent wants to execute a command",
+        "This action uses a real shell (bash) without command restrictions. Review the command before approving.",
+        { command, ...(cwd ? { cwd } : {}) },
+      );
+    }
 
     if (!approved) {
       console.warn(`[run-shell] 🚫 Command was rejected or timed out.`);

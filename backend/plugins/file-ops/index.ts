@@ -20,7 +20,7 @@ const schema = z.object({
   path: z
     .string()
     .describe(
-      "Absolute path of the target file or folder. For 'copy'/'move', this is the source path.",
+      "Target file or folder path. Can be a filename (e.g. 'system_health.md'), relative path, or absolute path. For 'copy'/'move', this is the source path.",
     ),
   destination: z
     .string()
@@ -203,12 +203,22 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { operation, path, destination, content } = parsed.data as {
+    let { operation, path, destination, content } = parsed.data as {
       operation: Operation;
       path: string;
       destination?: string;
       content?: string;
     };
+
+    // If the path points directly to root filesystem (e.g. "/notes.txt" or "/system_health.md"),
+    // models often emit leading slashes intending project-root/workspace-relative paths.
+    // Divert root writes to current working directory to avoid OS permission errors.
+    if (path.startsWith("/") && dirname(path) === "/" && !["/tmp", "/var"].includes(path)) {
+      path = join(Deno.cwd(), path.slice(1));
+    }
+    if (destination && destination.startsWith("/") && dirname(destination) === "/" && !["/tmp", "/var"].includes(destination)) {
+      destination = join(Deno.cwd(), destination.slice(1));
+    }
 
     if (content != null && content.length > MAX_CONTENT_CHARS) {
       return `The provided content is too large (${content.length} chars). Maximum allowed is ${MAX_CONTENT_CHARS}.`;

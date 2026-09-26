@@ -246,7 +246,7 @@ export function Chat() {
               chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
             notifyChatResponse(
               chatTitle,
-              finalContent.slice(0, 120) || "Nueva respuesta disponible",
+              finalContent.slice(0, 120) || "New response available",
             );
           }
         },

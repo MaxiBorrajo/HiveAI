@@ -20,6 +20,8 @@ import {
   ExecutionResultSidebar,
   type ExecutionResultData,
 } from "./ExecutionResultSidebar";
+import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 export function ExecutionsMain() {
   const {
@@ -42,9 +44,9 @@ export function ExecutionsMain() {
   const [planningThoughtMap, setPlanningThoughtMap] = useState<Record<string, string | null>>({});
   const [logsMap, setLogsMap] = useState<Record<string, string[]>>({});
   const [executionResultMap, setExecutionResultMap] = useState<Record<string, ExecutionResultData | null>>({});
-  const [activeStatusMessageMap, setActiveStatusMessageMap] = useState<Record<string, string | null>>({});
   const [activeToolNameMap, setActiveToolNameMap] = useState<Record<string, string | null>>({});
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
 
   const isThinking = isThinkingMap[key] || false;
   const isRunning = isRunningMap[key] || false;
@@ -56,7 +58,6 @@ export function ExecutionsMain() {
   const planningThought = planningThoughtMap[key] || null;
   const logs = logsMap[key] || [];
   const executionResult = executionResultMap[key] || null;
-  const activeStatusMessage = activeStatusMessageMap[key] || null;
   const activeToolName = activeToolNameMap[key] || null;
 
   const setIsThinking = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
@@ -88,15 +89,6 @@ export function ExecutionsMain() {
     targetKey = key
   ) => {
     setExecutionResultMap(prev => ({
-      ...prev,
-      [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val,
-    }));
-  };
-  const setActiveStatusMessage = (
-    val: string | null | ((prev: string | null) => string | null),
-    targetKey = key
-  ) => {
-    setActiveStatusMessageMap(prev => ({
       ...prev,
       [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val,
     }));
@@ -173,7 +165,6 @@ export function ExecutionsMain() {
             setActiveNodeIdMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setLogsMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setExecutionResultMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setActiveStatusMessageMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setActiveToolNameMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             
             currentKey = newId;
@@ -256,6 +247,13 @@ export function ExecutionsMain() {
     }
   };
 
+  const hasRequiredInputs = Boolean(
+    graph?.stateSchema &&
+      Object.entries(graph.stateSchema).some(
+        ([key, def]: [string, any]) => key === "input" && def.required === true
+      )
+  );
+
   const handleOpenRunModal = () => {
     if (!graph) return;
     const initialInputs: Record<string, any> = {};
@@ -266,16 +264,41 @@ export function ExecutionsMain() {
     setIsRunModalOpen(true);
   };
 
-  const handleRun = async () => {
+  const handleRunClick = () => {
+    if (hasRequiredInputs) {
+      handleOpenRunModal();
+    } else {
+      handleRun({});
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (!isThinking && !isRunning && graph) {
+          e.preventDefault();
+          handleRunClick();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isThinking, isRunning, graph, hasRequiredInputs]);
+
+  const handleRun = async (overrideInputs?: Record<string, any>) => {
     if (!activeExecutionId) return;
     const currentKey = activeExecutionId;
     setIsRunModalOpen(false);
     setIsRunning(true, currentKey);
-    setActiveStatusMessage("🚀 Initializing execution...", currentKey);
     setLogs((prev) => [...prev, "--- Starting Execution ---"], currentKey);
 
     // Clean up empty strings from runInputs so we don't override defaults with ""
-    const finalInputs = { ...runInputs };
+    const isExplicitRecord =
+      overrideInputs &&
+      typeof overrideInputs === "object" &&
+      !("nativeEvent" in overrideInputs);
+    const inputsSource = isExplicitRecord ? overrideInputs : runInputs;
+    const finalInputs = { ...inputsSource };
     Object.keys(finalInputs).forEach((key) => {
       if (finalInputs[key] === "") {
         delete finalInputs[key];
@@ -331,13 +354,11 @@ export function ExecutionsMain() {
                 };
                 setExecutionResult(resultData, currentKey);
                 setIsResultSidebarOpen(true);
-                setActiveStatusMessage(null, currentKey);
                 setLogs((prev) => [
                   ...prev,
                   `✅ Execution completed (iteration #${data.iteration || 1})`,
                 ], currentKey);
               } else if (currentEvent === "error") {
-                setActiveStatusMessage(null, currentKey);
                 setLogs((prev) => [
                   ...prev,
                   `❌ Execution error: ${data.error || "Unknown error"}`,
@@ -351,14 +372,12 @@ export function ExecutionsMain() {
                 if (evtType === "on_chain_start" && nodeName) {
                   setActiveNodeId(nodeName, currentKey);
                   setActiveToolName(null, currentKey);
-                  setActiveStatusMessage(`⚡ Running node: ${nodeName}`, currentKey);
                   setLogs((prev) => [...prev, `⚡ [start] Node: ${nodeName}`], currentKey);
                 } else if (evtType === "on_tool_start") {
                   setActiveToolName(data.name || null, currentKey);
-                  setActiveStatusMessage(`🔧 Tool: ${data.name || "running"}...`, currentKey);
                   setLogs((prev) => [...prev, `🔧 [tool] ${data.name}`], currentKey);
                 } else if (evtType === "on_chat_model_start") {
-                  setActiveStatusMessage(`🧠 Reasoning with AI model...`, currentKey);
+                  // Reasoning with AI model event
                 } else if (evtType === "on_tool_end") {
                   setActiveToolName(null, currentKey);
                   setLogs((prev) => [...prev, `✓ [tool done] ${data.name || ""}`], currentKey);
@@ -375,7 +394,6 @@ export function ExecutionsMain() {
       setIsRunning(false, currentKey);
       setActiveNodeId(undefined, currentKey);
       setActiveToolName(null, currentKey);
-      setActiveStatusMessage(null, currentKey);
     }
   };
 
@@ -413,42 +431,111 @@ export function ExecutionsMain() {
             )}
           </div>
 
-          {/* Live Execution Status Banner (top center) */}
-          {isRunning && activeStatusMessage && (
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-2.5 px-4 py-2 rounded-full bg-background/95 border border-emerald-500/50 shadow-2xl backdrop-blur-md text-sm font-medium animate-pulse">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
-              <span className="text-foreground">{activeStatusMessage}</span>
-            </div>
-          )}
 
-          {/* Floating panel for Run/Logs (when not empty) */}
+          {/* Split Controller Segmented Button (Option 3) */}
           {(!isEmpty || isThinking || isRunning) && (
-            <div className="absolute top-6 right-6 w-80 flex flex-col gap-2 pointer-events-auto max-h-[calc(100vh-200px)]">
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleOpenRunModal}
+            <div className="absolute top-6 right-6 z-20 pointer-events-auto flex flex-col items-end gap-2">
+              {/* Segmented Controller Block */}
+              <div className="inline-flex items-stretch rounded-xl bg-zinc-950/90 border border-zinc-800 shadow-2xl backdrop-blur-md overflow-hidden divide-x divide-zinc-800/80">
+                {/* Segment: Run Execution */}
+                <button
+                  type="button"
+                  onClick={handleRunClick}
                   disabled={isThinking || isRunning}
-                  variant="default"
-                  className="flex-1 shadow-lg"
+                  className={cn(
+                    "group flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium transition-all select-none",
+                    isRunning
+                      ? "bg-amber-500/10 text-amber-300 cursor-wait"
+                      : "text-zinc-200 hover:bg-zinc-900/90 hover:text-white active:bg-zinc-800",
+                    (isThinking || isRunning) && !isRunning && "opacity-50 cursor-not-allowed"
+                  )}
+                  title={hasRequiredInputs ? "Configure & Run Execution" : "Run Execution"}
                 >
-                  {isRunning ? "⏳ Running..." : "▶ Run Execution"}
-                </Button>
-                {executionResult && (
-                  <Button
-                    onClick={() => setIsResultSidebarOpen(true)}
-                    variant="outline"
-                    className="shadow-lg border-primary/40 hover:border-primary/70 bg-background/90 text-primary font-medium"
-                    title="View Deliverable & State"
+                  {isRunning ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin text-amber-400" />
+                      <span>Running...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-3.5 fill-emerald-400 text-emerald-400 transition-transform group-hover:scale-110" />
+                      <span className="font-medium">Run Execution</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Optional Parameters Launcher */}
+                {!hasRequiredInputs && !isRunning && (
+                  <button
+                    type="button"
+                    onClick={handleOpenRunModal}
+                    disabled={isThinking}
+                    className="flex items-center justify-center px-2 py-2 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-all border-l border-zinc-800/80 cursor-pointer"
+                    title="Run with Custom Parameters..."
                   >
-                    📊 Deliverable
-                  </Button>
+                    <SlidersHorizontal className="size-3.5" />
+                  </button>
                 )}
+
+                {/* Segment: Result */}
+                {executionResult && (
+                  <button
+                    type="button"
+                    onClick={() => setIsResultSidebarOpen(true)}
+                    className="group flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 active:bg-emerald-500/20 transition-all"
+                    title="View Execution Result & State"
+                  >
+                    <CircleCheckBig className="size-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+                    <span>Result</span>
+                  </button>
+                )}
+
+                {/* Segment: Logs Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setIsLogsOpen(!isLogsOpen)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all",
+                    isLogsOpen
+                      ? "bg-zinc-800/90 text-zinc-100"
+                      : "text-zinc-400 hover:bg-zinc-900/90 hover:text-zinc-200"
+                  )}
+                  title="Toggle Execution Logs"
+                >
+                  <Terminal className="size-3.5" />
+                  <span>Logs</span>
+                  {logs.length > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+                      {logs.length}
+                    </span>
+                  )}
+                </button>
               </div>
-              {logs.length > 0 && (
-                <div className="bg-black/90 text-green-400 p-2 text-xs overflow-auto font-mono rounded shadow-lg max-h-64 border border-zinc-800">
-                  {logs.map((l, i) => (
-                    <div key={i}>{l}</div>
-                  ))}
+
+              {/* Execution Logs Drawer (drops down under the split controller) */}
+              {isLogsOpen && logs.length > 0 && (
+                <div className="w-80 bg-zinc-950/95 text-emerald-400 p-2.5 text-xs overflow-auto font-mono rounded-xl shadow-2xl border border-zinc-800/90 max-h-64 backdrop-blur-md animate-in fade-in-50 slide-in-from-top-2 duration-150">
+                  <div className="text-[10px] uppercase font-bold text-zinc-500 mb-1.5 tracking-wider flex items-center justify-between border-b border-zinc-800/80 pb-1">
+                    <div className="flex items-center gap-1.5 text-zinc-400">
+                      <Terminal className="size-3" />
+                      <span>Console Logs</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-zinc-500 font-mono">{logs.length} lines</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsLogsOpen(false)}
+                        className="text-zinc-500 hover:text-zinc-300 text-xs px-1 hover:bg-zinc-800 rounded transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-0.5">
+                    {logs.map((l, i) => (
+                      <div key={i} className="leading-relaxed break-words font-mono">{l}</div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -573,11 +660,11 @@ export function ExecutionsMain() {
                 .map(([key, def]: [string, any]) => (
                   <div key={key} className="flex flex-col gap-1">
                     <label className="text-sm font-medium text-foreground">
-                      User Prompt
+                      User Prompt {def.required ? "" : "(Optional)"}
                     </label>
                     <Textarea
                       placeholder={
-                        def.description || "What should the agent do?"
+                        def.description || "What should the agent do? (Leave blank to use pre-configured defaults)"
                       }
                       value={runInputs[key] || ""}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
@@ -589,7 +676,7 @@ export function ExecutionsMain() {
                       className="min-h-[100px]"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      {def.description}
+                      {def.description || (def.required ? "Required input to trigger the flow." : "Optional input. If omitted, the workflow will run with its pre-configured parameters.")}
                     </p>
                   </div>
                 ))}
@@ -604,7 +691,7 @@ export function ExecutionsMain() {
             <Button variant="outline" onClick={() => setIsRunModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleRun}>Run</Button>
+            <Button onClick={() => handleRun()}>Run</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -615,7 +702,7 @@ export function ExecutionsMain() {
         onClose={() => setIsResultSidebarOpen(false)}
         data={executionResult}
         executionName={executions.find((e) => String(e.id) === activeExecutionId)?.name}
-        onRunAgain={handleOpenRunModal}
+        onRunAgain={handleRunClick}
       />
     </div>
   );

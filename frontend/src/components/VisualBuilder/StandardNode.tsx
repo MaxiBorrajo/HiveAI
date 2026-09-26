@@ -51,6 +51,7 @@ function getToolIcon(toolName: string) {
 }
 
 export function StandardNode({
+  id,
   data,
   selected,
 }: {
@@ -98,7 +99,7 @@ export function StandardNode({
         return {
           bg: "bg-rose-500/10 border-b border-rose-500/20 text-rose-400",
           icon: <Flag className="size-3.5" />,
-          label: "TERMINAL END",
+          label: "END NODE",
         };
       case "plugin":
         return {
@@ -177,8 +178,8 @@ export function StandardNode({
             <h4 className="font-semibold text-xs text-zinc-100 tracking-tight leading-snug">
               {data.name}
             </h4>
-            <span className="text-[10px] text-zinc-300 font-mono">
-              ID: {data.type === "llm" ? "agent_node" : data.type}
+            <span className="text-[10px] text-zinc-400 font-mono">
+              ID: {id}
             </span>
           </div>
 

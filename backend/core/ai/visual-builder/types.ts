@@ -2,10 +2,10 @@
 // 1. STATE & REDUCERS
 // ==========================================
 export type ReducerStrategy =
-  | "overwrite" // Reemplaza el viejo por el nuevo (Por defecto)
-  | "append" // Agrega al final de un array
-  | "prepend" // Agrega al inicio de un array
-  | "unique_append" // Agrega al array solo si no existe
+  | "overwrite" // Overwrites old with new (default)
+  | "append" // Appends to the end of an array
+  | "prepend" // Prepends to the start of an array
+  | "unique_append" // Appends to array only if not already present
   | "merge_dict" // Object.assign(old, new)
   | "sum" // old + new
   | "subtract" // old - new
@@ -28,29 +28,29 @@ export interface StatePropertyDefinition {
   required: boolean;
   default?: any;
 
-  // Soporte para anidamiento y colecciones
-  properties?: Record<string, StatePropertyDefinition>; // Si type === 'object'
-  items?: StatePropertyDefinition; // Si type === 'array'
-  options?: string[]; // Si type === 'enum'
+  // Support for nesting and collections
+  properties?: Record<string, StatePropertyDefinition>; // If type === 'object'
+  items?: StatePropertyDefinition; // If type === 'array'
+  options?: string[]; // If type === 'enum'
 
-  // La estrategia del reducer. Si no se envía, se asume 'overwrite'
+  // Reducer strategy. If omitted, 'overwrite' is assumed
   reducerStrategy?: ReducerStrategy;
 }
 
 // ==========================================
-// 2. NODOS
+// 2. NODES
 // ==========================================
 export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
 
 export interface GraphNode {
-  id: string; // ID interno (ej. "node_123")
-  name: string; // Etiqueta visual (ej. "Analista IA")
+  id: string; // Internal ID (e.g. "node_123")
+  name: string; // Visual label (e.g. "AI Analyst")
   type: NodeType;
 
-  // Posición para renderizar en React Flow
+  // Render position for React Flow
   uiPosition?: { x: number; y: number };
 
-  config: Record<string, unknown>; // Configuración dinámica para el plugin/función
+  config: Record<string, unknown>; // Dynamic configuration for plugin/function
 }
 
 export type NodeExecutorFunction = (
@@ -65,52 +65,90 @@ export interface ToolProvider {
 }
 
 // ==========================================
-// 3. CONEXIONES (EDGES) Y CONDICIONES
+// 3. EDGES & CONDITIONS
 // ==========================================
 export type ConditionOperator =
-  // Igualdad
+  // Equality
   | "equals"
   | "not_equals"
-  // Matemáticos
+  // Mathematical
   | "greater_than"
   | "greater_than_or_equals"
   | "less_than"
   | "less_than_or_equals"
-  // Strings / Colecciones
+  // Strings / Collections
   | "contains"
   | "not_contains"
   | "starts_with"
   | "ends_with"
-  // Existencia
+  // Existence
   | "is_empty"
   | "is_not_empty"
-  // Listas
+  // Lists
   | "in"
   | "not_in"
-  // Avanzado
+  // Advanced
   | "regex_match";
 
 export interface GraphEdge {
-  id: string; // ID de la conexión (ej. "edge_1")
-  source: string; // ID del nodo de origen
-  target: string;
-  path?: "true" | "false"; // Used if source is a condition node // ID del nodo de destino (o "__end__")
+  id: string; // Connection ID (e.g. "edge_1")
+  source: string; // Source node ID
+  target: string; // Target node ID (or "__end__")
+  path?: "true" | "false"; // Used if source is a condition node
 
   isConditional: boolean;
 
-  // La regla se evalúa SOLO si isConditional === true
+  // Rule is evaluated ONLY if isConditional === true
   condition?: {
-    field: string; // Ruta en el estado (ej. "evaluacion.score" o "messages")
+    field: string; // Path in state (e.g. "evaluation.score" or "messages")
     operator: ConditionOperator;
-    value: unknown; // Valor estático contra el que se compara
+    value: unknown; // Static value to compare against
   };
 }
 
 // ==========================================
-// 4. EL ROOT DEL JSON
+// 4. ROOT JSON
 // ==========================================
 export interface LangGraphAbstraction {
   nodes: GraphNode[];
   edges: GraphEdge[];
   stateSchema: Record<string, StatePropertyDefinition>;
 }
+
+// ==========================================
+// 5. EXECUTION RESULTS & DELIVERABLES
+// ==========================================
+export type ExecutionResultType =
+  // Documentos y Archivos
+  | "file"
+  | "markdown"
+  | "text"
+  // Datos y Analítica
+  | "table"
+  | "chart"
+  | "json"
+  // Multimedia y Web
+  | "image"
+  | "html"
+  | "url"
+  // Operaciones y Lógica
+  | "terminal"
+  | "boolean"
+  | "error";
+
+export interface ExecutionFileArtifact {
+  name: string;
+  path: string;
+  size?: number;
+  mimeType?: string;
+}
+
+export interface ExecutionResult {
+  type: ExecutionResultType;
+  summary: string;
+  content: any;
+  files?: ExecutionFileArtifact[];
+  metadata?: Record<string, any>;
+}
+
+

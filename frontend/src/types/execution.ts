@@ -73,3 +73,37 @@ export interface ExecutionDetails {
     createdAt: number;
   } | null;
 }
+
+export type ExecutionResultType =
+  // Documentos y Archivos
+  | "file"
+  | "markdown"
+  | "text"
+  // Datos y Analítica
+  | "table"
+  | "chart"
+  | "json"
+  // Multimedia y Web
+  | "image"
+  | "html"
+  | "url"
+  // Operaciones y Lógica
+  | "terminal"
+  | "boolean"
+  | "error";
+
+export interface ExecutionFileArtifact {
+  name: string;
+  path: string;
+  size?: number;
+  mimeType?: string;
+}
+
+export interface ExecutionResult {
+  type: ExecutionResultType;
+  summary: string;
+  content: any;
+  files?: ExecutionFileArtifact[];
+  metadata?: Record<string, any>;
+}
+

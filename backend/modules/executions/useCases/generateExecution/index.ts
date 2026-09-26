@@ -51,10 +51,24 @@ export async function generateExecution(
           `[Executions Generator] Prompt: "${content.length > 100 ? content.slice(0, 97) + "..." : content}"`,
         );
 
-        const availablePlugins = hive.getTools().map((t) => ({
-          name: t.name,
-          description: t.description,
-        }));
+        const availablePlugins = hive.getTools().map((t) => {
+          const plugin = hive.getPlugin(t.name);
+          let parametersDescription = "";
+          if (plugin && (plugin.schema as any)?.shape) {
+            const shape = (plugin.schema as any).shape;
+            parametersDescription = Object.entries(shape)
+              .map(([k, v]: [string, any]) => {
+                const isOpt = v.safeParse?.(undefined)?.success ?? false;
+                return `${k} (${isOpt ? "optional" : "REQUIRED"}${v.description ? `: ${v.description}` : ""})`;
+              })
+              .join("; ");
+          }
+          return {
+            name: t.name,
+            description: t.description,
+            parametersDescription,
+          };
+        });
 
         const repo = new ExecutionRepository(db);
         let currentGraph: LangGraphAbstraction | undefined = undefined;

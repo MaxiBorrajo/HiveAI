@@ -21,7 +21,7 @@ export const ChatMessage = memo(function ChatMessage({
             variant="ghost"
             size="icon-sm"
             className="absolute -top-1 right-0 opacity-0 transition-opacity group-hover/message:opacity-100 data-open:opacity-100"
-            title="Ver pasos"
+            title="View steps"
             onClick={() => setStepsOpen(true)}
           >
             <ListTreeIcon className="size-3.5" />
@@ -49,7 +49,7 @@ export const ChatMessage = memo(function ChatMessage({
             })}
           </span>
           {!!message.usedTools?.length && (
-            <span>· se usó {message.usedTools.join(", ")}</span>
+            <span>· used {message.usedTools.join(", ")}</span>
           )}
         </div>
         {!!message.steps?.length && (
