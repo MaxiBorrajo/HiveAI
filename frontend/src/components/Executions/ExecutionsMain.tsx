@@ -16,23 +16,37 @@ import type { LangGraphAbstraction } from "../../types/execution";
 import { getExecution } from "../../lib/executions/getExecution";
 import { generateExecutionStream } from "../../lib/executions/generateExecution";
 import { API_URL } from "../../lib/config";
+import {
+  ExecutionResultSidebar,
+  type ExecutionResultData,
+} from "./ExecutionResultSidebar";
 
 export function ExecutionsMain() {
-  const { activeExecutionId, onExecutionCreated, newExecutionToken } = useExecutions();
+  const {
+    executions,
+    activeExecutionId,
+    onExecutionCreated,
+    newExecutionToken,
+  } = useExecutions();
   const [input, setInput] = useState("");
 
   const key = activeExecutionId || newExecutionToken;
   const justCreatedIdRef = React.useRef<string | null>(null);
 
   const [isThinkingMap, setIsThinkingMap] = useState<Record<string, boolean>>({});
+  const [isRunningMap, setIsRunningMap] = useState<Record<string, boolean>>({});
   const [graphMap, setGraphMap] = useState<Record<string, LangGraphAbstraction | null>>({});
   const [activeNodeIdMap, setActiveNodeIdMap] = useState<Record<string, string | undefined>>({});
   const [selectedNodeIdMap, setSelectedNodeIdMap] = useState<Record<string, string | null>>({});
   const [selectedEdgeIdMap, setSelectedEdgeIdMap] = useState<Record<string, string | null>>({});
   const [planningThoughtMap, setPlanningThoughtMap] = useState<Record<string, string | null>>({});
   const [logsMap, setLogsMap] = useState<Record<string, string[]>>({});
+  const [executionResultMap, setExecutionResultMap] = useState<Record<string, ExecutionResultData | null>>({});
+  const [activeStatusMessageMap, setActiveStatusMessageMap] = useState<Record<string, string | null>>({});
+  const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
 
   const isThinking = isThinkingMap[key] || false;
+  const isRunning = isRunningMap[key] || false;
   const graph = graphMap[key] || null;
   const activeNodeId = activeNodeIdMap[key] || undefined;
   const selectedNodeId = selectedNodeIdMap[key] || null;
@@ -40,9 +54,14 @@ export function ExecutionsMain() {
   const setSelectedEdgeId = (id: string | null) => setSelectedEdgeIdMap((prev) => ({ ...prev, [key]: id }));
   const planningThought = planningThoughtMap[key] || null;
   const logs = logsMap[key] || [];
+  const executionResult = executionResultMap[key] || null;
+  const activeStatusMessage = activeStatusMessageMap[key] || null;
 
   const setIsThinking = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
     setIsThinkingMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || false) : val }));
+  };
+  const setIsRunning = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
+    setIsRunningMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || false) : val }));
   };
   const setGraph = (val: LangGraphAbstraction | null | ((prev: LangGraphAbstraction | null) => LangGraphAbstraction | null), targetKey = key) => {
     setGraphMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
@@ -58,6 +77,24 @@ export function ExecutionsMain() {
   };
   const setLogs = (val: string[] | ((prev: string[]) => string[]), targetKey = key) => {
     setLogsMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || []) : val }));
+  };
+  const setExecutionResult = (
+    val: ExecutionResultData | null | ((prev: ExecutionResultData | null) => ExecutionResultData | null),
+    targetKey = key
+  ) => {
+    setExecutionResultMap(prev => ({
+      ...prev,
+      [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val,
+    }));
+  };
+  const setActiveStatusMessage = (
+    val: string | null | ((prev: string | null) => string | null),
+    targetKey = key
+  ) => {
+    setActiveStatusMessageMap(prev => ({
+      ...prev,
+      [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val,
+    }));
   };
 
   // Run Modal State
@@ -86,6 +123,9 @@ export function ExecutionsMain() {
           setGraph(data.graph.graph, activeExecutionId);
         } else {
           setGraph(null, activeExecutionId);
+        }
+        if (data?.lastResult) {
+          setExecutionResult(data.lastResult, activeExecutionId);
         }
         setLogs([], activeExecutionId);
         setSelectedNodeId(null, activeExecutionId);
@@ -123,9 +163,12 @@ export function ExecutionsMain() {
             
             // Move state
             setIsThinkingMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
+            setIsRunningMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setGraphMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setActiveNodeIdMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             setLogsMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
+            setExecutionResultMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
+            setActiveStatusMessageMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
             
             currentKey = newId;
             onExecutionCreated(newId);
@@ -160,8 +203,13 @@ export function ExecutionsMain() {
               `+ Built node: ${node.name} (${node.type})`,
             ], currentKey);
           },
+          onNodeConfiguring: ({ nodeId, nodeName }) => {
+            setActiveNodeIdMap((prev) => ({ ...prev, [currentKey]: nodeId }));
+            setLogs((prev) => [...prev, `⚙️ Configuring node: ${nodeName}...`], currentKey);
+          },
           onNodeUpdated: ({ node, stateProperties }) => {
             setPlanningThought(null, currentKey);
+            setActiveNodeIdMap((prev) => ({ ...prev, [currentKey]: undefined }));
             setGraph((prev) => {
               if (!prev) return prev;
               return {
@@ -173,10 +221,11 @@ export function ExecutionsMain() {
                 },
               };
             }, currentKey);
-            setLogs((prev) => [...prev, `* Node updated: ${node.name}`], currentKey);
+            setLogs((prev) => [...prev, `✨ Configured: ${node.name}`], currentKey);
             setSelectedNodeId(null, activeExecutionId || newExecutionToken);
           },
           onDone: (data) => {
+            setActiveNodeIdMap((prev) => ({ ...prev, [currentKey]: undefined }));
             setPlanningThought(null, currentKey);
             setGraph(data.graph, currentKey);
             setLogs((prev) => [...prev, "✨ Flow assembled successfully!"], currentKey);
@@ -215,7 +264,8 @@ export function ExecutionsMain() {
     if (!activeExecutionId) return;
     const currentKey = activeExecutionId;
     setIsRunModalOpen(false);
-    setIsThinking(true, currentKey);
+    setIsRunning(true, currentKey);
+    setActiveStatusMessage("🚀 Initializing execution...", currentKey);
     setLogs((prev) => [...prev, "--- Starting Execution ---"], currentKey);
 
     // Clean up empty strings from runInputs so we don't override defaults with ""
@@ -236,57 +286,86 @@ export function ExecutionsMain() {
         },
       );
 
-      if (!res.body) throw new Error("No body");
+      if (!res.body) throw new Error("No response body received from server");
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
 
       let done = false;
+      let currentEvent = "";
+      let buffer = "";
+
       while (!done) {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         if (value) {
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              const eventName = line.replace("event: ", "").trim();
-              if (
-                eventName.startsWith("on_node_start") ||
-                eventName.startsWith("on_chat_model_start")
-              ) {
-                // handle logic
-              }
-            } else if (line.startsWith("data: ")) {
-              const dataStr = line.replace("data: ", "").trim();
-              if (!dataStr) continue;
-              const data = JSON.parse(dataStr);
-              setLogs((prev) => [
-                ...prev,
-                `[${data.event}] ${data.name || ""}`,
-              ], currentKey);
+          buffer += decoder.decode(value, { stream: !doneReading });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
-              if (
-                data.event === "on_chain_start" &&
-                data.name &&
-                data.name !== "LangGraph"
-              ) {
-                setActiveNodeId(data.name, currentKey);
-              } else if (
-                data.event === "on_chain_end" &&
-                data.name &&
-                data.name === activeNodeId
-              ) {
-                // Keep the last active node visible briefly or let the next chain_start override it
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("event: ")) {
+              currentEvent = trimmed.replace("event: ", "").trim();
+            } else if (trimmed.startsWith("data: ")) {
+              const dataStr = trimmed.replace("data: ", "").trim();
+              if (!dataStr) continue;
+              let data: any;
+              try {
+                data = JSON.parse(dataStr);
+              } catch (_) {
+                continue;
+              }
+
+              if (currentEvent === "done" || data.result !== undefined) {
+                const resultData: ExecutionResultData = {
+                  iteration: data.iteration || 1,
+                  result: data.result,
+                  finalState: data.finalState,
+                  createdAt: Date.now(),
+                };
+                setExecutionResult(resultData, currentKey);
+                setIsResultSidebarOpen(true);
+                setActiveStatusMessage(null, currentKey);
+                setLogs((prev) => [
+                  ...prev,
+                  `✅ Execution completed (iteration #${data.iteration || 1})`,
+                ], currentKey);
+              } else if (currentEvent === "error") {
+                setActiveStatusMessage(null, currentKey);
+                setLogs((prev) => [
+                  ...prev,
+                  `❌ Execution error: ${data.error || "Unknown error"}`,
+                ], currentKey);
+              } else {
+                const evtType = data.event || currentEvent;
+                const nodeName =
+                  data.metadata?.langgraph_node ||
+                  (data.name && data.name !== "LangGraph" ? data.name : null);
+
+                if (evtType === "on_chain_start" && nodeName) {
+                  setActiveNodeId(nodeName, currentKey);
+                  setActiveStatusMessage(`⚡ Running node: ${nodeName}`, currentKey);
+                  setLogs((prev) => [...prev, `⚡ [start] Node: ${nodeName}`], currentKey);
+                } else if (evtType === "on_tool_start") {
+                  setActiveStatusMessage(`🔧 Tool: ${data.name || "running"}...`, currentKey);
+                  setLogs((prev) => [...prev, `🔧 [tool] ${data.name}`], currentKey);
+                } else if (evtType === "on_chat_model_start") {
+                  setActiveStatusMessage(`🧠 Reasoning with AI model...`, currentKey);
+                } else if (evtType === "on_tool_end") {
+                  setLogs((prev) => [...prev, `✓ [tool done] ${data.name || ""}`], currentKey);
+                }
               }
             }
           }
         }
       }
     } catch (e: any) {
+      setLogs((prev) => [...prev, `❌ Run error: ${e.message}`], currentKey);
       alert("Stream error: " + e.message);
     } finally {
-      setIsThinking(false, currentKey);
+      setIsRunning(false, currentKey);
       setActiveNodeId(undefined, currentKey);
+      setActiveStatusMessage(null, currentKey);
     }
   };
 
@@ -323,18 +402,37 @@ export function ExecutionsMain() {
             )}
           </div>
 
-          {/* Floating panel for Run/Logs (when not empty) */}
+          {/* Live Execution Status Banner (top center) */}
+          {isRunning && activeStatusMessage && (
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-2.5 px-4 py-2 rounded-full bg-background/95 border border-emerald-500/50 shadow-2xl backdrop-blur-md text-sm font-medium animate-pulse">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+              <span className="text-foreground">{activeStatusMessage}</span>
+            </div>
+          )}
 
-          {(!isEmpty || isThinking) && (
+          {/* Floating panel for Run/Logs (when not empty) */}
+          {(!isEmpty || isThinking || isRunning) && (
             <div className="absolute top-6 right-6 w-80 flex flex-col gap-2 pointer-events-auto max-h-[calc(100vh-200px)]">
-              <Button
-                onClick={handleOpenRunModal}
-                disabled={isThinking}
-                variant="default"
-                className="shadow-lg"
-              >
-                ▶ Run Execution
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleOpenRunModal}
+                  disabled={isThinking || isRunning}
+                  variant="default"
+                  className="flex-1 shadow-lg"
+                >
+                  {isRunning ? "⏳ Running..." : "▶ Run Execution"}
+                </Button>
+                {executionResult && (
+                  <Button
+                    onClick={() => setIsResultSidebarOpen(true)}
+                    variant="outline"
+                    className="shadow-lg border-primary/40 hover:border-primary/70 bg-background/90 text-primary font-medium"
+                    title="View Deliverable & State"
+                  >
+                    📊 Deliverable
+                  </Button>
+                )}
+              </div>
               {logs.length > 0 && (
                 <div className="bg-black/90 text-green-400 p-2 text-xs overflow-auto font-mono rounded shadow-lg max-h-64 border border-zinc-800">
                   {logs.map((l, i) => (
@@ -499,6 +597,15 @@ export function ExecutionsMain() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Execution Deliverable / Result Slide-Over Sidebar */}
+      <ExecutionResultSidebar
+        isOpen={isResultSidebarOpen}
+        onClose={() => setIsResultSidebarOpen(false)}
+        data={executionResult}
+        executionName={executions.find((e) => String(e.id) === activeExecutionId)?.name}
+        onRunAgain={handleOpenRunModal}
+      />
     </div>
   );
 }

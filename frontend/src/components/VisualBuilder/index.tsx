@@ -92,7 +92,8 @@ export function VisualBuilder({
     const rfNodes: Node[] = currentNodes.map((n) => {
       const isSelected = selectedNodeId === n.id;
       const isActive = activeNodeId === n.id;
-      const isUpdating = isGenerating && isSelected;
+      const isUpdating = (activeNodeId === n.id && isGenerating) || (isGenerating && isSelected);
+      const isExecuting = activeNodeId === n.id && !isGenerating;
 
       if (n.type === "condition") {
         return {
@@ -104,22 +105,30 @@ export function VisualBuilder({
             config: n.config,
             isActive,
             isUpdating,
+            isExecuting,
             isSelected,
           },
           style: {
             width: 110,
             height: 110,
-            zIndex: isSelected || isUpdating ? 10 : 1,
+            zIndex: isSelected || isUpdating || isExecuting ? 10 : 1,
           },
         };
       }
 
       let borderColor = "var(--border, #3f3f46)";
       let boxShadow = "none";
-      // Lighter background for better contrast against #050403
       let bgColor = "var(--muted, #27272a)";
 
-      if (isActive || isUpdating) {
+      if (isUpdating) {
+        borderColor = "#f59e0b";
+        boxShadow = "0 0 20px rgba(245, 158, 11, 0.65)";
+        bgColor = "rgba(245, 158, 11, 0.15)";
+      } else if (isExecuting) {
+        borderColor = "#10b981";
+        boxShadow = "0 0 24px rgba(16, 185, 129, 0.75)";
+        bgColor = "rgba(16, 185, 129, 0.15)";
+      } else if (isActive) {
         borderColor = "var(--primary)";
         boxShadow = "0 0 14px var(--primary)";
         bgColor = "var(--secondary, #3f3f46)";
@@ -129,6 +138,12 @@ export function VisualBuilder({
         bgColor = "var(--secondary, #3f3f46)";
       }
 
+      const plugins = Array.isArray(n.config?.plugins)
+        ? (n.config.plugins as string[])
+        : [];
+      const hasTools = n.type === "llm" && plugins.length > 0;
+      const isPlugin = n.type === "plugin" && n.config?.pluginId;
+
       return {
         id: n.id,
         position: { x: 0, y: 0 },
@@ -136,18 +151,46 @@ export function VisualBuilder({
         targetPosition: Position.Left,
         data: {
           label: (
-            <div className="flex flex-col text-left">
+            <div className="flex flex-col text-left gap-1">
               <div className="flex items-center gap-1.5">
                 {isUpdating && (
-                  <span className="size-2 rounded-full bg-primary animate-ping shrink-0" />
+                  <span className="size-2 rounded-full bg-amber-400 animate-ping shrink-0" />
                 )}
-                <span className="font-medium text-xs text-zinc-100">
+                {isExecuting && (
+                  <span className="size-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                )}
+                <span className="font-medium text-xs text-zinc-100 truncate">
                   {n.name}
                 </span>
               </div>
-              <span className="text-[10px] text-zinc-400 capitalize">
-                {isUpdating ? "Updating..." : n.type}
-              </span>
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] text-zinc-400 capitalize">
+                  {isUpdating
+                    ? "Updating..."
+                    : isExecuting
+                      ? "Executing..."
+                      : hasTools
+                        ? "AI Agent"
+                        : n.type}
+                </span>
+                {isPlugin && (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono">
+                    🔧 {String(n.config.pluginId)}
+                  </span>
+                )}
+              </div>
+              {hasTools && (
+                <div className="flex gap-1 flex-wrap mt-0.5">
+                  {plugins.map((p) => (
+                    <span
+                      key={p}
+                      className="px-1 py-0.5 rounded text-[8.5px] bg-amber-500/15 text-amber-300 border border-amber-500/25 font-mono"
+                    >
+                      ⚡{p}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ),
         },
@@ -157,7 +200,8 @@ export function VisualBuilder({
           padding: "8px 12px",
           borderRadius: 8,
           color: "#fafafa",
-          width: 170,
+          minWidth: 170,
+          maxWidth: 220,
           cursor: "pointer",
           boxShadow,
           transition: "all 0.2s ease-in-out",

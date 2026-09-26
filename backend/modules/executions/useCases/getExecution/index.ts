@@ -36,7 +36,37 @@ export async function getExecution(
       }
     }
 
-    return ResponseBuilder.success({ execution, graph }, { headers });
+    let lastResult = null;
+    if (execution.lastResultId) {
+      const dbHistory = await repo.findHistoryById(execution.lastResultId);
+      if (dbHistory) {
+        let parsedResult: any = dbHistory.result;
+        if (typeof dbHistory.result === "string") {
+          try {
+            parsedResult = JSON.parse(dbHistory.result);
+          } catch (_) {}
+        }
+        lastResult = {
+          id: dbHistory.id,
+          executionId: dbHistory.executionId,
+          iteration: dbHistory.iteration,
+          result:
+            parsedResult && typeof parsedResult === "object" && "result" in parsedResult
+              ? parsedResult.result
+              : parsedResult,
+          finalState:
+            parsedResult && typeof parsedResult === "object" && "finalState" in parsedResult
+              ? parsedResult.finalState
+              : (typeof parsedResult === "object" ? parsedResult : undefined),
+          createdAt: dbHistory.createdAt,
+        };
+      }
+    }
+
+    return ResponseBuilder.success(
+      { execution, graph, lastResult },
+      { headers },
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return ResponseBuilder.error(

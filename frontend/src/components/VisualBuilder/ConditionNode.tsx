@@ -12,6 +12,7 @@ export interface ConditionNodeData {
   };
   isActive?: boolean;
   isUpdating?: boolean;
+  isExecuting?: boolean;
   isSelected?: boolean;
 }
 
@@ -60,12 +61,21 @@ export function ConditionNode({
   const isSelected = selected || data.isSelected;
   const isActive = data.isActive;
   const isUpdating = data.isUpdating;
+  const isExecuting = data.isExecuting || (isActive && !isUpdating);
 
   let borderColor = "var(--border, #3f3f46)";
   let boxShadow = "none";
   let bgColor = "var(--muted, #27272a)";
 
-  if (isActive || isUpdating) {
+  if (isUpdating) {
+    borderColor = "#f59e0b";
+    boxShadow = "0 0 20px rgba(245, 158, 11, 0.7)";
+    bgColor = "rgba(245, 158, 11, 0.15)";
+  } else if (isExecuting) {
+    borderColor = "#10b981";
+    boxShadow = "0 0 24px rgba(16, 185, 129, 0.75)";
+    bgColor = "rgba(16, 185, 129, 0.15)";
+  } else if (isActive) {
     borderColor = "var(--primary)";
     boxShadow = "0 0 14px var(--primary)";
     bgColor = "var(--secondary, #3f3f46)";
@@ -132,7 +142,10 @@ export function ConditionNode({
       {/* Center content - strictly horizontal, never rotated */}
       <div className="relative z-10 flex flex-col items-center justify-center text-center p-1 max-w-[70px] pointer-events-none">
         {isUpdating && (
-          <span className="size-2 rounded-full bg-primary animate-ping shrink-0 mb-1" />
+          <span className="size-2 rounded-full bg-amber-400 animate-ping shrink-0 mb-1" />
+        )}
+        {isExecuting && (
+          <span className="size-2 rounded-full bg-emerald-400 animate-ping shrink-0 mb-1" />
         )}
         <span className="text-[11px] font-medium text-foreground leading-tight line-clamp-2">
           {data.name || "Condition"}

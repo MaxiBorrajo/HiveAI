@@ -132,27 +132,55 @@ export async function runExecution(
           const events = await app.streamEvents(inputState || {}, {
             version: "v2",
           });
-          let finalState = {};
+          let finalState: Record<string, any> = {};
 
           for await (const event of events) {
             send(event.event, event);
             if (event.event === "on_chain_end" && event.name === "LangGraph") {
-              finalState = event.data.output;
+              finalState = event.data.output || {};
             }
           }
 
-          // Save history
+          // Guarantee state.result is always populated and standardized
+          if (finalState.result === undefined) {
+            const skipKeys = new Set(["input", "messages", "feedback", "attempts", "model"]);
+            const candidateKey =
+              Object.keys(finalState).find(
+                (k) => !skipKeys.has(k) && typeof finalState[k] !== "boolean",
+              ) || Object.keys(finalState).find((k) => !skipKeys.has(k));
+
+            if (candidateKey) {
+              finalState.result = finalState[candidateKey];
+            } else {
+              finalState.result = "Workflow executed successfully.";
+            }
+          }
+
+          const iterationCount = await repo.countHistories(id);
+          const currentIteration = iterationCount + 1;
+
+          // Save history record with both deliverable result and complete finalState
+          const historyPayload = {
+            result: finalState.result,
+            finalState,
+          };
+
           const historyRecord = await repo.createHistory({
             executionId: id,
-            iteration: 1, // We could count previous iterations
-            result: JSON.stringify(finalState),
+            iteration: currentIteration,
+            result: JSON.stringify(historyPayload),
             version: graphRecord.id,
             createdAt: Date.now(),
           });
 
           await repo.update(id, { lastResultId: historyRecord.id });
 
-          send("done", { historyId: historyRecord.id });
+          send("done", {
+            historyId: historyRecord.id,
+            iteration: currentIteration,
+            result: finalState.result,
+            finalState,
+          });
           controller.close();
         } catch (err: any) {
           send("error", { error: err.message });

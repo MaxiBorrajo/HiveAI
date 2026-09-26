@@ -66,5 +66,21 @@ export class ExecutionRepository {
       .returning();
     return result;
   }
+
+  async countHistories(executionId: number): Promise<number> {
+    const records = await this.db
+      .select()
+      .from(executionHistory)
+      .where(eq(executionHistory.executionId, executionId));
+    return records.length;
+  }
+
+  async findHistoryById(id: number): Promise<ExecutionHistory | undefined> {
+    const [history] = await this.db
+      .select()
+      .from(executionHistory)
+      .where(eq(executionHistory.id, id));
+    return history;
+  }
 }
 

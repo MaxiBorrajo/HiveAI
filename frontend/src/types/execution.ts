@@ -55,3 +55,21 @@ export interface ExecutionSummary {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface ExecutionDetails {
+  execution: any;
+  graph?: {
+    id: number;
+    graph: LangGraphAbstraction;
+    state: any;
+    createdAt: number;
+  };
+  lastResult?: {
+    id: number;
+    executionId: number;
+    iteration: number;
+    result: any;
+    finalState?: Record<string, any>;
+    createdAt: number;
+  } | null;
+}

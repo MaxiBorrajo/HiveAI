@@ -98,6 +98,40 @@ export function evaluateCondition(
   operator: ConditionOperator,
   targetValue: unknown,
 ): boolean {
+  // If targetValue is boolean, ensure strictly typed boolean equality
+  if (typeof targetValue === "boolean") {
+    const fieldBool =
+      typeof fieldValue === "boolean"
+        ? fieldValue
+        : typeof fieldValue === "string"
+          ? fieldValue.trim().toLowerCase() === "true"
+          : Boolean(fieldValue);
+    if (operator === "equals") return fieldBool === targetValue;
+    if (operator === "not_equals") return fieldBool !== targetValue;
+    return false;
+  }
+
+  // If targetValue is number, ensure strictly typed numeric comparisons
+  if (typeof targetValue === "number") {
+    const fieldNum =
+      typeof fieldValue === "number" ? fieldValue : Number(fieldValue);
+    if (Number.isNaN(fieldNum)) return false;
+    switch (operator) {
+      case "equals":
+        return fieldNum === targetValue;
+      case "not_equals":
+        return fieldNum !== targetValue;
+      case "greater_than":
+        return fieldNum > targetValue;
+      case "greater_than_or_equals":
+        return fieldNum >= targetValue;
+      case "less_than":
+        return fieldNum < targetValue;
+      case "less_than_or_equals":
+        return fieldNum <= targetValue;
+    }
+  }
+
   switch (operator) {
     case "equals":
       return fieldValue === targetValue;

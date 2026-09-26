@@ -24,6 +24,7 @@ export type DataType =
 export interface StatePropertyDefinition {
   name?: string; // Not strictly required in properties object if used as a record value
   type: DataType;
+  description?: string;
   required: boolean;
   default?: any;
 

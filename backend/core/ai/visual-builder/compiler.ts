@@ -1,4 +1,6 @@
 import { StateGraph, ReducedValue, START, END } from "@langchain/langgraph";
+import { ChatOllama } from "@langchain/ollama";
+import { HumanMessage } from "@langchain/core/messages";
 import {
   LangGraphAbstraction,
   GraphEdge,
@@ -13,6 +15,7 @@ import {
   buildPromptMessages,
   mapResponseToState,
   handleLlmError,
+  executeLlmNode,
 } from "./llm-executor.ts";
 
 export function buildStateSchema(
@@ -85,26 +88,78 @@ export function compileGraph(
 
     if (node.type === "llm") {
       nodeRunnable = async (state: Record<string, unknown>) => {
-        try {
-          // 1. Preparamos el LLM
-          const llm = buildLlmInstance(node.id, node.config, toolProvider);
-
-          // 2. Preparamos los mensajes
-          const messages = buildPromptMessages(state, node.config);
-
-          // 3. Ejecutamos
-          const response = await llm.invoke(messages);
-
-          // 4. Mapeamos la salida al estado
-          return mapResponseToState(response, node.config, state);
-        } catch (err: unknown) {
-          return handleLlmError(err, node.id, node.config);
-        }
+        return executeLlmNode(node.id, node.config, state, toolProvider);
       };
     } else if (node.type === "condition") {
-      // Condition nodes are decision gateways; they pass state through without mutation
-      nodeRunnable = async (_state: Record<string, unknown>) => {
-        return {};
+      // Condition nodes are decision gateways with intelligent fallback evaluation
+      nodeRunnable = async (state: Record<string, unknown>) => {
+        const cond = node.config?.condition as any;
+        if (!cond || !cond.field) return {};
+
+        const fieldParts = cond.field.split(".");
+        let fieldValue: unknown = state;
+        for (const part of fieldParts) {
+          fieldValue = (fieldValue as Record<string, unknown>)?.[part];
+        }
+
+        // If field already exists in state, pass through
+        if (fieldValue !== undefined) {
+          return {};
+        }
+
+        // Semantic evaluator: If field is missing, evaluate contextually with Ollama
+        try {
+          const modelName =
+            (node.config?.model as string) ||
+            (state.model as string) ||
+            "qwen2.5:latest";
+
+          const llm = new ChatOllama({ model: modelName, temperature: 0 });
+
+          let contextContent = "";
+          if (Array.isArray(state.messages) && state.messages.length > 0) {
+            const lastMsg = state.messages[state.messages.length - 1];
+            contextContent =
+              typeof lastMsg === "string"
+                ? lastMsg
+                : (lastMsg as any)?.content || JSON.stringify(lastMsg);
+          } else if (typeof state.content === "string") {
+            contextContent = state.content;
+          } else if (state.result !== undefined) {
+            contextContent =
+              typeof state.result === "string"
+                ? state.result
+                : JSON.stringify(state.result);
+          } else {
+            contextContent = JSON.stringify(state);
+          }
+
+          const prompt = `Evaluate if the following condition is satisfied based on the provided context.
+Condition: "${node.name}" (${cond.field} ${cond.operator} ${JSON.stringify(cond.value)})
+Context:
+${contextContent.slice(0, 1500)}
+
+Is the condition satisfied?
+Reply with ONLY the word "true" or "false".`;
+
+          const res = await llm.invoke([new HumanMessage(prompt)]);
+          const reply = String(res.content).trim().toLowerCase();
+          const isSatisfied = reply.includes("true");
+
+          let evaluatedValue: unknown = isSatisfied;
+          if (cond.operator === "equals") {
+            evaluatedValue = isSatisfied ? cond.value : !cond.value;
+          }
+
+          console.log(
+            `[Condition Evaluator] Node "${node.id}" evaluated missing field "${cond.field}" ->`,
+            evaluatedValue,
+          );
+          return { [cond.field]: evaluatedValue };
+        } catch (err: unknown) {
+          console.warn(`[Condition Evaluator] Fallback evaluation for ${node.id} failed:`, err);
+          return {};
+        }
       };
     } else {
       const executor =
@@ -139,92 +194,90 @@ export function compileGraph(
   );
 
   for (const edge of abstraction.edges) {
-    if (!edge.isConditional) {
-      normalEdges.push(edge);
-    } else {
-      if (conditionNodesMap.has(edge.source) || edge.isConditional) {
-        if (!conditionalEdgesBySource[edge.source]) {
-          conditionalEdgesBySource[edge.source] = [];
-        }
-        conditionalEdgesBySource[edge.source].push(edge);
-      } else {
-        normalEdges.push(edge);
+    const isFromCondition =
+      conditionNodesMap.has(edge.source) || edge.isConditional || !!edge.path;
+    if (isFromCondition) {
+      if (!conditionalEdgesBySource[edge.source]) {
+        conditionalEdgesBySource[edge.source] = [];
       }
+      conditionalEdgesBySource[edge.source].push(edge);
+    } else {
+      normalEdges.push(edge);
     }
+  }
 
-    for (const edge of normalEdges) {
-      const sourceId = edge.source === "start" ? START : edge.source;
-      const targetId = edge.target === "end" ? END : edge.target;
-      workflow.addEdge(sourceId as any, targetId as any);
-    }
+  for (const edge of normalEdges) {
+    const sourceId = edge.source === "start" ? START : edge.source;
+    const targetId = edge.target === "end" ? END : edge.target;
+    workflow.addEdge(sourceId as any, targetId as any);
+  }
 
-    for (const [source, edges] of Object.entries(conditionalEdgesBySource)) {
-      const sourceId = source === "start" ? START : source;
-      const condNode = conditionNodesMap.get(source);
+  for (const [source, edges] of Object.entries(conditionalEdgesBySource)) {
+    const sourceId = source === "start" ? START : source;
+    const condNode = conditionNodesMap.get(source);
 
-      workflow.addConditionalEdges(
-        sourceId as any,
-        (state: Record<string, unknown>): string => {
-          if (condNode) {
-            const cond = condNode.config?.condition as any;
-            let isMatch = false;
-            if (cond && cond.field) {
-              const fieldParts = cond.field.split(".");
-              let fieldValue: unknown = state;
-              for (const part of fieldParts) {
-                fieldValue = (fieldValue as Record<string, unknown>)?.[part];
-              }
-              isMatch = evaluateCondition(
-                fieldValue,
-                cond.operator,
-                cond.value,
-              );
-            }
-
-            const trueEdge = edges.find((e) => e.path === "true");
-            const falseEdge = edges.find((e) => e.path === "false");
-
-            if (isMatch && trueEdge) {
-              return trueEdge.target === "end" ? END : trueEdge.target;
-            }
-            if (!isMatch && falseEdge) {
-              return falseEdge.target === "end" ? END : falseEdge.target;
-            }
-
-            const fallback = trueEdge || falseEdge || edges[0];
-            return fallback
-              ? fallback.target === "end"
-                ? END
-                : fallback.target
-              : END;
-          }
-
-          for (const edge of edges) {
-            if (!edge.condition) continue;
-
-            const targetId = edge.target === "end" ? END : edge.target;
-
-            const fieldParts = edge.condition.field.split(".");
+    workflow.addConditionalEdges(
+      sourceId as any,
+      (state: Record<string, unknown>): string => {
+        if (condNode) {
+          const cond = condNode.config?.condition as any;
+          let isMatch = false;
+          if (cond && cond.field) {
+            const fieldParts = cond.field.split(".");
             let fieldValue: unknown = state;
             for (const part of fieldParts) {
               fieldValue = (fieldValue as Record<string, unknown>)?.[part];
             }
-
-            const match = evaluateCondition(
+            isMatch = evaluateCondition(
               fieldValue,
-              edge.condition.operator,
-              edge.condition.value,
+              cond.operator,
+              cond.value,
             );
-            if (match) return targetId as string;
           }
 
-          throw new Error(
-            `No matching conditional edge found for source node: ${sourceId}`,
-          );
-        },
-      );
-    }
+          const trueEdge = edges.find((e) => e.path === "true");
+          const falseEdge = edges.find((e) => e.path === "false");
 
-    return workflow.compile();
+          if (isMatch && trueEdge) {
+            return trueEdge.target === "end" ? END : trueEdge.target;
+          }
+          if (!isMatch && falseEdge) {
+            return falseEdge.target === "end" ? END : falseEdge.target;
+          }
+
+          const fallback = trueEdge || falseEdge || edges[0];
+          return fallback
+            ? fallback.target === "end"
+              ? END
+              : fallback.target
+            : END;
+        }
+
+        for (const edge of edges) {
+          if (!edge.condition) continue;
+
+          const targetId = edge.target === "end" ? END : edge.target;
+
+          const fieldParts = edge.condition.field.split(".");
+          let fieldValue: unknown = state;
+          for (const part of fieldParts) {
+            fieldValue = (fieldValue as Record<string, unknown>)?.[part];
+          }
+
+          const match = evaluateCondition(
+            fieldValue,
+            edge.condition.operator,
+            edge.condition.value,
+          );
+          if (match) return targetId as string;
+        }
+
+        throw new Error(
+          `No matching conditional edge found for source node: ${sourceId}`,
+        );
+      },
+    );
   }
+
+  return workflow.compile();
 }

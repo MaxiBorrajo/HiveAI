@@ -22,6 +22,10 @@ export interface GenerateStreamHandlers {
     edge?: GraphEdge;
     stateProperties?: Record<string, StatePropertyDefinition>;
   }) => void;
+  onNodeConfiguring?: (data: {
+    nodeId: string;
+    nodeName: string;
+  }) => void;
   onNodeUpdated?: (data: {
     node: GraphNode;
     stateProperties?: Record<string, StatePropertyDefinition>;
@@ -62,6 +66,8 @@ export async function generateExecutionStream(
       handlers.onPlanning?.(data.thoughts);
     } else if (eventName === "node_added") {
       handlers.onNodeAdded?.(data);
+    } else if (eventName === "node_configuring") {
+      handlers.onNodeConfiguring?.(data);
     } else if (eventName === "node_updated") {
       handlers.onNodeUpdated?.(data);
     } else if (eventName === "node_deleted") {
