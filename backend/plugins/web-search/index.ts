@@ -245,9 +245,11 @@ async function searchSearxng(
 export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
   name = "web_search";
   description =
-    "Searches the web for real-time information. Prefer this tool over your own knowledge when the request is about something that changes over time — even if you believe you already know the answer, since your training data may be outdated. Time markers like 'this year', 'currently', 'latest', 'now', 'today', or any specific year mentioned in the request ALWAYS mean you should search, regardless of how stable or well-known the general topic seems (e.g. 'who won the super bowl THIS YEAR' needs a search even though Super Bowl winners are usually well-documented facts, because 'this year' points to a specific, possibly recent result you may not have). Do NOT search for genuinely timeless questions with no time marker (what a language/concept/technology is, how something works, historical facts from a specific past date). USE CASES: Use the 'search' action for queries requiring up-to-date knowledge, recent news, trivia with time markers, or documentation lookups (e.g., 'who won the game this year', 'latest React docs').";
+    "Searches the web for real-time information and returns a list of results, each containing a title, URL, and a short snippet (a few sentences extracted from the page). IMPORTANT: this tool does NOT fetch or return the full content of any page — it only returns URLs and brief excerpts. If you need to read, analyze, or extract detailed information from a page's content, you must follow up by reading each URL individually with a page-reading tool. Prefer this tool over your own knowledge when the request is about something that changes over time — even if you believe you already know the answer, since your training data may be outdated. Time markers like 'this year', 'currently', 'latest', 'now', 'today', or any specific year mentioned in the request ALWAYS mean you should search. Do NOT search for genuinely timeless questions with no time marker (what a language/concept/technology is, how something works, historical facts from a specific past date).";
 
   schema = searchSchema;
+  returnDescription =
+    "Returns a plain-text list of search results. Each result contains: Title, URL, and Snippet (a short excerpt of a few sentences from the page). Does NOT include the full content of any page — only surface-level metadata and brief excerpts.";
 
   selectionTests: SelectionTestCase<WebSearchSchema>[] = [
     {

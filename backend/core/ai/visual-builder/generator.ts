@@ -24,6 +24,7 @@ export interface PluginInfo {
   parametersDescription?: string;
   parameterKeys?: string[];
   requiredKeys?: string[];
+  returnDescription?: string;
 }
 
 const RESERVED_NODE_NAMES = [
@@ -114,9 +115,9 @@ function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
               "Clear, concise title (e.g. 'Search News', 'Analyze Metrics', 'Is Anomaly Detected?'). DO NOT name 'Start' or 'End'.",
             ),
           type: z
-            .enum(["plugin", "llm", "condition"])
+            .enum(["plugin", "llm", "agent", "condition"])
             .describe(
-              "Node type: 'plugin' for single deterministic tool action (running bash, reading/writing files); 'llm' for cognitive reasoning/transformation OR autonomous agent; 'condition' for if/else routing diamond",
+              "Node type: 'plugin' for a single deterministic tool action; 'llm' for pure cognitive reasoning (no external tools); 'agent' for a goal-driven autonomous agent that combines multiple tools in a dynamic loop to research, explore, or iterate; 'condition' for if/else routing diamond",
             ),
           pluginId: pluginEnum
             .optional()
@@ -127,7 +128,7 @@ function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
             .array(pluginEnum)
             .optional()
             .describe(
-              `ONLY for Autonomous Agent LLM nodes that need an active tool loop. Leave empty for pure reasoning/summarizing LLM nodes. Available: [${pluginNames.join(", ")}]`,
+              `ONLY for 'agent' type nodes. List the tools the agent can invoke autonomously. Available: [${pluginNames.join(", ")}]`,
             ),
           description: z
             .string()
@@ -597,7 +598,7 @@ Available Plugins and their parameter schemas:
 ${availablePlugins
   .map(
     (p) =>
-      `- ${p.name}: ${p.description}\n  Parameters: ${p.parametersDescription || "none"}`,
+      `- ${p.name}: ${p.description}\n  Parameters: ${p.parametersDescription || "none"}${p.returnDescription ? `\n  Returns: ${p.returnDescription}` : ""}`,
   )
   .join("\n")}
 
@@ -611,24 +612,24 @@ CRITICAL ARCHITECTURE RULES & NODE ARCHETYPES:
    - If the workflow begins with an open-ended request or needs to understand dynamic user intent, "start" MUST connect to an "llm" node.
 
 2. Node Archetypes & Purpose:
-   - ARCHETYPE "plugin" (Deterministic Tool Execution):
-     * Use when a step is purely executing a single mechanical tool with known/pre-configured parameters.
-     * Examples: running a command, reading a file from disk, writing content to a file, getting current timestamp.
-     * Control parameters (command, path, operation) MUST be static and pre-configured.
-     * NEVER wrap an atomic tool action in an LLM if no thinking is required (e.g. saving text to a file is an atomic 'plugin' node, NOT an LLM agent!).
-     * NEVER chain two raw plugins directly together if semantic translation, filtering, or decision-making is needed; use an autonomous agent instead.
+   - ARCHETYPE "plugin" (Single Atomic Tool Execution):
+     * Use ONLY when a step executes exactly ONE tool call with fully pre-determined, static parameters.
+     * The tool, the operation, and all its parameters must be completely known before execution — no decisions, no branching, no adaptation.
+     * NEVER use plugin when the step involves more than one tool call, requires evaluating intermediate results, or needs to adapt its next action based on what a tool returned.
+     * NEVER chain two raw plugins directly together if semantic translation, filtering, or decision-making is needed between them; insert an LLM node.
 
-   - ARCHETYPE "llm" (Pure Cognitive Reasoning - NO tools):
+   - ARCHETYPE "llm" (Pure Cognitive Reasoning — NO external tools):
      * Consumes data already present in the state, reasons, and produces new data.
      * Use for analyzing, transforming, synthesizing, evaluating, scoring, or drafting content from the state.
-     * Tools/plugins array MUST be EMPTY. It does NOT invoke external tools, it only thinks and writes to state.
+     * Does NOT invoke any external tool. Only thinks and writes to state.
      * If evaluating before a condition, set outputKey to a score (number), category (string), or approval flag (boolean).
 
-   - ARCHETYPE "llm" with 'plugins' (Autonomous Problem-Solving Agent):
-     * A goal-driven agent with tools that operates in an autonomous loop to explore, inspect, test, fix, or research when actions cannot be statically scripted in advance.
-     * Use when the sequence of tool calls cannot be pre-determined because the next action depends on previous tool observations.
-     * Examples: refactoring code and running tests iteratively, deep web research and multi-link extraction, sysadmin troubleshooting anomalies.
-     * Do NOT use an Autonomous Agent for simple, linear steps that are already broken down into discrete steps (e.g. "run command X, then pass output to LLM to summarize, then save to file Y" is a 3-step pipeline: plugin -> llm -> plugin!).
+   - ARCHETYPE "agent" (Autonomous Multi-Tool Agent):
+     * An agent equipped with tools that operates in a dynamic observe → act → evaluate → act loop.
+     * Use when a step involves multiple related tool actions where the result of one action determines what to do next.
+     * Use when splitting the step into separate nodes would be unnatural or brittle because the internal decision logic is too dynamic to script statically.
+     * Use when the agent needs to retry, refine, or cross-reference across multiple tool outputs before producing a final result.
+     * Do NOT use an agent for a single, fully pre-determined tool call — use a plugin node instead.
 
    - ARCHETYPE "condition" (Control Flow Logic Router):
      * If/else decision diamond evaluating a typed state variable (boolean, number, string).
@@ -695,13 +696,15 @@ CRITICAL ARCHITECTURE AUDIT RULES:
 1. Plugin Identity & Tool Mapping:
    - Plugins MUST be strictly chosen from the registered available plugins: [${Array.from(pluginNames).join(", ")}].
    - Match each plugin node strictly to the available plugin whose description and capability best corresponds to the user's objective and node description.
-   - If the Architect proposed an invented plugin name (e.g. from other tools like n8n or generic aliases), map it to the registered available plugin that provides that capability.
+   - If the Architect proposed an invented plugin name, map it to the registered available plugin that provides that capability.
    - Any cognitive reasoning, analyzing, drafting, or summarizing step MUST be type: "llm", NEVER type: "plugin"!
-   - Never use an LLM agent for an atomic action if an available plugin already provides that exact capability.
 
-2. Pure Reasoning vs Autonomous Agent:
-   - If an LLM node's role is to summarize, analyze, give recommendations, score, or transform data already in the State, ensure its 'plugins' array is EMPTY. It is pure reasoning and does not need tools!
-   - Keep 'plugins' on an LLM ONLY if the step requires an autonomous problem-solving agent with a dynamic loop (e.g. researching the web, searching files & fixing code, iterative debugging).
+2. Node Type Correctness:
+   - "plugin": Use ONLY for exactly ONE tool call with fully pre-determined, static parameters. If the step needs more than one tool call, or if intermediate results influence what to do next, it is NOT a plugin.
+   - "llm": Pure reasoning — consumes state, produces state. NO tool invocation whatsoever.
+   - "agent": Use when a step involves multiple related tool actions where the agent must evaluate intermediate results to decide next actions, when splitting into separate nodes would be unnatural or brittle, or when the agent needs to retry, refine, or cross-reference across tool outputs dynamically.
+   - NEVER classify a step as "llm" if it needs to actively call external tools to complete its goal — use "agent" instead.
+   - NEVER use an "agent" for a single, fully pre-determined tool call — use "plugin" instead.
 
 3. Edge & ID Integrity:
    - Ensure clean, descriptive IDs (e.g. 'execute_check', 'summarize_report', 'save_output_file').
@@ -860,9 +863,11 @@ Return the refined, perfected workflow skeleton.`;
       config:
         nodeType === "plugin"
           ? { pluginId: cleanPluginId }
-          : nodeType === "llm" && cleanPlugins && cleanPlugins.length > 0
+          : nodeType === "agent" && cleanPlugins && cleanPlugins.length > 0
             ? { plugins: cleanPlugins }
-            : {},
+            : nodeType === "llm" && cleanPlugins && cleanPlugins.length > 0
+              ? { plugins: cleanPlugins }
+              : {},
     };
     intermediateNodes.push(node);
     graph.nodes.push(node);
@@ -1225,7 +1230,7 @@ CRITICAL INSTRUCTIONS:
             ? "number"
             : /category|classification|sentiment|status/i.test(outKey)
               ? "string"
-              : feedsIntoCondition
+              : outKey.startsWith("is_") || outKey.endsWith("_valid") || outKey.endsWith("_approved") || outKey.endsWith("_flag")
                 ? "boolean"
                 : "string");
 
@@ -1363,14 +1368,14 @@ Available Plugins in the system and their parameter schemas:
 ${availablePlugins
   .map(
     (p) =>
-      `- "${p.name}": ${p.description}\n  Parameters: ${p.parametersDescription || "None"}`,
+      `- "${p.name}": ${p.description}\n  Parameters: ${p.parametersDescription || "None"}${p.returnDescription ? `\n  Returns: ${p.returnDescription}` : ""}`,
   )
   .join("\n\n")}
 
 Selected Plugin for this node: "${pluginDef.name}"
 Plugin Description: ${pluginDef.description || ""}
 Plugin Required & Optional Parameters:
-${pluginDef.parametersDescription || "None"}
+${pluginDef.parametersDescription || "None"}${pluginDef.returnDescription ? `\nPlugin Output / Returns: ${pluginDef.returnDescription}` : ""}
 
 SYSTEM INVARIANTS:
 - Select and confirm "pluginId" from the available plugins [${Array.from(pluginNames).join(", ")}] that best performs this node's role: "${nodeRole}".
@@ -1671,10 +1676,15 @@ CRITICAL TYPING & FIELD SELECTION RULES:
 
         let condField = config.condition.field;
         const incomingNode = incomingNodes[0];
-        const incomingOutKey = incomingNode?.config?.outputKey as string;
+        const incomingOutKey = incomingNode?.config?.outputKey as string | undefined;
+        const incomingIsLlmOrAgent = incomingNode?.type === "llm" || incomingNode?.type === "agent";
 
-        // If the model selected generic 'result' or mismatched key, remap to the actual outputKey of the preceding node
-        if ((condField === "result" || !graph.stateSchema[condField]) && incomingOutKey) {
+        // Always remap to the actual outputKey of an upstream LLM/agent node:
+        // the LLM configurator already set the field's type in stateSchema, so we trust that.
+        if (incomingIsLlmOrAgent && incomingOutKey && condField !== incomingOutKey) {
+          condField = incomingOutKey;
+        } else if ((condField === "result" || !graph.stateSchema[condField]) && incomingOutKey) {
+          // Fallback: remap generic or unknown fields for any node type
           condField = incomingOutKey;
         }
 

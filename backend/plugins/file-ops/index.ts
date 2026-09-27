@@ -42,6 +42,7 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
     "Performs destructive and constructive filesystem operations (create, write, touch, mkdir, copy, move). USE CASES: Use this when the user explicitly requests to create new files, write code or text to disk, duplicate folders, or reorganize the directory structure. Always prefer this tool over shell commands for simple file manipulation to ensure cross-platform safety. Note: This tool does not support file deletion.";
 
   schema = schema;
+  returnDescription = "Returns a plain-text confirmation message describing the operation performed and its result (e.g. 'File written to /path/to/file.ts' or 'Directory created at /path/to/dir'). Does not return the file content.";
 
   selectionTests: SelectionTestCase<FileOpsSchema>[] = [
     {

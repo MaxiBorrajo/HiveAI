@@ -86,7 +86,7 @@ export function compileGraph(
 
     let nodeRunnable: NodeExecutorFunction;
 
-    if (node.type === "llm") {
+    if (node.type === "llm" || node.type === "agent") {
       nodeRunnable = async (state: Record<string, unknown>) => {
         return executeLlmNode(node.id, node.config, state, toolProvider);
       };

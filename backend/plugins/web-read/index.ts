@@ -186,9 +186,11 @@ async function extractWithJina(url: string): Promise<string | null> {
 export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
   name = "web_read";
   description =
-    "Extracts and reads the text content from a specific URL or webpage. Use this tool when the user provides a specific link and asks you to summarize, translate, or analyze the content of that webpage. Do NOT use this tool to search the web (it cannot search, it only reads exact URLs).";
+    "Fetches and returns the full text content of a specific URL or webpage. Use this tool to read the actual content of a page — for example, to read articles, documentation, or any page whose URL you already know. This is the complement to a web search tool: after a search returns a list of URLs and short snippets, use this tool to read the full content of individual URLs. Returns the complete readable text extracted from the page (titles, paragraphs, article body). Do NOT use this tool to search the web — it cannot discover URLs, it only reads a URL you provide.";
 
   schema = readSchema;
+  returnDescription =
+    "Returns the full readable text content extracted from the page: title, headings, paragraphs, and article body as a single plain-text string. Content can be long (entire articles or documentation pages).";
 
   selectionTests: SelectionTestCase<WebReadSchema>[] = [
     {

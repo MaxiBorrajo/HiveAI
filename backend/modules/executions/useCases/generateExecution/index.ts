@@ -73,6 +73,7 @@ export async function generateExecution(
             parametersDescription,
             parameterKeys,
             requiredKeys,
+            returnDescription: (plugin as any)?.returnDescription as string | undefined,
           };
         });
 

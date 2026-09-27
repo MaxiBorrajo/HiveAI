@@ -57,6 +57,7 @@ export default class FileSearchPlugin implements BeePlugin<FileSearchSchema> {
     "Locates files and folders anywhere in the filesystem by matching partial names. USE CASES: Use this when the user asks to find a lost file, locate where a specific configuration or document is stored, or when you need the exact absolute path of a file before you can read it. It is optimized for substring matching (e.g., use 'config' instead of '*.config'). Do NOT use this tool if you already know the absolute path of the file. It only matches by file/folder name — it cannot tell whether a file was modified, its content, or its version-control status; for anything about a file's history or changes, this tool does not apply.";
 
   schema = schema;
+  returnDescription = "Returns a plain-text list of absolute paths of files and folders whose names match the search term. Each result is one path per line. Returns an empty result or a 'no matches' message if nothing is found.";
 
   selectionTests: SelectionTestCase<FileSearchSchema>[] = [
     {
