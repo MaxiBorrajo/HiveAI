@@ -272,7 +272,7 @@ export function ExecutionsMain() {
               (v) => typeof v === "string" && (v === "input" || v === "${input}" || v.includes("${input}"))
             );
           }
-          if (n.type === "llm") {
+          if (n.type === "llm" || n.type === "agent") {
             const prompt = String(n.config?.systemPrompt || "");
             return prompt.includes("${input}") || prompt.includes("input message") || prompt.includes("input ticket");
           }

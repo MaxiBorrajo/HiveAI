@@ -66,7 +66,8 @@ export function StandardNode({
   const plugins: string[] = Array.isArray(data.config?.plugins)
     ? data.config.plugins
     : [];
-  const hasTools = data.type === "llm" && plugins.length > 0;
+  const hasTools =
+    (data.type === "llm" || data.type === "agent") && plugins.length > 0;
 
   // Auto-expand if the node is actively executing or explicitly selected
   const showTools = isExpanded || isExecuting || isSelected;
@@ -119,6 +120,12 @@ export function StandardNode({
               icon: <Brain className="size-3.5" />,
               label: "LLM REASONER",
             };
+      case "agent":
+        return {
+          bg: "bg-amber-500/15 border-b border-amber-500/25 text-amber-300",
+          icon: <Bot className="size-3.5" />,
+          label: "AUTONOMOUS AGENT",
+        };
       default:
         return {
           bg: "bg-zinc-800/40 border-b border-zinc-700/50 text-zinc-300",

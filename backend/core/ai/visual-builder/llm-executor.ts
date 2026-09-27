@@ -131,19 +131,34 @@ export function buildPromptMessages(
     contextParts.push(`USER GOAL / INPUT:\n${state.input}`);
   }
 
-  for (const [key, value] of Object.entries(state)) {
-    if (
-      key !== "input" &&
-      key !== "messages" &&
-      key !== "feedback" &&
-      key !== "model" &&
-      value !== undefined &&
-      value !== null
-    ) {
+  // If this node declares an inputMapping (label -> bare state key), it
+  // REPLACES the full-state dump below with only the declared subset —
+  // this is what makes a node's data dependencies explicit and auditable
+  // instead of every node seeing the entire accumulated state.
+  const inputMapping = config.inputMapping as Record<string, string> | undefined;
+  if (inputMapping && Object.keys(inputMapping).length > 0) {
+    for (const [label, stateKey] of Object.entries(inputMapping)) {
+      const resolved = state[stateKey];
+      if (resolved === undefined || resolved === null) continue;
       const valStr =
-        typeof value === "string" ? value : JSON.stringify(value, null, 2);
-      // Include reasonable slice to prevent prompt explosion
-      contextParts.push(`CONTEXT [${key}]:\n${valStr.slice(0, 4000)}`);
+        typeof resolved === "string" ? resolved : JSON.stringify(resolved, null, 2);
+      contextParts.push(`CONTEXT [${label}]:\n${valStr.slice(0, 4000)}`);
+    }
+  } else {
+    for (const [key, value] of Object.entries(state)) {
+      if (
+        key !== "input" &&
+        key !== "messages" &&
+        key !== "feedback" &&
+        key !== "model" &&
+        value !== undefined &&
+        value !== null
+      ) {
+        const valStr =
+          typeof value === "string" ? value : JSON.stringify(value, null, 2);
+        // Include reasonable slice to prevent prompt explosion
+        contextParts.push(`CONTEXT [${key}]:\n${valStr.slice(0, 4000)}`);
+      }
     }
   }
 

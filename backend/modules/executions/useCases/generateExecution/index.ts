@@ -4,6 +4,7 @@ import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.t
 import { generateIncrementalGraph } from "../../../../core/ai/visual-builder/generator.ts";
 import type { LangGraphAbstraction } from "../../../../core/ai/visual-builder/types.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
+import type { z } from "zod";
 
 export async function generateExecution(
   db: AppDatabase,
@@ -56,8 +57,10 @@ export async function generateExecution(
           let parametersDescription = "";
           const parameterKeys: string[] = [];
           const requiredKeys: string[] = [];
+          let parameterSchema: Record<string, z.ZodTypeAny> | undefined;
           if (plugin && (plugin.schema as any)?.shape) {
             const shape = (plugin.schema as any).shape;
+            parameterSchema = shape;
             parametersDescription = Object.entries(shape)
               .map(([k, v]: [string, any]) => {
                 parameterKeys.push(k);
@@ -73,6 +76,7 @@ export async function generateExecution(
             parametersDescription,
             parameterKeys,
             requiredKeys,
+            parameterSchema,
             returnDescription: (plugin as any)?.returnDescription as string | undefined,
           };
         });
