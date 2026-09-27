@@ -112,7 +112,7 @@ export function compileGraph(
           const modelName =
             (node.config?.model as string) ||
             (state.model as string) ||
-            "qwen2.5:latest";
+            "qwen3:8b";
 
           const llm = new ChatOllama({ model: modelName, temperature: 0 });
 

@@ -3,6 +3,7 @@ import { ResponseBuilder } from "../../../../core/api/response.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../../infrastructure/db/repositories/ExecutionRepository.ts";
 import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
+import { executionContextStorage } from "../../../../core/microkernel/human-interaction.ts";
 import {
   compileGraph,
   buildStateSchema,
@@ -87,23 +88,36 @@ export function normalizeExecutionResult(
 
     const size = typeof fileContent === "string" ? fileContent.length : undefined;
 
-    return {
-      type: "file",
-      summary: `Archivo '${fileName}' generado y guardado en disco.`,
-      content: fileContent || rawResult,
-      files: [
-        {
-          name: fileName,
-          path: fullPath,
-          size,
-          mimeType: inferMimeType(fileName),
+    // Verify if the file was physically created on disk
+    let fileExistsOnDisk = false;
+    let actualSize: number | undefined = size;
+    try {
+      const stat = Deno.statSync(fullPath);
+      fileExistsOnDisk = stat.isFile;
+      actualSize = stat.size;
+    } catch {
+      fileExistsOnDisk = false;
+    }
+
+    if (fileExistsOnDisk) {
+      return {
+        type: "file",
+        summary: `Archivo '${fileName}' generado y guardado en disco.`,
+        content: fileContent || rawResult,
+        files: [
+          {
+            name: fileName,
+            path: fullPath,
+            size: actualSize,
+            mimeType: inferMimeType(fileName),
+          },
+        ],
+        metadata: {
+          nodeId: fileOpsNode?.id,
+          operation: (fileOpsNode?.config?.inputMapping as any)?.operation || "write",
         },
-      ],
-      metadata: {
-        nodeId: fileOpsNode?.id,
-        operation: (fileOpsNode?.config?.inputMapping as any)?.operation || "write",
-      },
-    };
+      };
+    }
   }
 
   // 3. Boolean Decision
@@ -111,8 +125,8 @@ export function normalizeExecutionResult(
     return {
       type: "boolean",
       summary: rawResult
-        ? "Condición evaluada como Verdadera (True)."
-        : "Condición evaluada como Falsa (False).",
+        ? "Condition evaluated as True."
+        : "Condition evaluated as False.",
       content: rawResult,
     };
   }
@@ -125,7 +139,7 @@ export function normalizeExecutionResult(
       rawResult[0] !== null;
     return {
       type: isTabular ? "table" : "json",
-      summary: `Colección de ${rawResult.length} registros obtenidos.`,
+      summary: `Retrieved ${rawResult.length} records.`,
       content: rawResult,
     };
   }
@@ -134,7 +148,7 @@ export function normalizeExecutionResult(
   if (typeof rawResult === "object" && rawResult !== null) {
     return {
       type: "json",
-      summary: "Estructura de datos JSON generada.",
+      summary: "Structured JSON data generated.",
       content: rawResult,
     };
   }
@@ -150,7 +164,7 @@ export function normalizeExecutionResult(
   ) {
     return {
       type: "terminal",
-      summary: "Comando de terminal ejecutado.",
+      summary: "Terminal command executed successfully.",
       content: rawResult,
       metadata: {
         command: (lastTerminalNode.config?.inputMapping as any)?.command,
@@ -170,14 +184,14 @@ export function normalizeExecutionResult(
 
     return {
       type: isMarkdown ? "markdown" : "text",
-      summary: isMarkdown ? "Documento formateado generado con éxito." : "Texto generado con éxito.",
+      summary: isMarkdown ? "Formatted markdown document generated." : "Text content generated successfully.",
       content: rawResult,
     };
   }
 
   return {
     type: "text",
-    summary: "Ejecución completada.",
+    summary: "Execution completed.",
     content: String(rawResult ?? ""),
   };
 }
@@ -245,14 +259,22 @@ export async function runExecution(
         
         for (const [key, rawMapping] of Object.entries(inputMapping)) {
            let mapping: any = rawMapping;
-           if (typeof mapping === "object" && mapping !== null && "value" in mapping) {
-              mapping = (mapping as any).value;
+           if (typeof mapping === "object" && mapping !== null) {
+              mapping = (mapping as any).value ?? (mapping as any).staticValue ?? mapping;
            }
-           if (typeof mapping === "string" && mapping.startsWith("${") && mapping.endsWith("}")) {
-              const varName = mapping.slice(2, -1);
-              inputToTool[key] = state[varName] !== undefined ? state[varName] : state[mapping] !== undefined ? state[mapping] : mapping;
-           } else if (typeof mapping === "string" && state[mapping] !== undefined) {
-              inputToTool[key] = state[mapping];
+           if (typeof mapping === "string") {
+              if (mapping.startsWith("${") && mapping.endsWith("}") && !mapping.slice(2, -1).includes("${")) {
+                 const varName = mapping.slice(2, -1);
+                 inputToTool[key] = state[varName] !== undefined ? state[varName] : mapping;
+              } else if (state[mapping] !== undefined) {
+                 inputToTool[key] = state[mapping];
+              } else if (mapping.includes("${")) {
+                 inputToTool[key] = mapping.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+                    return state[varName] !== undefined ? String(state[varName]) : match;
+                 });
+              } else {
+                 inputToTool[key] = mapping;
+              }
            } else {
               inputToTool[key] = mapping;
            }
@@ -302,8 +324,14 @@ export async function runExecution(
           );
         };
 
-        try {
-          const initialInputs = { input: "", ...(inputState || {}) };
+        await executionContextStorage.run({ autoApprove: true }, async () => {
+          try {
+            const initialInputs = {
+              input: "",
+              cwd: Deno.cwd(),
+              os: Deno.build.os,
+              ...(inputState || {}),
+            };
           const events = await app.streamEvents(initialInputs, {
             version: "v2",
           });
@@ -318,7 +346,7 @@ export async function runExecution(
 
           // Guarantee state.result is always populated and standardized
           if (finalState.result === undefined) {
-            const skipKeys = new Set(["input", "messages", "feedback", "attempts", "model"]);
+            const skipKeys = new Set(["input", "cwd", "os", "messages", "feedback", "attempts", "model"]);
             const candidateKey =
               Object.keys(finalState).find(
                 (k) => !skipKeys.has(k) && typeof finalState[k] !== "boolean",
@@ -367,13 +395,42 @@ export async function runExecution(
               };
             });
 
-            normalizedResult = {
-              type: outputSpec.type,
-              summary: outputSpec.summary || "Workflow deliverable completed successfully.",
-              content,
-              files: resolvedFiles,
-              metadata: outputSpec.metadata,
-            };
+            // Verify if files physically exist on disk (for file deliverable)
+            const existingFiles = (resolvedFiles || []).filter((f: any) => {
+              try {
+                return Deno.statSync(f.path).isFile;
+              } catch {
+                return false;
+              }
+            });
+
+            if (outputSpec.type === "file" && existingFiles.length === 0) {
+              // The expected file was not created (e.g. conditional branch skipped file creation)
+              const booleanVar = Object.keys(finalState).find(
+                (k) => typeof finalState[k] === "boolean" && !["input", "cwd", "os"].includes(k),
+              );
+              const boolVal = booleanVar ? finalState[booleanVar] : undefined;
+
+              normalizedResult = {
+                type: booleanVar !== undefined ? "boolean" : "text",
+                summary: booleanVar !== undefined
+                  ? `Workflow completed. Condition '${booleanVar}' = ${boolVal} (file creation skipped).`
+                  : `Workflow completed without file generation.`,
+                content: booleanVar !== undefined ? boolVal : (content || "Completed"),
+                metadata: {
+                  ...outputSpec.metadata,
+                  skippedFiles: resolvedFiles?.map((f: any) => f.name) || [],
+                },
+              };
+            } else {
+              normalizedResult = {
+                type: outputSpec.type,
+                summary: outputSpec.summary || "Workflow deliverable completed successfully.",
+                content,
+                files: existingFiles.length > 0 ? existingFiles : resolvedFiles,
+                metadata: outputSpec.metadata,
+              };
+            }
           } else {
             normalizedResult = normalizeExecutionResult(finalState, abstraction.nodes);
           }
@@ -410,6 +467,7 @@ export async function runExecution(
           send("error", { error: err.message });
           controller.close();
         }
+      });
       },
     });
 

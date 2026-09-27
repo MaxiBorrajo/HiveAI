@@ -497,22 +497,11 @@ export function ExecutionResultSidebar({
                 />
               </div>
             ) : resObj.type === "boolean" ? (
-              <div className="flex items-center gap-3 p-4 rounded-xl border border-zinc-800/80 bg-zinc-900/40">
-                <div
-                  className={`size-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                    resObj.content
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-red-500/20 text-red-400 border border-red-500/30"
-                  }`}
-                >
-                  {resObj.content ? "✓" : "✕"}
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-zinc-100">
-                    Decision: {resObj.content ? "TRUE" : "FALSE"}
-                  </h4>
-                  <p className="text-xs text-zinc-400">{resObj.summary}</p>
-                </div>
+              <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-zinc-800/80 bg-zinc-900/40">
+                <h4 className="text-sm font-semibold text-zinc-100">
+                  Decision: {resObj.content ? "TRUE" : "FALSE"}
+                </h4>
+                <p className="text-xs text-zinc-400">{resObj.summary}</p>
               </div>
             ) : resObj.type === "table" &&
               Array.isArray(resObj.content) &&

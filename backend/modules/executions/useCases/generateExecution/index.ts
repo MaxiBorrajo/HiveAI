@@ -54,11 +54,15 @@ export async function generateExecution(
         const availablePlugins = hive.getTools().map((t) => {
           const plugin = hive.getPlugin(t.name);
           let parametersDescription = "";
+          const parameterKeys: string[] = [];
+          const requiredKeys: string[] = [];
           if (plugin && (plugin.schema as any)?.shape) {
             const shape = (plugin.schema as any).shape;
             parametersDescription = Object.entries(shape)
               .map(([k, v]: [string, any]) => {
+                parameterKeys.push(k);
                 const isOpt = v.safeParse?.(undefined)?.success ?? false;
+                if (!isOpt) requiredKeys.push(k);
                 return `${k} (${isOpt ? "optional" : "REQUIRED"}${v.description ? `: ${v.description}` : ""})`;
               })
               .join("; ");
@@ -67,6 +71,8 @@ export async function generateExecution(
             name: t.name,
             description: t.description,
             parametersDescription,
+            parameterKeys,
+            requiredKeys,
           };
         });
 

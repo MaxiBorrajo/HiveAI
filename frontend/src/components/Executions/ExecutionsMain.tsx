@@ -20,7 +20,7 @@ import {
   ExecutionResultSidebar,
   type ExecutionResultData,
 } from "./ExecutionResultSidebar";
-import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal } from "lucide-react";
+import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export function ExecutionsMain() {
@@ -97,6 +97,15 @@ export function ExecutionsMain() {
   // Run Modal State
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [runInputs, setRunInputs] = useState<Record<string, any>>({});
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleCopyGraph = () => {
+    if (!graph) return;
+    const json = JSON.stringify(graph, null, 2);
+    navigator.clipboard.writeText(json);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   useEffect(() => {
     if (!activeExecutionId) {
@@ -248,9 +257,27 @@ export function ExecutionsMain() {
   };
 
   const hasRequiredInputs = Boolean(
-    graph?.stateSchema &&
-      Object.entries(graph.stateSchema).some(
-        ([key, def]: [string, any]) => key === "input" && def.required === true
+    graph &&
+      (
+        Boolean(
+          graph.stateSchema &&
+            Object.entries(graph.stateSchema).some(
+              ([key, def]: [string, any]) => key === "input" && def.required === true
+            )
+        ) ||
+        graph.nodes?.some((n) => {
+          if (n.type === "plugin") {
+            const mapping = (n.config?.inputMapping || {}) as Record<string, any>;
+            return Object.values(mapping).some(
+              (v) => typeof v === "string" && (v === "input" || v === "${input}" || v.includes("${input}"))
+            );
+          }
+          if (n.type === "llm") {
+            const prompt = String(n.config?.systemPrompt || "");
+            return prompt.includes("${input}") || prompt.includes("input message") || prompt.includes("input ticket");
+          }
+          return false;
+        })
       )
   );
 
@@ -495,7 +522,7 @@ export function ExecutionsMain() {
                   type="button"
                   onClick={() => setIsLogsOpen(!isLogsOpen)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all",
+                    "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all select-none cursor-pointer",
                     isLogsOpen
                       ? "bg-zinc-800/90 text-zinc-100"
                       : "text-zinc-400 hover:bg-zinc-900/90 hover:text-zinc-200"
@@ -510,6 +537,28 @@ export function ExecutionsMain() {
                     </span>
                   )}
                 </button>
+
+                {/* Segment: Copy Graph JSON */}
+                {graph && (
+                  <button
+                    type="button"
+                    onClick={handleCopyGraph}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-900/90 hover:text-zinc-200 active:bg-zinc-800 transition-all select-none cursor-pointer"
+                    title="Copy full Graph JSON to clipboard"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="size-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="size-3.5" />
+                        <span>Copy JSON</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Execution Logs Drawer (drops down under the split controller) */}
@@ -658,13 +707,16 @@ export function ExecutionsMain() {
               Object.entries(graph.stateSchema)
                 .filter(([key]) => key === "input")
                 .map(([key, def]: [string, any]) => (
-                  <div key={key} className="flex flex-col gap-1">
+                  <div key={key} className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-foreground">
-                      User Prompt {def.required ? "" : "(Optional)"}
+                      {def.description && !def.description.startsWith("User initial query")
+                        ? def.description
+                        : "User Input"}{" "}
+                      {hasRequiredInputs ? "" : "(Optional)"}
                     </label>
                     <Textarea
                       placeholder={
-                        def.description || "What should the agent do? (Leave blank to use pre-configured defaults)"
+                        def.description || "Enter input text or prompt to run this workflow..."
                       }
                       value={runInputs[key] || ""}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
@@ -673,10 +725,12 @@ export function ExecutionsMain() {
                           [key]: e.target.value,
                         }))
                       }
-                      className="min-h-[100px]"
+                      className="min-h-[110px]"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {def.description || (def.required ? "Required input to trigger the flow." : "Optional input. If omitted, the workflow will run with its pre-configured parameters.")}
+                    <p className="text-xs text-muted-foreground">
+                      {hasRequiredInputs
+                        ? "This workflow requires an input value to execute."
+                        : "Optional input. If omitted, the workflow will run with its pre-configured defaults."}
                     </p>
                   </div>
                 ))}
@@ -691,7 +745,12 @@ export function ExecutionsMain() {
             <Button variant="outline" onClick={() => setIsRunModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => handleRun()}>Run</Button>
+            <Button
+              disabled={hasRequiredInputs && !runInputs["input"]?.trim()}
+              onClick={() => handleRun()}
+            >
+              Run
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

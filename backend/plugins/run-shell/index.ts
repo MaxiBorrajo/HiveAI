@@ -14,16 +14,19 @@ function launchBash(command: string): { bin: string; args: string[] } {
 
 function isSafeInspectionCommand(command: string): boolean {
   const trimmed = command.trim();
-  // Disallow file output redirections or dangerous write commands
-  if (/>|\brm\s|\bmv\s|\bsudo\b|\bchmod\b|\bchown\b|\bkill\b|\bpkill\b|\bmkfs\b|\bdd\b|\btruncate\b/i.test(trimmed)) {
+  // Strip safe stderr redirects (e.g. 2>/dev/null, 2>&1) before checking redirection operators
+  const withoutSafeRedirection = trimmed.replace(/2>\s*\/dev\/null|2>&1/g, "");
+  // Disallow file output redirections (except safe /tmp/ logging) or dangerous write commands
+  if (/>\s*(?!\/tmp\/)|\brm\s|\bmv\s|\bsudo\b|\bchmod\b|\bchown\b|\bkill\b|\bpkill\b|\bmkfs\b|\bdd\b|\btruncate\b/i.test(withoutSafeRedirection)) {
     return false;
   }
-  // Allow common inspection and test commands
+  // Allow common inspection, formatting and test commands
   const safePatterns = [
-    /^(ps|top|df|free|head|tail|ls|grep|cat|uptime|wc|pwd|date|uname|whoami|echo|which|du)\b/i,
+    /^(ps|top|df|free|head|tail|ls|grep|cat|uptime|wc|pwd|date|uname|whoami|echo|which|du|awk|sed|cut|tee|sort|uniq|tr)\b/i,
     /^git\s+(status|log|diff|branch|show)\b/i,
     /^(npm|yarn|pnpm|bun)\s+(test|run\s+test)\b/i,
-    /^deno\s+(test|check)\b/i,
+    /^deno\s+(test|check|eval)\b/i,
+    /^node\s+(-e|--check)\b/i,
   ];
 
   // If piped or chained (e.g. ps aux | head -n 5 && df -h), check each sub-command
