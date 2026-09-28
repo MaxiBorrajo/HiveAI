@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-// Shared Zod fragments reused across the Phase 2 node configurators
-// (llm/plugin/condition) — a StatePropertyDefinition shape for declaring new
-// state variables, and an edge-condition shape some node config schemas
-// optionally accept.
 export const statePropertyDefinitionSchema = z.object({
   type: z.enum(["string", "number", "boolean", "object", "array"]),
   description: z.string().optional(),

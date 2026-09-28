@@ -1,34 +1,8 @@
-import type { LangGraphAbstraction } from "./types.ts";
+import type { InputMappingViolation, LangGraphAbstraction, PluginParameterInfo } from "./types.ts";
 
-export type ViolationKind =
-  | "syntax" // dot/bracket path access, malformed identifier
-  | "undefined_variable" // ${varName} not produced by any node's outputKey
-  | "invalid_plugin_param" // inputMapping key not in the plugin's real schema
-  | "unequipped_tool_mention"; // systemPrompt mentions a tool not in config.plugins
-
-export interface InputMappingViolation {
-  kind: ViolationKind;
-  nodeId: string;
-  nodeName: string;
-  field: string;
-  invalidValue: string;
-  reason: string;
-}
-
-export interface PluginParameterInfo {
-  name: string;
-  parameterKeys?: string[];
-}
 
 const VALID_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/**
- * Validates a single inputMapping value against the interpolation grammar:
- * a literal (no "${" at all), or one or more bare "${varName}" references.
- * Dot/bracket path access (e.g. "${a.b[0]}") is rejected — the runtime resolver
- * only supports flat state-key lookups. Returns null if valid, else a
- * human-readable reason suitable for feeding back into a correction prompt.
- */
 export function validateInterpolationValue(value: unknown): string | null {
   if (typeof value !== "string" || !value.includes("${")) return null;
 
@@ -48,10 +22,6 @@ export function validateInterpolationValue(value: unknown): string | null {
   return violations.length > 0 ? violations.join(" ") : null;
 }
 
-/**
- * Walks every node's config.inputMapping in the graph and returns ALL
- * grammar violations found (accumulated, not fail-fast).
- */
 export function validateGraphInterpolationGrammar(
   graph: LangGraphAbstraction,
 ): InputMappingViolation[] {
@@ -78,13 +48,6 @@ export function validateGraphInterpolationGrammar(
   return violations;
 }
 
-/**
- * Extracts every "${varName}" reference from a grammar-valid plugin
- * inputMapping value. Assumes the value already passed
- * validateInterpolationValue (no dot/bracket paths) — used only to
- * cross-check that referenced variables were actually produced by some
- * node's outputKey.
- */
 function extractVarNames(value: unknown): string[] {
   if (typeof value !== "string") return [];
   const re = /\$\{([^}]*)\}/g;
@@ -96,38 +59,13 @@ function extractVarNames(value: unknown): string[] {
   return names;
 }
 
-/**
- * Unlike plugin inputMapping (which mixes literals and "${var}" references,
- * requiring the braces to disambiguate them), llm/agent inputMapping values
- * are ALWAYS a bare state-key name — there is no literal case to disambiguate
- * from, so the value itself IS the variable name.
- */
 function extractBareVarName(value: unknown): string[] {
   if (typeof value !== "string" || value.length === 0) return [];
   return [value];
 }
 
-// Always present at runtime regardless of graph contents — not tied to any
-// node's outputKey, so referencing them is always valid.
 const BUILTIN_RUNTIME_KEYS = new Set(["input", "cwd", "os"]);
 
-/**
- * Walks every node's config.inputMapping and confirms each referenced
- * "${varName}" was actually declared as an outputKey by some node in the
- * graph (or is a built-in runtime property like "input"/"cwd"/"os").
- *
- * Deliberately does NOT treat "graph.stateSchema" membership alone as proof
- * of validity: the initial skeleton seeds a placeholder "result" key (type
- * "unknown") before any node runs, so a reference to "${result}" would pass
- * a naive stateSchema-membership check even when no node actually wrote to
- * it — exactly the kind of dangling reference this check exists to catch.
- * "result" (and any other key) only counts as known once some node's
- * config.outputKey actually equals it.
- *
- * Only checks values that are already grammar-valid (dot/bracket violations
- * are reported separately by validateGraphInterpolationGrammar, not
- * duplicated here).
- */
 export function validateGraphVariableReferences(
   graph: LangGraphAbstraction,
 ): InputMappingViolation[] {
@@ -149,11 +87,12 @@ export function validateGraphVariableReferences(
 
     for (const [field, value] of Object.entries(inputMapping)) {
       if (!isBareValueNode && validateInterpolationValue(value) !== null) {
-        continue; // grammar error already reported elsewhere
+        continue;
       }
       const varNames = isBareValueNode
         ? extractBareVarName(value)
         : extractVarNames(value);
+
       for (const varName of varNames) {
         if (!knownKeys.has(varName)) {
           violations.push({
@@ -170,17 +109,10 @@ export function validateGraphVariableReferences(
       }
     }
   }
+  
   return violations;
 }
 
-/**
- * Walks every "plugin" node's config.inputMapping and confirms every key
- * matches an actual parameter of that plugin's real Zod schema (parameterKeys,
- * extracted directly from the plugin's schema.shape). Catches invented/
- * hallucinated parameter names (e.g. a "url" key on a plugin whose schema has
- * no such field) that would otherwise be silently dropped by Zod's non-strict
- * parsing at execution time.
- */
 export function validateGraphPluginParameters(
   graph: LangGraphAbstraction,
   availablePlugins: PluginParameterInfo[],
@@ -189,15 +121,28 @@ export function validateGraphPluginParameters(
 
   for (const node of graph.nodes) {
     if (node.type !== "plugin") continue;
+
+    const pluginId = node.config?.pluginId as string | undefined;
+    const pluginDef = availablePlugins.find((p) => p.name === pluginId);
+    if (pluginId && !pluginDef) {
+      violations.push({
+        kind: "unknown_plugin",
+        nodeId: node.id,
+        nodeName: node.name,
+        field: "pluginId",
+        invalidValue: pluginId,
+        reason: `"${pluginId}" is not a registered plugin. Available plugins: [${availablePlugins.map((p) => p.name).join(", ")}]. Replace "pluginId" with one of the valid plugin names.`,
+      });
+      continue;
+    }
+
     const inputMapping = node.config?.inputMapping as
       | Record<string, unknown>
       | undefined;
     if (!inputMapping) continue;
 
-    const pluginId = node.config?.pluginId as string | undefined;
-    const pluginDef = availablePlugins.find((p) => p.name === pluginId);
     if (!pluginDef?.parameterKeys || pluginDef.parameterKeys.length === 0) {
-      continue; // no known schema to check against, skip rather than false-positive
+      continue;
     }
     const validKeys = new Set(pluginDef.parameterKeys);
 
@@ -217,20 +162,10 @@ export function validateGraphPluginParameters(
   return violations;
 }
 
-// Normalizes plugin-name variants a model might use in free text
-// ("file_ops", "file-ops", "file ops") down to one comparable form.
 function normalizePluginMention(name: string): string {
   return name.toLowerCase().replace(/[-_\s]+/g, "_");
 }
 
-/**
- * Walks every "llm" node's systemPrompt and flags a mention of a real
- * plugin's name (in any "-"/"_"/space separator variant) that is NOT present
- * in that node's config.plugins. This catches an agent-equipped llm node
- * whose instructions promise to use a tool (e.g. "save the file using
- * file-ops") that it was never actually equipped with, so the promised
- * action silently cannot happen.
- */
 export function validateGraphAgentToolMentions(
   graph: LangGraphAbstraction,
   availablePlugins: PluginParameterInfo[],
@@ -243,7 +178,10 @@ export function validateGraphAgentToolMentions(
     if (typeof systemPrompt !== "string" || !systemPrompt) continue;
 
     const equipped = new Set(
-      (Array.isArray(node.config?.plugins) ? (node.config.plugins as unknown[]) : [])
+      (Array.isArray(node.config?.plugins)
+        ? (node.config.plugins as unknown[])
+        : []
+      )
         .filter((p): p is string => typeof p === "string")
         .map(normalizePluginMention),
     );

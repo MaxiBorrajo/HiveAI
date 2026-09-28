@@ -1,16 +1,20 @@
-// ==========================================
-// 1. STATE & REDUCERS
-// ==========================================
+import type { StructuredToolInterface } from "@langchain/core/tools";
+import { ChatOllama } from "@langchain/ollama";
+import { PluginInfo } from "./generation/topology-compiler.ts";
+import { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
+import z from "zod";
+import { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
+
 export type ReducerStrategy =
-  | "overwrite" // Overwrites old with new (default)
-  | "append" // Appends to the end of an array
-  | "prepend" // Prepends to the start of an array
-  | "unique_append" // Appends to array only if not already present
-  | "merge_dict" // Object.assign(old, new)
-  | "sum" // old + new
-  | "subtract" // old - new
-  | "multiply" // old * new
-  | "divide"; // old / new
+  | "overwrite"
+  | "append" 
+  | "prepend" 
+  | "unique_append" 
+  | "merge_dict"
+  | "sum"
+  | "subtract" 
+  | "multiply" 
+  | "divide";
 
 export type DataType =
   | "string"
@@ -22,35 +26,25 @@ export type DataType =
   | "unknown";
 
 export interface StatePropertyDefinition {
-  name?: string; // Not strictly required in properties object if used as a record value
+  name?: string;
   type: DataType;
   description?: string;
   required: boolean;
   default?: any;
-
-  // Support for nesting and collections
-  properties?: Record<string, StatePropertyDefinition>; // If type === 'object'
-  items?: StatePropertyDefinition; // If type === 'array'
-  options?: string[]; // If type === 'enum'
-
-  // Reducer strategy. If omitted, 'overwrite' is assumed
+  properties?: Record<string, StatePropertyDefinition>; 
+  items?: StatePropertyDefinition; 
+  options?: string[];
   reducerStrategy?: ReducerStrategy;
 }
 
-// ==========================================
-// 2. NODES
-// ==========================================
 export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
 
 export interface GraphNode {
-  id: string; // Internal ID (e.g. "node_123")
-  name: string; // Visual label (e.g. "AI Analyst")
+  id: string; 
+  name: string;
   type: NodeType;
-
-  // Render position for React Flow
   uiPosition?: { x: number; y: number };
-
-  config: Record<string, unknown>; // Dynamic configuration for plugin/function
+  config: Record<string, unknown>; 
 }
 
 export type NodeExecutorFunction = (
@@ -61,58 +55,43 @@ export type NodeExecutorFunction = (
 export type NodeRegistry = Record<string, NodeExecutorFunction>;
 
 export interface ToolProvider {
-  getTool(name: string): any; // LangChain Tool
+  getTool(name: string): StructuredToolInterface | undefined;
 }
 
-// ==========================================
-// 3. EDGES & CONDITIONS
-// ==========================================
 export type ConditionOperator =
-  // Equality
   | "equals"
   | "not_equals"
-  // Mathematical
   | "greater_than"
   | "greater_than_or_equals"
   | "less_than"
   | "less_than_or_equals"
-  // Strings / Collections
   | "contains"
   | "not_contains"
   | "starts_with"
   | "ends_with"
-  // Existence
   | "is_empty"
   | "is_not_empty"
-  // Lists
   | "in"
   | "not_in"
-  // Advanced
   | "regex_match";
 
 export interface ConditionConfig {
-  field: string; // Path in state (e.g. "evaluation.score" or "messages")
+  field: string; 
   operator: ConditionOperator;
-  value: unknown; // Static value to compare against
+  value: unknown;
 }
 
 export interface GraphEdge {
-  id: string; // Connection ID (e.g. "edge_1")
-  source: string; // Source node ID
-  target: string; // Target node ID (or "__end__")
-  path?: "true" | "false"; // Used if source is a condition node
-
+  id: string;
+  source: string;
+  target: string;
+  path?: "true" | "false";
   isConditional: boolean;
-
-  // Rule is evaluated ONLY if isConditional === true
   condition?: ConditionConfig;
 }
 
-// Config for a "llm" node. Extra plugin-defined fields are still allowed
-// dynamically (see GraphNode.config), so this intentionally stays an index
-// signature rather than `unknown`/`never` for unlisted keys.
 export interface LlmConfig {
-  model?: string | { name?: string; value?: string };
+  model?: string
   systemPrompt?: string;
   plugins?: string[];
   pluginId?: string;
@@ -122,32 +101,22 @@ export interface LlmConfig {
   [key: string]: unknown;
 }
 
-// ==========================================
-// 4. ROOT JSON
-// ==========================================
 export interface LangGraphAbstraction {
   nodes: GraphNode[];
   edges: GraphEdge[];
   stateSchema: Record<string, StatePropertyDefinition>;
 }
 
-// ==========================================
-// 5. EXECUTION RESULTS & DELIVERABLES
-// ==========================================
 export type ExecutionResultType =
-  // Documentos y Archivos
   | "file"
   | "markdown"
   | "text"
-  // Datos y Analítica
   | "table"
   | "chart"
   | "json"
-  // Multimedia y Web
   | "image"
   | "html"
   | "url"
-  // Operaciones y Lógica
   | "terminal"
   | "boolean"
   | "error";
@@ -167,4 +136,109 @@ export interface ExecutionResult {
   metadata?: Record<string, any>;
 }
 
+export type IncrementalEvent =
+  | { type: "planning"; thoughts: string }
+  | {
+      type: "node_added";
+      node: GraphNode;
+      edge?: GraphEdge;
+      stateProperties?: Record<string, any>;
+    }
+  | {
+      type: "node_configuring";
+      nodeId: string;
+      nodeName: string;
+    }
+  | {
+      type: "node_updated";
+      node: GraphNode;
+      stateProperties?: Record<string, any>;
+    }
+  | { type: "edge_added"; edge: GraphEdge }
+  | {
+      type: "validation_error";
+      violations: InputMappingViolation[];
+      attempt: number;
+    }
+  | {
+      type: "node_fixed";
+      node: GraphNode;
+      stateProperties?: Record<string, any>;
+    };
 
+export type ViolationKind =
+  | "syntax"
+  | "undefined_variable"
+  | "invalid_plugin_param"
+  | "unequipped_tool_mention"
+  | "unknown_plugin"
+  | "missing_condition_branch"
+  | "condition_branches_converge";
+
+export interface InputMappingViolation {
+  kind: ViolationKind;
+  nodeId: string;
+  nodeName: string;
+  field: string;
+  invalidValue: string;
+  reason: string;
+}
+
+export interface PluginParameterInfo {
+  name: string;
+  parameterKeys?: string[];
+}
+
+export interface ConditionNodeConfiguratorContext {
+  prompt: string;
+  configLlm: ChatOllama;
+  graph: LangGraphAbstraction;
+  graphStateText: string;
+}
+
+export interface EndNodeConfiguratorContext {
+  prompt: string;
+  configLlm: ChatOllama;
+  graph: LangGraphAbstraction;
+  intermediateNodes: GraphNode[];
+}
+
+export interface InvocableAgent {
+  invoke: (input: any, config?: any) => Promise<any>;
+}
+
+export interface InterpolationSelfCorrectionContext {
+  graph: LangGraphAbstraction;
+  availablePlugins: PluginInfo[];
+  configLlm: ChatOllama;
+  nodeDescriptions: Map<string, string>;
+}
+
+export interface LlmNodeConfiguratorContext {
+  prompt: string;
+  modelName: string;
+  availablePlugins: PluginInfo[];
+  pluginNames: Set<string>;
+  configLlm: ChatOllama;
+  graph: LangGraphAbstraction;
+  intermediateNodes: GraphNode[];
+  nodeDescriptions: Map<string, string>;
+  neighborHint: string;
+  graphStateText: string;
+}
+
+export type LlmConfigCandidate = z.infer<ReturnType<typeof buildLlmConfigSchema>>;
+
+export interface PluginNodeConfiguratorContext {
+  prompt: string;
+  availablePlugins: PluginInfo[];
+  pluginNames: Set<string>;
+  configLlm: ChatOllama;
+  graph: LangGraphAbstraction;
+  intermediateNodes: GraphNode[];
+  nodeDescriptions: Map<string, string>;
+  neighborHint: string;
+  graphStateText: string;
+}
+
+export type PluginConfigCandidate = z.infer<ReturnType<typeof buildPluginConfigSchema>>;

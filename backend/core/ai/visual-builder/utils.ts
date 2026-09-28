@@ -1,5 +1,23 @@
 import { z } from "zod";
-import { StatePropertyDefinition, ReducerStrategy, ConditionOperator } from "./types.ts";
+import {
+  StatePropertyDefinition,
+  ReducerStrategy,
+  ConditionOperator,
+  GraphNode,
+} from "./types.ts";
+
+export function describeNeighbor(
+  n: GraphNode | undefined,
+  nodeDescriptions: Map<string, string>,
+): string {
+  if (!n) return "none";
+  const role = nodeDescriptions.get(n.id) || n.name;
+  const plugins = Array.isArray(n.config?.plugins)
+    ? (n.config.plugins as string[])
+    : [];
+  const outputKey = n.config?.outputKey as string | undefined;
+  return `"${n.name}" (type: ${n.type}, role: "${role}"${outputKey ? `, outputKey: "${outputKey}"` : ""}${plugins.length ? `, tools: [${plugins.join(", ")}]` : ""})`;
+}
 
 export function getReducerFunction(strategy?: ReducerStrategy) {
   switch (strategy) {
@@ -11,10 +29,10 @@ export function getReducerFunction(strategy?: ReducerStrategy) {
       return (a: unknown[], b: unknown[]) =>
         Array.from(new Set([...(a || []), ...(b || [])]));
     case "merge_dict":
-      return (
-        a: Record<string, unknown>,
-        b: Record<string, unknown>,
-      ) => ({ ...(a || {}), ...(b || {}) });
+      return (a: Record<string, unknown>, b: Record<string, unknown>) => ({
+        ...(a || {}),
+        ...(b || {}),
+      });
     case "sum":
       return (a: unknown, b: unknown) =>
         ((a as number) || 0) + ((b as number) || 0);
@@ -35,7 +53,6 @@ export function getReducerFunction(strategy?: ReducerStrategy) {
       };
     case "overwrite":
     default:
-      // In LangGraph, if no reducer is provided, it automatically overwrites
       return undefined;
   }
 }
@@ -93,8 +110,7 @@ export function mapTypeToZod(def: StatePropertyDefinition): z.ZodType {
   return schema;
 }
 
-// Walks `source` following a dot-separated `path` (e.g. "evaluation.score")
-// and returns the value found, or undefined if any segment is missing.
+
 export function getFieldByPath(
   source: Record<string, unknown>,
   path: string,
@@ -112,7 +128,6 @@ export function evaluateCondition(
   operator: ConditionOperator,
   targetValue: unknown,
 ): boolean {
-  // If targetValue is boolean, ensure strictly typed boolean equality
   if (typeof targetValue === "boolean") {
     const fieldBool =
       typeof fieldValue === "boolean"
@@ -125,7 +140,6 @@ export function evaluateCondition(
     return false;
   }
 
-  // If targetValue is number, ensure strictly typed numeric comparisons
   if (typeof targetValue === "number") {
     const fieldNum =
       typeof fieldValue === "number" ? fieldValue : Number(fieldValue);
@@ -201,4 +215,3 @@ export function evaluateCondition(
       return false;
   }
 }
-

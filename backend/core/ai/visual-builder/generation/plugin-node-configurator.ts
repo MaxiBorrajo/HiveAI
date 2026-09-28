@@ -1,22 +1,35 @@
 import { ChatOllama } from "@langchain/ollama";
-import { SystemMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import { GraphNode, LangGraphAbstraction } from "../types.ts";
+import {
+  GraphNode,
+  LangGraphAbstraction,
+  PluginConfigCandidate,
+  PluginNodeConfiguratorContext,
+} from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
 import { normalizePluginName, PluginInfo } from "./topology-compiler.ts";
-import { statePropertyDefinitionSchema, edgeConditionSchema } from "./node-config-schemas.ts";
+import {
+  statePropertyDefinitionSchema,
+  edgeConditionSchema,
+} from "./node-config-schemas.ts";
 
-/**
- * Dynamic Zod schema for configuring a Plugin node.
- * Allows inputMapping to contain both state variable references and static literals.
- */
-// "${varName}" only — a template reference resolved at runtime, accepted
-// regardless of the parameter's declared type (the referenced state
-// variable could hold any type at that point).
 const templateRefSchema = z
   .string()
   .regex(/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/)
   .describe('A "${varName}" template reference to a state variable');
+
+
+function buildPluginParameterFieldSchemas(
+  pluginDef: PluginInfo | undefined,
+): Record<string, z.ZodTypeAny> | undefined {
+  if (!pluginDef?.parameterSchema) return undefined;
+  const fieldSchemas: Record<string, z.ZodTypeAny> = {};
+  for (const [key, fieldSchema] of Object.entries(pluginDef.parameterSchema)) {
+    fieldSchemas[key] = z.union([fieldSchema, templateRefSchema]);
+  }
+  return fieldSchemas;
+}
 
 export function buildPluginConfigSchema(
   availablePlugins: PluginInfo[],
@@ -28,26 +41,10 @@ export function buildPluginConfigSchema(
       ? z.enum(pluginNames as [string, ...string[]])
       : z.string();
 
-  // If we know the real plugin for this node, build inputMapping's value
-  // schema PER FIELD from its actual Zod types — a number field only
-  // accepts a real number literal or a "${varName}" template string, never
-  // a bare string like "5" for a field that expects a real number.
-  let inputMappingSchema: z.ZodTypeAny;
-  if (selectedPluginDef?.parameterSchema) {
-    const fieldSchemas: Record<string, z.ZodTypeAny> = {};
-    for (const [key, fieldSchema] of Object.entries(
-      selectedPluginDef.parameterSchema,
-    )) {
-      fieldSchemas[key] = z.union([fieldSchema, templateRefSchema]);
-    }
-    inputMappingSchema = z.object(fieldSchemas).partial();
-  } else {
-    // Fallback: no known plugin shape — keep the generic union.
-    inputMappingSchema = z.record(
-      z.string(),
-      z.union([z.string(), z.number(), z.boolean()]),
-    );
-  }
+  const fieldSchemas = buildPluginParameterFieldSchemas(selectedPluginDef);
+  const inputMappingSchema: z.ZodTypeAny = fieldSchemas
+    ? z.object(fieldSchemas).partial()
+    : z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
 
   return z.object({
     nodeId: z
@@ -56,10 +53,9 @@ export function buildPluginConfigSchema(
     nodeName: z
       .string()
       .describe("Human readable name (e.g. 'Search Google', 'Save Alert Log')"),
-    pluginId: pluginEnum
-      .describe(
-        `The plugin ID to use. Available: [${pluginNames.join(", ")}]. MUST be one of these exact names!`,
-      ),
+    pluginId: pluginEnum.describe(
+      `The plugin ID to use. Available: [${pluginNames.join(", ")}]. MUST be one of these exact names!`,
+    ),
     inputMapping: inputMappingSchema
       .optional()
       .describe(
@@ -68,7 +64,9 @@ export function buildPluginConfigSchema(
     outputKey: z
       .string()
       .optional()
-      .describe("Descriptive memory key for plugin output (e.g. 'system_metrics', 'file_content', 'search_data'). Avoid 'result' unless this is the final deliverable node!"),
+      .describe(
+        "Descriptive memory key for plugin output (e.g. 'system_metrics', 'file_content', 'search_data'). Avoid 'result' unless this is the final deliverable node!",
+      ),
     edgeCondition: edgeConditionSchema.optional(),
     newStateProperties: z
       .record(z.string(), statePropertyDefinitionSchema)
@@ -77,38 +75,258 @@ export function buildPluginConfigSchema(
   });
 }
 
-export interface PluginNodeConfiguratorContext {
-  prompt: string;
-  availablePlugins: PluginInfo[];
-  pluginNames: Set<string>;
-  configLlm: ChatOllama;
-  graph: LangGraphAbstraction;
-  intermediateNodes: GraphNode[];
-  nodeDescriptions: Map<string, string>;
-  neighborHint: string;
-  graphStateText: string;
+function resolveInitialPlugin(
+  node: GraphNode,
+  availablePlugins: PluginInfo[],
+  pluginNames: Set<string>,
+): { assignedPluginId: string | undefined; pluginDef: PluginInfo | undefined } {
+  const candidateId = node.config.pluginId as string | undefined;
+  if (candidateId && pluginNames.has(candidateId)) {
+    return {
+      assignedPluginId: candidateId,
+      pluginDef: availablePlugins.find((p) => p.name === candidateId),
+    };
+  }
+  return { assignedPluginId: undefined, pluginDef: undefined };
 }
 
-/**
- * Phase 2, "plugin" node branch: resolves the selected plugin, configures
- * its inputMapping/outputKey via a structured-output call, applies the
- * schema-driven generic parameter auto-completion for common parameter
- * shapes (path/content/operation/command/cwd/url/query), and falls back to
- * a manual heuristic mapping if the call fails. Returns whether the
- * fallback path was used (the caller yields "node_updated" without
- * `stateProperties` in that case, matching the pre-refactor behavior).
- */
+function buildPluginSystemPrompt(
+  node: GraphNode,
+  nodeRole: string,
+  pluginDef: PluginInfo | undefined,
+  availablePlugins: PluginInfo[],
+  pluginNames: Set<string>,
+  neighborHint: string,
+  graphStateText: string,
+): string {
+  const selectedPluginSection = pluginDef
+    ? `Selected Plugin for this node: "${pluginDef.name}"
+      Plugin Description: ${pluginDef.description || ""}
+      Plugin Required & Optional Parameters:
+      ${pluginDef.parametersDescription || "None"}${pluginDef.returnDescription ? `\nPlugin Output / Returns: ${pluginDef.returnDescription}` : ""}`
+    : `No plugin has been pre-selected for this node — choose "pluginId" from the list above that best performs this node's role.`;
+
+  return `You are a Plugin Node Configurator.
+        Node Name: "${node.name}" (ID: "${node.id}")
+        Node Operational Role / Purpose: "${nodeRole}"
+        ${neighborHint}
+
+        Available Plugins in the system and their parameter schemas:
+        ${availablePlugins
+          .map(
+            (p) =>
+              `- "${p.name}": ${p.description}\n  Parameters: ${p.parametersDescription || "None"}${p.returnDescription ? `\n  Returns: ${p.returnDescription}` : ""}`,
+          )
+          .join("\n\n")}
+
+        ${selectedPluginSection}
+
+        SYSTEM INVARIANTS:
+        - Select and confirm "pluginId" from the available plugins [${Array.from(pluginNames).join(", ")}] that best performs this node's role: "${nodeRole}".
+        - NEVER invent or hallucinate external tool names (like n8n, zapier, etc.)!
+
+        HOST SYSTEM ENVIRONMENT:
+        - Host Operating System: "${Deno.build.os}".
+        - For command or script execution tools: You MUST generate commands fully compatible with ${Deno.build.os}!
+        ${
+          Deno.build.os === "linux"
+            ? `  * Linux detected: Use standard Linux CLI utilities. NEVER use macOS-only commands like 'pmset', 'top -l 1', or 'vm_stat'!`
+            : Deno.build.os === "darwin"
+              ? `  * macOS detected: Use macOS CLI utilities.`
+              : `  * Windows detected: Use Windows CLI utilities.`
+        }
+
+        CRITICAL RULES FOR inputMapping:
+        1. You MUST provide values for all REQUIRED parameters of this plugin.
+        2. Each parameter's value MUST match its REAL declared type (shown above under "Plugin Required & Optional Parameters") — if a parameter expects a number, provide a literal number (e.g. limit: 5, NOT limit: "5"); if it expects a boolean, provide a literal boolean; if it expects a string, provide a string. The ONLY exception is a "\${varName}" template reference (below), which is accepted regardless of the parameter's declared type.
+          - For literal values: provide the raw value directly, in its correct type (e.g. command: "git status --short", operation: "write", path: "system_health.md", limit: 5).
+          - For state memory references: use ONLY the exact template syntax "\${varName}", where varName is a single bare variable name with NO dots and NO brackets (e.g. "\${cwd}", "\${search_results}").
+          - FORBIDDEN — NEVER write dot-path or bracket-index access such as "\${search_results.results[0].url}" or "\${search_results[1].url}". The runtime resolver treats everything inside "\${...}" as one flat literal key and does NOT walk into nested objects or arrays.
+          - If you need a specific field out of a list/object (e.g. the URL of the top search result) rather than the whole variable, do NOT try to express that here. The upstream graph must already contain an "llm" node dedicated to extracting that single field into its own scalar outputKey (e.g. "top_result_url") — then reference that scalar here as "\${top_result_url}".
+            * WRONG: inputMapping: { "url": "\${search_results.results[0].url}" }
+            * RIGHT: upstream "llm" node with outputKey "top_result_url", then this node: inputMapping: { "url": "\${top_result_url}" }
+          - NEVER wrap values in objects like { staticValue: ... } or { value: ... }!
+          - For folder/directory/path parameters: if the User Objective does not give an explicit absolute path, use "\${cwd}" (the real host working directory, available in state). NEVER invent a plausible-looking absolute path like "/project/src" or "/home/user/docs" — that path does not exist on the host and will fail at runtime.
+        3. Matching Specific Commands to Specialized Nodes:
+          - When the user objective specifies multiple commands (e.g. chained with '&&', ';', or 'and') and the workflow decomposed them into separate specialized nodes (e.g. one node for "Git Status" and one for "Git Log"):
+            Assign ONLY the specific sub-command matching THIS node's Operational Role!
+            * For a Status inspection node: use ONLY the status command (e.g. "git status --short").
+            * For a Log/history inspection node: use ONLY the log command (e.g. "git log -n 3 --oneline").
+            * DO NOT copy the entire chained string into both nodes!
+          - If there is only ONE plugin node in the workflow for multiple commands, then assign the full chained command.
+        ${graphStateText}`;
+}
+
+function normalizeMappingValues(
+  rawMapping: Record<string, any>,
+): Record<string, any> {
+  const mapping: Record<string, any> = {};
+  for (const [k, v] of Object.entries(rawMapping)) {
+    mapping[k] = v && typeof v === "object" && "value" in v ? v.value : v;
+  }
+  return mapping;
+}
+
+function resolveEffectivePluginId(
+  config: PluginConfigCandidate,
+  fallbackPluginId: string | undefined,
+  availablePlugins: PluginInfo[],
+  pluginNames: Set<string>,
+): string {
+  let effectivePluginId = fallbackPluginId;
+  if (config.pluginId) {
+    const normalized = normalizePluginName(config.pluginId, availablePlugins);
+    if (normalized && pluginNames.has(normalized)) {
+      effectivePluginId = normalized;
+    }
+  }
+  if (!effectivePluginId || !pluginNames.has(effectivePluginId)) {
+    effectivePluginId = availablePlugins[0]?.name || "tool";
+  }
+  return effectivePluginId;
+}
+
+
+function resolveOutputKey(
+  config: PluginConfigCandidate,
+  node: GraphNode,
+  intermediateNodes: GraphNode[],
+): string {
+  const outKey = config.outputKey || `${node.id}_data`;
+  const isLastIntermediate =
+    intermediateNodes[intermediateNodes.length - 1]?.id === node.id;
+  return outKey === "result" && !isLastIntermediate
+    ? `${node.id}_data`
+    : outKey;
+}
+
+function validatePluginInputMapping(
+  pluginDef: PluginInfo | undefined,
+  inputMapping: Record<string, unknown>,
+): string[] {
+  const fieldSchemas = buildPluginParameterFieldSchemas(pluginDef);
+  if (!fieldSchemas) return [];
+
+  const requiredKeys = new Set(pluginDef?.requiredKeys || []);
+  const shaped: Record<string, z.ZodTypeAny> = {};
+  for (const [key, schema] of Object.entries(fieldSchemas)) {
+    shaped[key] = requiredKeys.has(key) ? schema : schema.optional();
+  }
+
+  const result = z.object(shaped).safeParse(inputMapping);
+  if (result.success) return [];
+
+  return result.error.issues.map(
+    (issue) => `parameter "${issue.path.join(".")}": ${issue.message}`,
+  );
+}
+
+function fillMissingRequiredParams(
+  inputMapping: Record<string, any>,
+  pluginDef: PluginInfo | undefined,
+): void {
+  for (const reqKey of pluginDef?.requiredKeys || []) {
+    if (inputMapping[reqKey] === undefined) {
+      inputMapping[reqKey] = "${input}";
+    }
+  }
+}
+
+function registerPluginOutputStateField(
+  graph: LangGraphAbstraction,
+  outKey: string,
+  config: PluginConfigCandidate,
+  effectivePluginId: string,
+): void {
+  if (config.newStateProperties?.[outKey]) {
+    graph.stateSchema[outKey] = config.newStateProperties[outKey];
+  } else if (!graph.stateSchema[outKey]) {
+    graph.stateSchema[outKey] = {
+      type: "object",
+      description: `Result from plugin ${effectivePluginId}`,
+      required: false,
+    };
+  }
+}
+
+function resolveEffectivePlugin(
+  config: PluginConfigCandidate,
+  assignedPluginId: string | undefined,
+  availablePlugins: PluginInfo[],
+  pluginNames: Set<string>,
+): { effectivePluginId: string; effectivePluginDef: PluginInfo | undefined } {
+  const effectivePluginId = resolveEffectivePluginId(config, assignedPluginId, availablePlugins, pluginNames);
+  const effectivePluginDef = availablePlugins.find((p: PluginInfo) => p.name === effectivePluginId);
+  return { effectivePluginId, effectivePluginDef };
+}
+
+function finalizePluginConfig(
+  node: GraphNode,
+  ctx: PluginNodeConfiguratorContext,
+  config: PluginConfigCandidate,
+  effectivePluginId: string,
+  inputMapping: Record<string, any>,
+  usedFallback: boolean,
+): { usedFallback: boolean } {
+  const { graph, intermediateNodes } = ctx;
+  const outKey = resolveOutputKey(config, node, intermediateNodes);
+
+  node.config = {
+    pluginId: effectivePluginId,
+    inputMapping,
+    outputKey: outKey,
+  };
+
+  registerPluginOutputStateField(graph, outKey, config, effectivePluginId);
+
+  return { usedFallback };
+}
+
+function applyFallbackPluginConfig(
+  node: GraphNode,
+  ctx: PluginNodeConfiguratorContext,
+  assignedPluginId: string | undefined,
+): { usedFallback: boolean } {
+  const { availablePlugins } = ctx;
+
+  console.warn(
+    `[Visual Builder - Generator] Plugin Config failed for ${node.id}, using deterministic fallback.`,
+  );
+
+  const fallbackPluginId =
+    assignedPluginId || availablePlugins[0]?.name || "tool";
+  const fallbackPluginDef =
+    availablePlugins.find((p: PluginInfo) => p.name === fallbackPluginId) ||
+    availablePlugins[0];
+
+  const inputMapping: Record<string, any> = {};
+  fillMissingRequiredParams(inputMapping, fallbackPluginDef);
+
+  node.config = {
+    pluginId: fallbackPluginId,
+    inputMapping,
+    outputKey: `${node.id}_data`,
+  };
+  return { usedFallback: true };
+}
+
+const MAX_PLUGIN_RETRIES = 1;
+
 export async function configurePluginNode(
   node: GraphNode,
   ctx: PluginNodeConfiguratorContext,
 ): Promise<{ usedFallback: boolean }> {
-  const { prompt, availablePlugins, pluginNames, configLlm, graph, intermediateNodes, nodeDescriptions, neighborHint, graphStateText } = ctx;
+  const {
+    prompt,
+    availablePlugins,
+    pluginNames,
+    configLlm,
+    nodeDescriptions,
+    neighborHint,
+    graphStateText,
+  } = ctx;
 
-  let selectedPluginId = (node.config.pluginId as string);
-  if (!selectedPluginId || !pluginNames.has(selectedPluginId)) {
-    selectedPluginId = availablePlugins[0]?.name || "tool";
-  }
-  const pluginDef = availablePlugins.find((p) => p.name === selectedPluginId) || availablePlugins[0];
+  const { assignedPluginId, pluginDef } = resolveInitialPlugin(node, availablePlugins, pluginNames);
 
   const pluginConfigSchema = buildPluginConfigSchema(availablePlugins, pluginDef);
   const pluginAgent = configLlm.withStructuredOutput(pluginConfigSchema, {
@@ -116,289 +334,69 @@ export async function configurePluginNode(
   });
 
   const nodeRole = nodeDescriptions.get(node.id) || node.name;
-  const builderMessages = [
-    new SystemMessage(`You are a Plugin Node Configurator.
-Node Name: "${node.name}" (ID: "${node.id}")
-Node Operational Role / Purpose: "${nodeRole}"
-${neighborHint}
-
-Available Plugins in the system and their parameter schemas:
-${availablePlugins
-  .map(
-    (p) =>
-      `- "${p.name}": ${p.description}\n  Parameters: ${p.parametersDescription || "None"}${p.returnDescription ? `\n  Returns: ${p.returnDescription}` : ""}`,
-  )
-  .join("\n\n")}
-
-Selected Plugin for this node: "${pluginDef.name}"
-Plugin Description: ${pluginDef.description || ""}
-Plugin Required & Optional Parameters:
-${pluginDef.parametersDescription || "None"}${pluginDef.returnDescription ? `\nPlugin Output / Returns: ${pluginDef.returnDescription}` : ""}
-
-SYSTEM INVARIANTS:
-- Select and confirm "pluginId" from the available plugins [${Array.from(pluginNames).join(", ")}] that best performs this node's role: "${nodeRole}".
-- NEVER invent or hallucinate external tool names (like n8n, zapier, etc.)!
-
-HOST SYSTEM ENVIRONMENT:
-- Host Operating System: "${Deno.build.os}".
-- For command or script execution tools: You MUST generate commands fully compatible with ${Deno.build.os}!
-${
-  Deno.build.os === "linux"
-    ? `  * Linux detected: Use standard Linux CLI utilities. NEVER use macOS-only commands like 'pmset', 'top -l 1', or 'vm_stat'!`
-    : Deno.build.os === "darwin"
-      ? `  * macOS detected: Use macOS CLI utilities.`
-      : `  * Windows detected: Use Windows CLI utilities.`
-}
-
-CRITICAL RULES FOR inputMapping:
-1. You MUST provide values for all REQUIRED parameters of this plugin.
-2. Each parameter's value MUST match its REAL declared type (shown above under "Plugin Required & Optional Parameters") — if a parameter expects a number, provide a literal number (e.g. limit: 5, NOT limit: "5"); if it expects a boolean, provide a literal boolean; if it expects a string, provide a string. The ONLY exception is a "\${varName}" template reference (below), which is accepted regardless of the parameter's declared type.
-   - For literal values: provide the raw value directly, in its correct type (e.g. command: "git status --short", operation: "write", path: "system_health.md", limit: 5).
-   - For state memory references: use ONLY the exact template syntax "\${varName}", where varName is a single bare variable name with NO dots and NO brackets (e.g. "\${cwd}", "\${search_results}").
-   - FORBIDDEN — NEVER write dot-path or bracket-index access such as "\${search_results.results[0].url}" or "\${search_results[1].url}". The runtime resolver treats everything inside "\${...}" as one flat literal key and does NOT walk into nested objects or arrays.
-   - If you need a specific field out of a list/object (e.g. the URL of the top search result) rather than the whole variable, do NOT try to express that here. The upstream graph must already contain an "llm" node dedicated to extracting that single field into its own scalar outputKey (e.g. "top_result_url") — then reference that scalar here as "\${top_result_url}".
-     * WRONG: inputMapping: { "url": "\${search_results.results[0].url}" }
-     * RIGHT: upstream "llm" node with outputKey "top_result_url", then this node: inputMapping: { "url": "\${top_result_url}" }
-   - NEVER wrap values in objects like { staticValue: ... } or { value: ... }!
-   - For folder/directory/path parameters: if the User Objective does not give an explicit absolute path, use "\${cwd}" (the real host working directory, available in state). NEVER invent a plausible-looking absolute path like "/project/src" or "/home/user/docs" — that path does not exist on the host and will fail at runtime.
-3. Matching Specific Commands to Specialized Nodes:
-   - When the user objective specifies multiple commands (e.g. chained with '&&', ';', or 'and') and the workflow decomposed them into separate specialized nodes (e.g. one node for "Git Status" and one for "Git Log"):
-     Assign ONLY the specific sub-command matching THIS node's Operational Role!
-     * For a Status inspection node: use ONLY the status command (e.g. "git status --short").
-     * For a Log/history inspection node: use ONLY the log command (e.g. "git log -n 3 --oneline").
-     * DO NOT copy the entire chained string into both nodes!
-   - If there is only ONE plugin node in the workflow for multiple commands, then assign the full chained command.
-${graphStateText}`),
+  const messages: BaseMessage[] = [
+    new SystemMessage(
+      buildPluginSystemPrompt(node, nodeRole, pluginDef, availablePlugins, pluginNames, neighborHint, graphStateText),
+    ),
     new HumanMessage(
       `Overall User Objective: "${prompt}"\nConfigure this plugin node specifically for its role: "${nodeRole}".`,
     ),
   ];
 
-  return runConfigStep<z.infer<ReturnType<typeof buildPluginConfigSchema>>, { usedFallback: boolean }>({
-    label: "Plugin Node Configurator",
-    agent: pluginAgent,
-    messages: builderMessages,
-    onSuccess: (config) => {
-      let outKey = config.outputKey || `${node.id}_data`;
-      const isLastIntermediate =
-        intermediateNodes[intermediateNodes.length - 1]?.id === node.id;
-      if (outKey === "result" && !isLastIntermediate) {
-        outKey = `${node.id}_data`;
-      }
-
-      let effectivePluginId = selectedPluginId;
-      if (config.pluginId) {
-        const normalized = normalizePluginName(config.pluginId, availablePlugins);
-        if (normalized && pluginNames.has(normalized)) {
-          effectivePluginId = normalized;
-        }
-      }
-      if (!pluginNames.has(effectivePluginId)) {
-        effectivePluginId = availablePlugins[0]?.name || "tool";
-      }
-
-      const rawMapping = (config.inputMapping || {}) as Record<string, any>;
-      const inputMapping: Record<string, any> = {};
-      for (const [k, v] of Object.entries(rawMapping)) {
-        if (v && typeof v === "object" && "value" in v) {
-          inputMapping[k] = (v as any).value;
-        } else {
-          inputMapping[k] = v;
-        }
-      }
-
-      // === SCHEMA-DRIVEN GENERIC PARAMETER AUTO-COMPLETION ===
-      const expectedKeys = new Set([
-        ...(pluginDef.parameterKeys || []),
-        ...Object.keys(rawMapping),
-      ]);
-      const hasParam = (pattern: RegExp) =>
-        Array.from(expectedKeys).find((k) => pattern.test(k));
-
-      // 1. Path / File parameter (e.g. path, file, filename, filePath)
-      const pathKey = hasParam(/^(?:path|file|filename|filePath)$/i);
-      if (pathKey) {
-        if (!inputMapping[pathKey]) {
-          const fileMatch = prompt.match(
-            /['"]?([a-zA-Z0-9_\-\.\/]+\.(?:log|md|json|txt|js|ts|py|html|sh))['"]?/i,
-          );
-          inputMapping[pathKey] = fileMatch ? fileMatch[1] : "${cwd}";
-        }
-        if (
-          typeof inputMapping[pathKey] === "string" &&
-          inputMapping[pathKey].startsWith("/") &&
-          !inputMapping[pathKey].startsWith("/home/") &&
-          !inputMapping[pathKey].startsWith("/tmp/") &&
-          !inputMapping[pathKey].startsWith("/var/")
-        ) {
-          inputMapping[pathKey] = inputMapping[pathKey].replace(/^\/+/, "");
-        }
-      }
-
-      // 2. Content / Data / Body / Text parameter
-      const contentKey = hasParam(/^(?:content|data|body|text|payload|message)$/i);
-      if (contentKey && !inputMapping[contentKey]) {
-        const incomingEdge = graph.edges.find((e) => e.target === node.id);
-        const sourceNode = incomingEdge
-          ? graph.nodes.find((n) => n.id === incomingEdge.source)
-          : null;
-        const sourceOutKey =
-          (sourceNode?.config?.outputKey as string) ||
-          Object.keys(graph.stateSchema).find((k) => k !== "input") ||
-          "input";
-        inputMapping[contentKey] = sourceOutKey;
-      }
-
-      // 3. Operation / Action parameter
-      const opKey = hasParam(/^(?:operation|action|mode|method)$/i);
-      if (opKey && !inputMapping[opKey]) {
-        inputMapping[opKey] = "write";
-      }
-
-      // 4. Command / Script parameter
-      const cmdKey = hasParam(/^(?:command|cmd|script)$/i);
-      if (cmdKey) {
-        let cmd = typeof inputMapping[cmdKey] === "string" ? inputMapping[cmdKey].trim() : "";
-
-        // Resolve template references like ${tempFilePath.path} or ${tempFilePath}
-        if (/\$\{[^}]*(?:temp|file|path)[^}]*\}/i.test(cmd)) {
-          const priorFileNode = intermediateNodes.find((n) => {
-            if (n.type !== "plugin") return false;
-            const mapping = (n.config?.inputMapping || {}) as Record<string, any>;
-            return Boolean(mapping.path || mapping.file || mapping.filename);
-          });
-          const priorPath =
-            (priorFileNode?.config?.inputMapping as any)?.path ||
-            (priorFileNode?.config?.inputMapping as any)?.file ||
-            "/tmp/temp_file.ts";
-          cmd = cmd.replace(/\$\{[^}]*(?:temp|file|path)[^}]*\}/gi, priorPath);
-        }
-
-        if (!cmd || cmd === "input") {
-          cmd = "${input}";
-        }
-
-        inputMapping[cmdKey] = cmd;
-      }
-
-      // 5. Working Directory / Folder parameter
-      const cwdKey = hasParam(/^(?:cwd|dir|workingDirectory|folder|directory)$/i);
-      if (cwdKey) {
-        if (!inputMapping[cwdKey]) {
-          inputMapping[cwdKey] = "${cwd}";
-        } else if (
-          typeof inputMapping[cwdKey] === "string" &&
-          inputMapping[cwdKey].startsWith("/") &&
-          !inputMapping[cwdKey].startsWith("/home/") &&
-          !inputMapping[cwdKey].startsWith("/tmp/") &&
-          !inputMapping[cwdKey].startsWith("/var/")
-        ) {
-          // The LLM invented an absolute path that doesn't exist on the host (e.g. "/project/src").
-          inputMapping[cwdKey] = "${cwd}";
-        }
-      }
-
-      // 6. URL parameter
-      const urlKey = hasParam(/^(?:url|uri|link)$/i);
-      if (urlKey && !inputMapping[urlKey]) {
-        inputMapping[urlKey] = "input";
-      }
-
-      // 7. Query / Search parameter
-      const queryKey = hasParam(/^(?:query|search|keyword|term)$/i);
-      if (queryKey && !inputMapping[queryKey]) {
-        inputMapping[queryKey] = "input";
-      }
-
-      node.config = {
-        pluginId: effectivePluginId,
-        inputMapping,
-        outputKey: outKey,
-      };
-
-      if (config.newStateProperties?.[outKey]) {
-        // Only accept the schema entry for THIS node's own outKey — see the
-        // matching comment in the llm/agent branch for why unrelated keys
-        // here must not pollute graph.stateSchema.
-        graph.stateSchema[outKey] = config.newStateProperties[outKey];
-      } else if (!graph.stateSchema[outKey]) {
-        graph.stateSchema[outKey] = {
-          type: "object",
-          description: `Result from plugin ${effectivePluginId}`,
-          required: false,
-        };
-      }
-      return { usedFallback: false };
-    },
-    onFallback: (err: any) => {
-      console.warn(
-        `[Visual Builder - Generator] Plugin Config failed for ${node.id}:`,
-        err?.message,
-      );
-      const fallbackMapping: Record<string, any> = {};
-      const expectedFallbackKeys = new Set([
-        ...(pluginDef.parameterKeys || []),
-      ]);
-      const hasFallbackParam = (pattern: RegExp) =>
-        Array.from(expectedFallbackKeys).find((k) => pattern.test(k));
-
-      const fbPathKey = hasFallbackParam(/^(?:path|file|filename|filePath)$/i);
-      if (fbPathKey) {
-        const fileMatch = prompt.match(
-          /['"]?([a-zA-Z0-9_\-\.\/]+\.(?:log|md|json|txt|js|ts|py|html|sh))['"]?/i,
+  for (let attempt = 1; attempt <= MAX_PLUGIN_RETRIES + 1; attempt++) {
+    const step = await runConfigStep<
+      PluginConfigCandidate,
+      { config: PluginConfigCandidate | null; failed: boolean }
+    >({
+      label: "Plugin Node Configurator",
+      agent: pluginAgent,
+      messages,
+      onSuccess: (config) => ({ config, failed: false }),
+      onFallback: (err: unknown) => {
+        console.warn(
+          `[Visual Builder - Generator] Plugin Config LLM call failed for ${node.id} (attempt ${attempt}):`,
+          err instanceof Error ? err.message : err,
         );
-        fallbackMapping[fbPathKey] = fileMatch ? fileMatch[1] : "output.txt";
-      }
+        return { config: null, failed: true };
+      },
+    });
 
-      const fbContentKey = hasFallbackParam(/^(?:content|data|body|text|payload|message)$/i);
-      if (fbContentKey) {
-        const incomingEdge = graph.edges.find((e) => e.target === node.id);
-        const sourceNode = incomingEdge
-          ? graph.nodes.find((n) => n.id === incomingEdge.source)
-          : null;
-        fallbackMapping[fbContentKey] =
-          (sourceNode?.config?.outputKey as string) ||
-          Object.keys(graph.stateSchema).find((k) => k !== "input") ||
-          "result";
-      }
+    if (step.failed || !step.config) {
+      return applyFallbackPluginConfig(node, ctx, assignedPluginId);
+    }
 
-      const fbOpKey = hasFallbackParam(/^(?:operation|action|mode|method)$/i);
-      if (fbOpKey) {
-        fallbackMapping[fbOpKey] = "write";
-      }
+    const { effectivePluginId, effectivePluginDef } = resolveEffectivePlugin(
+      step.config,
+      assignedPluginId,
+      availablePlugins,
+      pluginNames,
+    );
 
-      const fbCmdKey = hasFallbackParam(/^(?:command|cmd|script)$/i);
-      if (fbCmdKey) {
-        fallbackMapping[fbCmdKey] = "${input}";
-      }
+    const rawMapping = (step.config.inputMapping || {}) as Record<string, any>;
+    const inputMapping = normalizeMappingValues(rawMapping);
 
-      const fbCwdKey = hasFallbackParam(/^(?:cwd|dir|workingDirectory)$/i);
-      if (fbCwdKey) {
-        fallbackMapping[fbCwdKey] = "${cwd}";
-      }
+    const violations = validatePluginInputMapping(effectivePluginDef, inputMapping);
+    if (violations.length === 0) {
+      return finalizePluginConfig(node, ctx, step.config, effectivePluginId, inputMapping, false);
+    }
 
-      const fbUrlKey = hasFallbackParam(/^(?:url|uri|link)$/i);
-      if (fbUrlKey) {
-        fallbackMapping[fbUrlKey] = "input";
-      }
+    console.warn(
+      `[Visual Builder - Generator] Plugin node ${node.id} attempt ${attempt} has an invalid inputMapping:`,
+      violations,
+    );
 
-      const fbQueryKey = hasFallbackParam(/^(?:query|search|keyword|term)$/i);
-      if (fbQueryKey) {
-        fallbackMapping[fbQueryKey] = "input";
-      }
+    if (attempt > MAX_PLUGIN_RETRIES) {
+      fillMissingRequiredParams(inputMapping, effectivePluginDef);
+      return finalizePluginConfig(node, ctx, step.config, effectivePluginId, inputMapping, true);
+    }
 
-      for (const reqKey of pluginDef.requiredKeys || []) {
-        if (fallbackMapping[reqKey] === undefined) {
-          fallbackMapping[reqKey] = "input";
-        }
-      }
+    messages.push(
+      new AIMessage(JSON.stringify(step.config)),
+      new HumanMessage(
+        `That inputMapping is invalid:\n${violations.map((v) => `- ${v}`).join("\n")}\nFix ALL of the issues above and answer again with a corrected inputMapping.`,
+      ),
+    );
+  }
 
-      node.config = {
-        pluginId: selectedPluginId,
-        inputMapping: fallbackMapping,
-        outputKey: `${node.id}_data`,
-      };
-      return { usedFallback: true };
-    },
-  });
+  return applyFallbackPluginConfig(node, ctx, assignedPluginId);
 }

@@ -1,5 +1,5 @@
 import { ChatOllama } from "@langchain/ollama";
-import { SystemMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import { runConfigStep } from "./generation-step.ts";
 
@@ -267,6 +267,7 @@ export async function runTopologyCompilerPhase(
   prompt: string,
   modelName: string,
   availablePlugins: PluginInfo[],
+  correctionContext?: { previousSkeleton: WorkflowSkeleton; violations: string[] },
 ): Promise<WorkflowSkeleton> {
   const workflowSkeletonSchema = buildWorkflowSkeletonSchema(availablePlugins);
 
@@ -334,10 +335,24 @@ Example D — Numeric quality gates use "number", not a boolean flag:
   WRONG: outputKey "is_good_enough" (boolean) with condition operator "equals" true/false — this discards the actual numeric scale the user asked for.
   RIGHT: the "llm" node's outputKey is "quality_score", producing a real number (not a 0/1 flag); the "condition" node's field is "quality_score" with a numeric operator ("greater_than_or_equals") and a numeric value (8, not "8" or true/false). Use "string" outputs the same way for category/label judgments (e.g. field "severity", operator "equals", value "critical") — only use a boolean when the objective is a literal yes/no question.`;
 
+  const messages: BaseMessage[] = [
+    new SystemMessage(compilerPrompt),
+    new HumanMessage(`User Objective: "${prompt}"`),
+  ];
+
+  if (correctionContext) {
+    messages.push(
+      new AIMessage(JSON.stringify(correctionContext.previousSkeleton)),
+      new HumanMessage(
+        `That workflow structure is invalid:\n${correctionContext.violations.map((v) => `- ${v}`).join("\n")}\nFix ALL of the issues above and answer again with a corrected node/edge structure.`,
+      ),
+    );
+  }
+
   return runConfigStep<WorkflowSkeleton, WorkflowSkeleton>({
     label: "Topology Compiler",
     agent: compilerAgent,
-    messages: [new SystemMessage(compilerPrompt), new HumanMessage(`User Objective: "${prompt}"`)],
+    messages,
     onSuccess: (skeleton) => {
       console.log(
         `[Visual Builder - Generator] Architecture designed: ${skeleton.nodes.length} nodes, ${skeleton.edges.length} edges`,

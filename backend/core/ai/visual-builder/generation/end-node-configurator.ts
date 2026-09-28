@@ -1,12 +1,13 @@
 import { ChatOllama } from "@langchain/ollama";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import { GraphNode, LangGraphAbstraction } from "../types.ts";
+import {
+  EndNodeConfiguratorContext,
+  GraphNode,
+  LangGraphAbstraction,
+} from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
 
-/**
- * Zod schema for configuring the End node deliverable contract (Structured Output).
- */
 export function buildEndNodeConfigSchema(availableStateKeys: string[] = []) {
   const validKeys = availableStateKeys.filter((k) => k && k.trim().length > 0);
   const contentKeySchema =
@@ -25,7 +26,9 @@ export function buildEndNodeConfigSchema(availableStateKeys: string[] = []) {
   return z.object({
     thought: z
       .string()
-      .describe("Explanation of the final deliverable and format of this workflow"),
+      .describe(
+        "Explanation of the final deliverable and format of this workflow",
+      ),
     type: z
       .enum([
         "file",
@@ -43,14 +46,23 @@ export function buildEndNodeConfigSchema(availableStateKeys: string[] = []) {
       .describe("The primary type of deliverable produced by this workflow"),
     summary: z
       .string()
-      .describe("Concise human-readable summary of what this workflow delivers"),
+      .describe(
+        "Concise human-readable summary of what this workflow delivers",
+      ),
     contentKey: contentKeySchema,
     files: z
       .array(
         z.object({
           name: z.string().describe("Filename e.g. 'system_health.md'"),
-          path: z.string().describe("File path on disk, matching the saved file name or path within workspace e.g. 'system_health.md'"),
-          mimeType: z.string().optional().describe("MIME type e.g. 'text/markdown'"),
+          path: z
+            .string()
+            .describe(
+              "File path on disk, matching the saved file name or path within workspace e.g. 'system_health.md'",
+            ),
+          mimeType: z
+            .string()
+            .optional()
+            .describe("MIME type e.g. 'text/markdown'"),
         }),
       )
       .optional()
@@ -69,21 +81,109 @@ export function buildEndNodeConfigSchema(availableStateKeys: string[] = []) {
   });
 }
 
-export interface EndNodeConfiguratorContext {
-  prompt: string;
-  configLlm: ChatOllama;
-  graph: LangGraphAbstraction;
-  intermediateNodes: GraphNode[];
+function buildEndNodeSystemPrompt(
+  prompt: string,
+  endWorkspaceDir: string,
+  intermediateNodes: GraphNode[],
+  graph: LangGraphAbstraction,
+): string {
+  return `You are the Deliverable & Output Architect for an AI Agent Visual Builder.
+    Your task is to inspect the completed workflow and define the formal Structured Output Contract on the 'end' node.
+
+    User Objective: "${prompt}"
+
+    RUNTIME ENVIRONMENT:
+    - Workspace / Current Working Directory: "${endWorkspaceDir}"
+
+    Workflow Functional Steps & Configuration:
+    ${intermediateNodes.map((n) => `- Node "${n.name}" (ID: "${n.id}", Type: "${n.type}"): config = ${JSON.stringify(n.config)}`).join("\n")}
+
+    Available State Variables:
+    ${Object.keys(graph.stateSchema)
+      .map(
+        (k) =>
+          `- "${k}" (${graph.stateSchema[k]?.type || "string"}: ${graph.stateSchema[k]?.description || ""})`,
+      )
+      .join("\n")}
+
+    CRITICAL DELIVERABLE RULES:
+    1. If the workflow ends by saving or writing a file to disk:
+      - type MUST be "file".
+      - contentKey MUST be the state variable containing the actual text/markdown body that was written (e.g. from the preceding LLM reasoning step).
+      - files MUST contain the file info (name, path).
+        * For "path", look at the file path configured in the preceding node. Use the EXACT path configured in that node (e.g. "system_health.md" or "${endWorkspaceDir}/system_health.md").
+        * NEVER invent dummy placeholder prefixes like "absolute/path/to/", "/path/to/", or "/current/working/directory/".
+    2. If the workflow produces an executive report, article, or analysis without saving to disk:
+      - type MUST be "markdown".
+      - contentKey MUST be the state variable containing the report.
+    3. If the workflow produces a list of records or tabular dataset:
+      - type MUST be "table" or "json".
+    4. If the workflow evaluates a condition or decision check:
+      - type MUST be "boolean".
+    5. If the workflow executes a terminal command without saving:
+      - type MUST be "terminal".
+    6. USER RUNTIME INPUT REQUIREMENT:
+      - Set requiresUserInput to true if this workflow processes, classifies, analyzes, or responds to dynamic runtime user messages, tickets, inquiries, questions, or text provided when the user runs the execution.
+      - Set requiresUserInput to false if the workflow runs autonomously without user input (e.g. system diagnostics, reading hardware battery/CPU, cron scripts, fixed actions).
+      - If requiresUserInput is true, provide an inputDescription explaining what the user should provide (e.g. 'Technical support ticket to classify', 'User search query', 'Text to process').`;
 }
 
-/**
- * Phase 2.5: configures the "end" node's deliverable contract (structured
- * output spec) via a structured-output call, falling back to a heuristic
- * file/markdown deliverable derived from the last intermediate node if the
- * call fails. Also determines and applies whether the graph's "input" state
- * property is required, based on the deliverable config and whether any
- * node actually reads "input".
- */
+function buildEmergencyDeliverable(intermediateNodes: GraphNode[]) {
+  const lastIntermediate = intermediateNodes[intermediateNodes.length - 1];
+  const lastMapping = (lastIntermediate?.config?.inputMapping || {}) as Record<
+    string,
+    any
+  >;
+  const targetFilePath =
+    lastMapping.path || lastMapping.file || lastMapping.filename;
+  const isFileSavingStep =
+    lastIntermediate?.type === "plugin" && typeof targetFilePath === "string";
+
+  const prevNode = intermediateNodes[intermediateNodes.length - 2];
+  const contentKey =
+    (prevNode?.config?.outputKey as string) ||
+    (lastIntermediate?.config?.outputKey as string) ||
+    "result";
+
+  return {
+    type: isFileSavingStep ? "file" : "markdown",
+    summary: "Workflow Deliverable",
+    contentKey,
+    ...(isFileSavingStep
+      ? {
+          files: [
+            {
+              name: targetFilePath,
+              path: targetFilePath,
+              mimeType: "text/plain",
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
+function resolveInputRequirement(
+  graph: LangGraphAbstraction,
+  endConfig: { requiresUserInput?: boolean; inputDescription?: string } | null,
+): void {
+  if (!graph.stateSchema?.input) return;
+
+  graph.stateSchema.input.required = endConfig?.requiresUserInput || false;
+
+  if (endConfig?.inputDescription) {
+    graph.stateSchema.input.description = endConfig.inputDescription;
+  } else if (
+    graph.stateSchema.input.required &&
+    (!graph.stateSchema.input.description ||
+      graph.stateSchema.input.description ===
+        "User initial query or prompt for this execution")
+  ) {
+    graph.stateSchema.input.description =
+      "User input or prompt to execute this workflow";
+  }
+}
+
 export async function configureEndNodeDeliverable(
   endNode: GraphNode,
   ctx: EndNodeConfiguratorContext,
@@ -92,69 +192,44 @@ export async function configureEndNodeDeliverable(
 
   const endWorkspaceDir = Deno.cwd();
 
-  const endNodeConfigSchema = buildEndNodeConfigSchema(Object.keys(graph.stateSchema));
+  const endNodeConfigSchema = buildEndNodeConfigSchema(
+    Object.keys(graph.stateSchema),
+  );
+
   const endAgent = configLlm.withStructuredOutput(endNodeConfigSchema, {
     name: "DeliverableConfig",
   });
 
   const endMessages = [
-    new SystemMessage(`You are the Deliverable & Output Architect for an AI Agent Visual Builder.
-Your task is to inspect the completed workflow and define the formal Structured Output Contract on the 'end' node.
-
-User Objective: "${prompt}"
-
-RUNTIME ENVIRONMENT:
-- Workspace / Current Working Directory: "${endWorkspaceDir}"
-
-Workflow Functional Steps & Configuration:
-${intermediateNodes.map((n) => `- Node "${n.name}" (ID: "${n.id}", Type: "${n.type}"): config = ${JSON.stringify(n.config)}`).join("\n")}
-
-Available State Variables:
-${Object.keys(graph.stateSchema).map((k) => `- "${k}" (${graph.stateSchema[k]?.type || "string"}: ${graph.stateSchema[k]?.description || ""})`).join("\n")}
-
-CRITICAL DELIVERABLE RULES:
-1. If the workflow ends by saving or writing a file to disk:
-   - type MUST be "file".
-   - contentKey MUST be the state variable containing the actual text/markdown body that was written (e.g. from the preceding LLM reasoning step).
-   - files MUST contain the file info (name, path).
-     * For "path", look at the file path configured in the preceding node. Use the EXACT path configured in that node (e.g. "system_health.md" or "${endWorkspaceDir}/system_health.md").
-     * NEVER invent dummy placeholder prefixes like "absolute/path/to/", "/path/to/", or "/current/working/directory/".
-2. If the workflow produces an executive report, article, or analysis without saving to disk:
-   - type MUST be "markdown".
-   - contentKey MUST be the state variable containing the report.
-3. If the workflow produces a list of records or tabular dataset:
-   - type MUST be "table" or "json".
-4. If the workflow evaluates a condition or decision check:
-   - type MUST be "boolean".
-5. If the workflow executes a terminal command without saving:
-   - type MUST be "terminal".
-6. USER RUNTIME INPUT REQUIREMENT:
-   - Set requiresUserInput to true if this workflow processes, classifies, analyzes, or responds to dynamic runtime user messages, tickets, inquiries, questions, or text provided when the user runs the execution.
-   - Set requiresUserInput to false if the workflow runs autonomously without user input (e.g. system diagnostics, reading hardware battery/CPU, cron scripts, fixed actions).
-   - If requiresUserInput is true, provide an inputDescription explaining what the user should provide (e.g. 'Technical support ticket to classify', 'User search query', 'Text to process').`),
-    new HumanMessage(`Define the final deliverable output contract for this workflow.`),
+    new SystemMessage(
+      buildEndNodeSystemPrompt(
+        prompt,
+        endWorkspaceDir,
+        intermediateNodes,
+        graph,
+      ),
+    ),
+    new HumanMessage(
+      `Define the final deliverable output contract for this workflow.`,
+    ),
   ];
 
-  const endConfig = await runConfigStep<z.infer<typeof endNodeConfigSchema>, z.infer<typeof endNodeConfigSchema> | null>({
+  const endConfig = await runConfigStep<
+    z.infer<typeof endNodeConfigSchema>,
+    z.infer<typeof endNodeConfigSchema> | null
+  >({
     label: "End Node Configurator",
     agent: endAgent,
     messages: endMessages,
     onSuccess: (config) => {
-      const sanitizedFiles = config.files?.map((f) => {
-        const raw = f.path || f.name;
-        const clean = raw.replace(/^(?:\/?absolute\/path\/to\/|\/?current\/working\/directory\/|\/?path\/to\/)/i, "");
-        return {
-          ...f,
-          path: clean,
-        };
-      });
-
       endNode.config = {
         output: {
           type: config.type,
           summary: config.summary,
           contentKey: config.contentKey,
-          ...(sanitizedFiles && sanitizedFiles.length > 0 ? { files: sanitizedFiles } : {}),
+          ...(config.files && config.files.length > 0
+            ? { files: config.files }
+            : {}),
         },
       };
       console.log(
@@ -164,84 +239,14 @@ CRITICAL DELIVERABLE RULES:
       return config;
     },
     onFallback: (err: any) => {
-      console.warn(`[Visual Builder - Generator] End Node Config fallback:`, err?.message);
-      const lastIntermediate = intermediateNodes[intermediateNodes.length - 1];
-      const lastMapping = (lastIntermediate?.config?.inputMapping || {}) as Record<string, any>;
-      const targetFilePath = lastMapping.path || lastMapping.file || lastMapping.filename;
-      const isFileSavingStep = lastIntermediate?.type === "plugin" && typeof targetFilePath === "string";
-      const prevNode = intermediateNodes[intermediateNodes.length - 2];
-      const contentKey = (prevNode?.config?.outputKey as string) || (lastIntermediate?.config?.outputKey as string) || "result";
-
-      endNode.config = {
-        output: {
-          type: isFileSavingStep ? "file" : "markdown",
-          summary: "Workflow Deliverable",
-          contentKey,
-          ...(isFileSavingStep
-            ? {
-                files: [
-                  {
-                    name: targetFilePath,
-                    path: targetFilePath,
-                    mimeType: "text/plain",
-                  },
-                ],
-              }
-            : {}),
-        },
-      };
+      console.warn(
+        `[Visual Builder - Generator] End Node Config fallback:`,
+        err?.message,
+      );
+      endNode.config = { output: buildEmergencyDeliverable(intermediateNodes) };
       return null;
     },
   });
 
-  // Determine if 'input' is actually required by any node in the graph dynamically
-  const anyNodeUsesInput = intermediateNodes.some((n) => {
-    if (n.type === "plugin") {
-      const mapping = (n.config?.inputMapping || {}) as Record<string, any>;
-      return Object.values(mapping).some(
-        (v) => typeof v === "string" && (v === "input" || v === "${input}" || v.includes("${input}")),
-      );
-    }
-    if (n.type === "llm") {
-      // llm inputMapping values are bare state-key names (no "${}"),
-      // so "input" itself (not "${input}") is the value to look for here.
-      const mapping = (n.config?.inputMapping || {}) as Record<string, unknown>;
-      if (Object.values(mapping).some((v) => v === "input")) return true;
-
-      const sysPrompt = String(n.config?.systemPrompt || "");
-      return (
-        sysPrompt.includes("${input}") ||
-        sysPrompt.includes("input message") ||
-        sysPrompt.includes("input ticket") ||
-        sysPrompt.includes("Use the input")
-      );
-    }
-    return false;
-  });
-
-  const promptExplicitlyDemandsInput =
-    /\b(?:del?\s+input|desde\s+el\s+input|del?\s+usuario|tome\s+(?:un\s+)?(?:mensaje|ticket|texto|query|consulta|pregunta)|recib(?:a|e|ir)\s+(?:un\s+)?(?:mensaje|ticket|texto|query|consulta|pregunta|input)|user\s+input|runtime\s+input)\b/i.test(
-      prompt,
-    );
-
-  const isInputRequired = Boolean(
-    endConfig?.requiresUserInput ||
-      anyNodeUsesInput ||
-      (intermediateNodes[0]?.type === "llm" && promptExplicitlyDemandsInput),
-  );
-
-  if (graph.stateSchema?.input) {
-    graph.stateSchema.input.required = isInputRequired;
-    if (endConfig?.inputDescription) {
-      graph.stateSchema.input.description = endConfig.inputDescription;
-    } else if (
-      isInputRequired &&
-      (!graph.stateSchema.input.description ||
-        graph.stateSchema.input.description ===
-          "User initial query or prompt for this execution")
-    ) {
-      graph.stateSchema.input.description =
-        "User input or prompt to execute this workflow";
-    }
-  }
+  resolveInputRequirement(graph, endConfig);
 }

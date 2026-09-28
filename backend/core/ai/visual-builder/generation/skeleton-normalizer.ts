@@ -277,9 +277,6 @@ export function normalizeSkeletonToGraph(
     let cleanPath: "true" | "false" | undefined = undefined;
     if (isCondition) {
       const pRaw = (raw.path || "").toLowerCase().trim();
-      const sIdx = intermediateNodes.findIndex((n) => n.id === s);
-      const tIdx = intermediateNodes.findIndex((n) => n.id === t);
-      const isLoopback = tIdx !== -1 && sIdx !== -1 && tIdx < sIdx;
 
       if (
         pRaw === "false" ||
@@ -287,8 +284,7 @@ export function normalizeSkeletonToGraph(
         pRaw === "fail" ||
         pRaw === "retry" ||
         pRaw === "loop" ||
-        pRaw === "loopback" ||
-        isLoopback
+        pRaw === "loopback"
       ) {
         cleanPath = "false";
       } else {
