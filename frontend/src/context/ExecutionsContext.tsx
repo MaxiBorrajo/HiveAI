@@ -1,13 +1,11 @@
+import { createContext, useContext, type ReactNode } from "react";
+import { listExecutions } from "@/lib/executions/listExecutions";
+import { deleteExecution } from "@/lib/executions/deleteExecution";
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import { listExecutions as listExecutionsRequest } from "@/lib/executions/listExecutions";
-import { deleteExecution as deleteExecutionRequest } from "@/lib/executions/deleteExecution";
-import { updateExecution as updateExecutionRequest } from "@/lib/executions/updateExecution";
+  updateExecution as updateExecutionRequest,
+  type UpdateExecutionDto,
+} from "@/lib/executions/updateExecution";
+import { useEntityListState } from "@/lib/useEntityListState";
 import type { ExecutionSummary } from "@/types/execution";
 
 interface ExecutionsContextValue {
@@ -31,94 +29,46 @@ interface ExecutionsContextValue {
 const ExecutionsContext = createContext<ExecutionsContextValue | null>(null);
 
 export function ExecutionsProvider({ children }: { children: ReactNode }) {
-  const [executions, setExecutions] = useState<ExecutionSummary[]>([]);
-  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(
-    null,
+  const state = useEntityListState<ExecutionSummary, UpdateExecutionDto>(
+    {
+      list: listExecutions,
+      remove: deleteExecution,
+      // The backend returns the full `Execution` entity here (numeric `id`),
+      // not an `ExecutionSummary` — only forward the fields the merge
+      // function below actually reads.
+      update: async (id, dto) => {
+        const { data } = await updateExecutionRequest(id, dto);
+        return { data: data ? { name: data.name, updatedAt: data.updatedAt } : undefined };
+      },
+    },
+    (execution, dto, serverExecution) => ({
+      ...execution,
+      name: serverExecution?.name ?? dto.name,
+      updatedAt: serverExecution?.updatedAt ?? Date.now(),
+    }),
   );
-  const [newExecutionToken, setNewExecutionToken] = useState(() =>
-    crypto.randomUUID(),
-  );
-  const [isLoadingExecutions, setIsLoadingExecutions] = useState(false);
-
-  function refreshExecutions() {
-    setIsLoadingExecutions(true);
-    listExecutionsRequest()
-      .then(({ data }) => setExecutions(data ?? []))
-      .finally(() => setIsLoadingExecutions(false));
-  }
-
-  useEffect(refreshExecutions, []);
-
-  function selectExecution(id: string) {
-    setActiveExecutionId(id);
-  }
-
-  function startNewExecution() {
-    setActiveExecutionId(null);
-    setNewExecutionToken(crypto.randomUUID());
-  }
-
-  function onExecutionCreated(id: string) {
-    setActiveExecutionId(id);
-    refreshExecutions();
-  }
-
-  function touchExecution(id: string) {
-    setExecutions((prev) => {
-      const index = prev.findIndex((e) => e.id === id);
-      if (index === -1) return prev;
-
-      const touched = { ...prev[index], updatedAt: Date.now() };
-      const rest = prev.filter((e) => e.id !== id);
-      return [touched, ...rest];
-    });
-  }
-
-  async function deleteExecution(id: string) {
-    await deleteExecutionRequest(id);
-    if (activeExecutionId === id) {
-      setActiveExecutionId(null);
-      setNewExecutionToken(crypto.randomUUID());
-    }
-    refreshExecutions();
-  }
 
   async function updateExecution(
     id: string,
     nameOrDto: string | { name: string },
   ) {
     const name = typeof nameOrDto === "string" ? nameOrDto : nameOrDto.name;
-    const { data } = await updateExecutionRequest(id, { name });
-    if (data) {
-      setExecutions((prev) =>
-        prev.map((e) =>
-          e.id === id
-            ? {
-                ...e,
-                name: data.name ?? name,
-                updatedAt: data.updatedAt ?? Date.now(),
-              }
-            : e,
-        ),
-      );
-    } else {
-      refreshExecutions();
-    }
+    await state.update(id, { name });
   }
 
   const value: ExecutionsContextValue = {
-    executions,
-    activeExecutionId,
-    newExecutionToken,
-    isLoadingExecutions,
-    refreshExecutions,
-    selectExecution,
-    startNewExecution,
-    deleteExecution,
+    executions: state.items,
+    activeExecutionId: state.activeId,
+    newExecutionToken: state.newItemToken,
+    isLoadingExecutions: state.isLoading,
+    refreshExecutions: state.refresh,
+    selectExecution: state.select,
+    startNewExecution: state.startNew,
+    deleteExecution: state.remove,
     updateExecution,
     renameExecution: (id: string, name: string) => updateExecution(id, name),
-    onExecutionCreated,
-    touchExecution,
+    onExecutionCreated: state.onCreated,
+    touchExecution: state.touch,
   };
 
   return (

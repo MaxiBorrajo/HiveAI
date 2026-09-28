@@ -107,3 +107,11 @@ export interface ExecutionResult {
   metadata?: Record<string, any>;
 }
 
+export interface ExecutionResultData {
+  result: any;
+  finalState?: Record<string, any>;
+  iteration?: number;
+  historyId?: number;
+  createdAt?: number;
+}
+

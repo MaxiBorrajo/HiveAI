@@ -1,25 +1,12 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { ChatInput } from "../Chat/ChatInput";
 import { Logo } from "../Logo";
 import { VisualBuilder } from "../VisualBuilder";
-import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "../ui/dialog";
 import { useExecutions } from "../../context/ExecutionsContext";
-import type { LangGraphAbstraction } from "../../types/execution";
-import { getExecution } from "../../lib/executions/getExecution";
-import { generateExecutionStream } from "../../lib/executions/generateExecution";
-import { API_URL } from "../../lib/config";
-import {
-  ExecutionResultSidebar,
-  type ExecutionResultData,
-} from "./ExecutionResultSidebar";
+import { useKeyedState } from "@/lib/useKeyedState";
+import { useExecutionWorkspace } from "./useExecutionWorkspace";
+import { RunExecutionModal } from "./RunExecutionModal";
+import { ExecutionResultSidebar } from "./ExecutionResultSidebar";
 import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -31,229 +18,54 @@ export function ExecutionsMain() {
     newExecutionToken,
   } = useExecutions();
   const [input, setInput] = useState("");
-
   const key = activeExecutionId || newExecutionToken;
-  const justCreatedIdRef = React.useRef<string | null>(null);
 
-  const [isThinkingMap, setIsThinkingMap] = useState<Record<string, boolean>>({});
-  const [isRunningMap, setIsRunningMap] = useState<Record<string, boolean>>({});
-  const [graphMap, setGraphMap] = useState<Record<string, LangGraphAbstraction | null>>({});
-  const [activeNodeIdMap, setActiveNodeIdMap] = useState<Record<string, string | undefined>>({});
-  const [selectedNodeIdMap, setSelectedNodeIdMap] = useState<Record<string, string | null>>({});
-  const [selectedEdgeIdMap, setSelectedEdgeIdMap] = useState<Record<string, string | null>>({});
-  const [planningThoughtMap, setPlanningThoughtMap] = useState<Record<string, string | null>>({});
-  const [logsMap, setLogsMap] = useState<Record<string, string[]>>({});
-  const [executionResultMap, setExecutionResultMap] = useState<Record<string, ExecutionResultData | null>>({});
-  const [activeToolNameMap, setActiveToolNameMap] = useState<Record<string, string | null>>({});
+  const selectedNodeIdState = useKeyedState<string | null>(key, null);
+  const selectedEdgeIdState = useKeyedState<string | null>(key, null);
+  const selectedNodeId = selectedNodeIdState.value;
+  const selectedEdgeId = selectedEdgeIdState.value;
+  const setSelectedNodeId = selectedNodeIdState.set;
+  const setSelectedEdgeId = (id: string | null) => selectedEdgeIdState.set(id);
+
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
-
-  const isThinking = isThinkingMap[key] || false;
-  const isRunning = isRunningMap[key] || false;
-  const graph = graphMap[key] || null;
-  const activeNodeId = activeNodeIdMap[key] || undefined;
-  const selectedNodeId = selectedNodeIdMap[key] || null;
-  const selectedEdgeId = selectedEdgeIdMap[key] || null;
-  const setSelectedEdgeId = (id: string | null) => setSelectedEdgeIdMap((prev) => ({ ...prev, [key]: id }));
-  const planningThought = planningThoughtMap[key] || null;
-  const logs = logsMap[key] || [];
-  const executionResult = executionResultMap[key] || null;
-  const activeToolName = activeToolNameMap[key] || null;
-
-  const setIsThinking = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
-    setIsThinkingMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || false) : val }));
-  };
-  const setIsRunning = (val: boolean | ((prev: boolean) => boolean), targetKey = key) => {
-    setIsRunningMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || false) : val }));
-  };
-  const setActiveToolName = (val: string | null | ((prev: string | null) => string | null), targetKey = key) => {
-    setActiveToolNameMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
-  };
-  const setGraph = (val: LangGraphAbstraction | null | ((prev: LangGraphAbstraction | null) => LangGraphAbstraction | null), targetKey = key) => {
-    setGraphMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
-  };
-  const setActiveNodeId = (val: string | undefined | ((prev: string | undefined) => string | undefined), targetKey = key) => {
-    setActiveNodeIdMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || undefined) : val }));
-  };
-  const setSelectedNodeId = (val: string | null | ((prev: string | null) => string | null), targetKey = key) => {
-    setSelectedNodeIdMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
-  };
-  const setPlanningThought = (val: string | null | ((prev: string | null) => string | null), targetKey = key) => {
-    setPlanningThoughtMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val }));
-  };
-  const setLogs = (val: string[] | ((prev: string[]) => string[]), targetKey = key) => {
-    setLogsMap(prev => ({ ...prev, [targetKey]: typeof val === 'function' ? val(prev[targetKey] || []) : val }));
-  };
-  const setExecutionResult = (
-    val: ExecutionResultData | null | ((prev: ExecutionResultData | null) => ExecutionResultData | null),
-    targetKey = key
-  ) => {
-    setExecutionResultMap(prev => ({
-      ...prev,
-      [targetKey]: typeof val === 'function' ? val(prev[targetKey] || null) : val,
-    }));
-  };
-
-  // Run Modal State
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [runInputs, setRunInputs] = useState<Record<string, any>>({});
   const [isCopied, setIsCopied] = useState(false);
 
+  const {
+    isThinking,
+    isRunning,
+    graph,
+    activeNodeId,
+    planningThought,
+    logs,
+    executionResult,
+    activeToolName,
+    handleGenerate,
+    handleRun: runExecution,
+  } = useExecutionWorkspace({
+    key,
+    activeExecutionId,
+    newExecutionToken,
+    selectedNodeId,
+    setSelectedNodeId,
+    onExecutionCreated,
+  });
+
   const handleCopyGraph = () => {
     if (!graph) return;
-    const json = JSON.stringify(graph, null, 2);
-    navigator.clipboard.writeText(json);
+    navigator.clipboard.writeText(JSON.stringify(graph, null, 2));
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  useEffect(() => {
-    if (!activeExecutionId) {
-      if (justCreatedIdRef.current === null) {
-        // Only clear if we didn't just create one
-      }
-      return;
-    }
-
-    if (justCreatedIdRef.current === activeExecutionId) {
-      justCreatedIdRef.current = null;
-      return;
-    }
-
-    // Only load if we haven't loaded it yet
-    if (graphMap[activeExecutionId] !== undefined) return;
-
-    getExecution(activeExecutionId)
-      .then(({ data }) => {
-        if (data?.graph?.graph) {
-          setGraph(data.graph.graph, activeExecutionId);
-        } else {
-          setGraph(null, activeExecutionId);
-        }
-        if (data?.lastResult) {
-          setExecutionResult(data.lastResult, activeExecutionId);
-        }
-        setLogs([], activeExecutionId);
-        setSelectedNodeId(null, activeExecutionId);
-      })
-      .catch((e) => console.error("Failed to load execution graph", e));
-  }, [activeExecutionId, key, graphMap]);
-
-  const handleGenerate = async () => {
+  const handleGenerateClick = async () => {
     if (!input.trim()) return;
     const userPrompt = input;
     setInput("");
-    let currentKey = key;
-    setIsThinking(true, currentKey);
-    setPlanningThought(null, currentKey);
-    setLogs(["Pollinating flow: starting design..."], currentKey);
-
-    // If starting a brand new execution, reset graph so canvas displays incremental stream
-    if (!activeExecutionId && !selectedNodeId) {
-      setGraph(null, currentKey);
-    }
-
-    try {
-      await generateExecutionStream(
-        {
-          content: userPrompt,
-          executionId: activeExecutionId
-            ? Number(activeExecutionId)
-            : undefined,
-          targetNodeId: selectedNodeId ?? undefined,
-        },
-        {
-          onExecutionCreated: (id) => {
-            const newId = String(id);
-            justCreatedIdRef.current = newId;
-            
-            // Move state
-            setIsThinkingMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setIsRunningMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setGraphMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setActiveNodeIdMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setLogsMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setExecutionResultMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            setActiveToolNameMap(prev => { const { [currentKey]: v, ...rest } = prev; return { ...rest, [newId]: v }; });
-            
-            currentKey = newId;
-            onExecutionCreated(newId);
-          },
-          onPlanning: (thoughts) => {
-            setPlanningThought(thoughts, currentKey);
-            setLogs((prev) => [...prev, ` ${thoughts}`], currentKey);
-          },
-          onNodeAdded: ({ node, edge, stateProperties }) => {
-            setPlanningThought(null, currentKey);
-            setGraph((prev) => {
-              const current = prev || { nodes: [], edges: [], stateSchema: {} };
-              if (current.nodes.some((n) => n.id === node.id)) {
-                return current;
-              }
-              const updatedNodes = [...current.nodes, node];
-              const updatedEdges = edge
-                ? [...current.edges, edge]
-                : current.edges;
-              const updatedSchema = {
-                ...current.stateSchema,
-                ...(stateProperties || {}),
-              };
-              return {
-                nodes: updatedNodes,
-                edges: updatedEdges,
-                stateSchema: updatedSchema,
-              };
-            }, currentKey);
-            setLogs((prev) => [
-              ...prev,
-              `+ Built node: ${node.name} (${node.type})`,
-            ], currentKey);
-          },
-          onNodeConfiguring: ({ nodeId, nodeName }) => {
-            setActiveNodeIdMap((prev) => ({ ...prev, [currentKey]: nodeId }));
-            setLogs((prev) => [...prev, `⚙️ Configuring node: ${nodeName}...`], currentKey);
-          },
-          onNodeUpdated: ({ node, stateProperties }) => {
-            setPlanningThought(null, currentKey);
-            setActiveNodeIdMap((prev) => ({ ...prev, [currentKey]: undefined }));
-            setGraph((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                nodes: prev.nodes.map((n) => (n.id === node.id ? node : n)),
-                stateSchema: {
-                  ...prev.stateSchema,
-                  ...(stateProperties || {}),
-                },
-              };
-            }, currentKey);
-            setLogs((prev) => [...prev, `✨ Configured: ${node.name}`], currentKey);
-            setSelectedNodeId(null, activeExecutionId || newExecutionToken);
-          },
-          onDone: (data) => {
-            setActiveNodeIdMap((prev) => ({ ...prev, [currentKey]: undefined }));
-            setPlanningThought(null, currentKey);
-            setGraph(data.graph, currentKey);
-            setLogs((prev) => [...prev, "✨ Flow assembled successfully!"], currentKey);
-            setIsThinking(false, currentKey);
-          },
-          onError: (message) => {
-            setPlanningThought(null, currentKey);
-            setLogs((prev) => [...prev, `❌ Error: ${message}`], currentKey);
-            setIsThinking(false, currentKey);
-          },
-        },
-      );
-    } catch (e: any) {
-      // The API client already toasts errors if we don't silence them.
-      // alert("Error: " + e.message);
-      setPlanningThought(null, currentKey);
-      setLogs((prev) => [...prev, `❌ Streaming error: ${e.message}`], currentKey);
-    } finally {
-      setIsThinking(false, currentKey);
-      setPlanningThought(null, currentKey);
-      setInput("");
-    }
+    await handleGenerate(userPrompt);
+    setInput("");
   };
 
   const hasRequiredInputs = Boolean(
@@ -291,6 +103,21 @@ export function ExecutionsMain() {
     setIsRunModalOpen(true);
   };
 
+  const handleRun = async (overrideInputs?: Record<string, any>) => {
+    setIsRunModalOpen(false);
+    const isExplicitRecord =
+      overrideInputs &&
+      typeof overrideInputs === "object" &&
+      !("nativeEvent" in overrideInputs);
+    const inputsSource = isExplicitRecord ? overrideInputs : runInputs;
+
+    try {
+      await runExecution(inputsSource, () => setIsResultSidebarOpen(true));
+    } catch (e: any) {
+      alert("Stream error: " + e.message);
+    }
+  };
+
   const handleRunClick = () => {
     if (hasRequiredInputs) {
       handleOpenRunModal();
@@ -311,118 +138,6 @@ export function ExecutionsMain() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isThinking, isRunning, graph, hasRequiredInputs]);
-
-  const handleRun = async (overrideInputs?: Record<string, any>) => {
-    if (!activeExecutionId) return;
-    const currentKey = activeExecutionId;
-    setIsRunModalOpen(false);
-    setIsRunning(true, currentKey);
-    setLogs((prev) => [...prev, "--- Starting Execution ---"], currentKey);
-
-    // Clean up empty strings from runInputs so we don't override defaults with ""
-    const isExplicitRecord =
-      overrideInputs &&
-      typeof overrideInputs === "object" &&
-      !("nativeEvent" in overrideInputs);
-    const inputsSource = isExplicitRecord ? overrideInputs : runInputs;
-    const finalInputs = { ...inputsSource };
-    Object.keys(finalInputs).forEach((key) => {
-      if (finalInputs[key] === "") {
-        delete finalInputs[key];
-      }
-    });
-
-    try {
-      const res = await fetch(
-        `${API_URL}/api/executions/${activeExecutionId}/run`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: finalInputs }),
-        },
-      );
-
-      if (!res.body) throw new Error("No response body received from server");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-
-      let done = false;
-      let currentEvent = "";
-      let buffer = "";
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        if (value) {
-          buffer += decoder.decode(value, { stream: !doneReading });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith("event: ")) {
-              currentEvent = trimmed.replace("event: ", "").trim();
-            } else if (trimmed.startsWith("data: ")) {
-              const dataStr = trimmed.replace("data: ", "").trim();
-              if (!dataStr) continue;
-              let data: any;
-              try {
-                data = JSON.parse(dataStr);
-              } catch (_) {
-                continue;
-              }
-
-              if (currentEvent === "done" || data.result !== undefined) {
-                const resultData: ExecutionResultData = {
-                  iteration: data.iteration || 1,
-                  result: data.result,
-                  finalState: data.finalState,
-                  createdAt: Date.now(),
-                };
-                setExecutionResult(resultData, currentKey);
-                setIsResultSidebarOpen(true);
-                setLogs((prev) => [
-                  ...prev,
-                  `✅ Execution completed (iteration #${data.iteration || 1})`,
-                ], currentKey);
-              } else if (currentEvent === "error") {
-                setLogs((prev) => [
-                  ...prev,
-                  `❌ Execution error: ${data.error || "Unknown error"}`,
-                ], currentKey);
-              } else {
-                const evtType = data.event || currentEvent;
-                const nodeName =
-                  data.metadata?.langgraph_node ||
-                  (data.name && data.name !== "LangGraph" ? data.name : null);
-
-                if (evtType === "on_chain_start" && nodeName) {
-                  setActiveNodeId(nodeName, currentKey);
-                  setActiveToolName(null, currentKey);
-                  setLogs((prev) => [...prev, `⚡ [start] Node: ${nodeName}`], currentKey);
-                } else if (evtType === "on_tool_start") {
-                  setActiveToolName(data.name || null, currentKey);
-                  setLogs((prev) => [...prev, `🔧 [tool] ${data.name}`], currentKey);
-                } else if (evtType === "on_chat_model_start") {
-                  // Reasoning with AI model event
-                } else if (evtType === "on_tool_end") {
-                  setActiveToolName(null, currentKey);
-                  setLogs((prev) => [...prev, `✓ [tool done] ${data.name || ""}`], currentKey);
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (e: any) {
-      setLogs((prev) => [...prev, `❌ Run error: ${e.message}`], currentKey);
-      alert("Stream error: " + e.message);
-    } finally {
-      setIsRunning(false, currentKey);
-      setActiveNodeId(undefined, currentKey);
-      setActiveToolName(null, currentKey);
-    }
-  };
 
   const isEmpty = !graph && !isThinking;
   const selectedNode = graph?.nodes.find((n) => n.id === selectedNodeId);
@@ -677,7 +392,7 @@ export function ExecutionsMain() {
                   input={input}
                   setInput={setInput}
                   isThinking={isThinking}
-                  handleSend={handleGenerate}
+                  handleSend={handleGenerateClick}
                   isEmpty={isEmpty}
                   hidePluginsAndModes
                   placeholder={
@@ -696,64 +411,15 @@ export function ExecutionsMain() {
         </div>
       </div>
 
-      {/* Run Input Modal */}
-      <Dialog open={isRunModalOpen} onOpenChange={setIsRunModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Start Execution</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4 py-4">
-            {graph?.stateSchema &&
-              Object.entries(graph.stateSchema)
-                .filter(([key]) => key === "input")
-                .map(([key, def]: [string, any]) => (
-                  <div key={key} className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-foreground">
-                      {def.description && !def.description.startsWith("User initial query")
-                        ? def.description
-                        : "User Input"}{" "}
-                      {hasRequiredInputs ? "" : "(Optional)"}
-                    </label>
-                    <Textarea
-                      placeholder={
-                        def.description || "Enter input text or prompt to run this workflow..."
-                      }
-                      value={runInputs[key] || ""}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                        setRunInputs((prev) => ({
-                          ...prev,
-                          [key]: e.target.value,
-                        }))
-                      }
-                      className="min-h-[110px]"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {hasRequiredInputs
-                        ? "This workflow requires an input value to execute."
-                        : "Optional input. If omitted, the workflow will run with its pre-configured defaults."}
-                    </p>
-                  </div>
-                ))}
-            {graph?.stateSchema && !graph.stateSchema["input"] && (
-              <p className="text-sm text-yellow-600">
-                Warning: The graph does not have a standard 'input' property
-                defined in its state schema.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRunModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={hasRequiredInputs && !runInputs["input"]?.trim()}
-              onClick={() => handleRun()}
-            >
-              Run
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RunExecutionModal
+        open={isRunModalOpen}
+        onOpenChange={setIsRunModalOpen}
+        graph={graph}
+        hasRequiredInputs={hasRequiredInputs}
+        runInputs={runInputs}
+        setRunInputs={setRunInputs}
+        onRun={() => handleRun()}
+      />
 
       {/* Execution Deliverable / Result Slide-Over Sidebar */}
       <ExecutionResultSidebar

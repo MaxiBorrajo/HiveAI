@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   CheckCircle2,
   Copy,
@@ -21,16 +21,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { MessageMarkdown } from "@/components/Chat/MessageMarkdown";
 import { cn } from "@/lib/utils";
-import type { ExecutionResult, ExecutionFileArtifact, ExecutionResultType } from "../../types/execution.ts";
+import { useResizableSidebar } from "@/lib/useResizableSidebar";
+import type {
+  ExecutionResult,
+  ExecutionFileArtifact,
+  ExecutionResultType,
+  ExecutionResultData,
+} from "../../types/execution.ts";
 
-
-export interface ExecutionResultData {
-  result: any;
-  finalState?: Record<string, any>;
-  iteration?: number;
-  historyId?: number;
-  createdAt?: number;
-}
+export type { ExecutionResultData };
 
 interface ExecutionResultSidebarProps {
   isOpen: boolean;
@@ -50,50 +49,18 @@ export function ExecutionResultSidebar({
   const [copied, setCopied] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
   const [activeTab, setActiveTab] = useState<"result" | "raw" | "state">("result");
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    if (typeof window === "undefined") return 540;
-    const saved = localStorage.getItem("hiveai_result_sidebar_width");
-    const parsed = saved ? parseInt(saved, 10) : 540;
-    const maxAllowed = Math.max(400, window.innerWidth - 300);
-    return Math.max(380, Math.min(parsed, maxAllowed));
+  const {
+    width: sidebarWidth,
+    isResizing,
+    isMaximized,
+    startResizing,
+    toggleMaximize,
+  } = useResizableSidebar({
+    storageKey: "hiveai_result_sidebar_width",
+    minWidth: 380,
+    defaultWidth: 540,
+    reservedViewportWidth: 300,
   });
-  const [isResizing, setIsResizing] = useState(false);
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const maxAllowed = Math.max(400, window.innerWidth - 300);
-      const minAllowed = 380;
-      const newWidth = Math.min(
-        Math.max(window.innerWidth - e.clientX, minAllowed),
-        maxAllowed,
-      );
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    document.body.style.cursor = "ew-resize";
-    document.body.style.userSelect = "none";
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isResizing]);
-
-  useEffect(() => {
-    if (!isResizing && typeof window !== "undefined") {
-      localStorage.setItem("hiveai_result_sidebar_width", String(sidebarWidth));
-    }
-  }, [sidebarWidth, isResizing]);
 
   if (!isOpen || !data) return null;
 
@@ -195,15 +162,6 @@ export function ExecutionResultSidebar({
     URL.revokeObjectURL(url);
   };
 
-  const isMaximized =
-    typeof window !== "undefined" && sidebarWidth >= window.innerWidth - 320;
-
-  const toggleMaximize = () => {
-    if (typeof window === "undefined") return;
-    const maxWidth = window.innerWidth - 300;
-    setSidebarWidth((prev) => (prev >= maxWidth - 40 ? 540 : maxWidth));
-  };
-
   const getTypeTheme = (type: ExecutionResultType) => {
     switch (type) {
       case "file":
@@ -281,7 +239,7 @@ export function ExecutionResultSidebar({
     >
       {/* Drag handle */}
       <div
-        onMouseDown={() => setIsResizing(true)}
+        onMouseDown={startResizing}
         className="absolute left-0 inset-y-0 w-1.5 -translate-x-1/2 cursor-ew-resize hover:bg-emerald-500/50 transition-colors z-50 group"
       >
         <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-1 h-8 rounded-full bg-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity" />
