@@ -86,7 +86,7 @@ export function compileGraph(
 
     let nodeRunnable: NodeExecutorFunction;
 
-    if (node.type === "llm" || node.type === "agent") {
+    if (node.type === "llm") {
       nodeRunnable = async (state: Record<string, unknown>) => {
         return executeLlmNode(node.id, node.config, state, toolProvider);
       };
@@ -177,7 +177,7 @@ Reply with ONLY the word "true" or "false".`;
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error(`Error in node ${node.id}:`, errorMsg);
-          return { result: { error: errorMsg, nodeId: node.id } };
+          throw new Error(`Node '${node.id}' failed: ${errorMsg}`);
         }
       };
     }

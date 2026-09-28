@@ -11,7 +11,7 @@ export interface StatePropertyDefinition {
   reducerStrategy?: ReducerStrategy;
 }
 
-export type NodeType = "start" | "end" | "llm" | "agent" | "plugin" | "condition";
+export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
 
 export interface GraphNode {
   id: string;

@@ -145,7 +145,7 @@ export function validateGraphVariableReferences(
       | Record<string, unknown>
       | undefined;
     if (!inputMapping) continue;
-    const isBareValueNode = node.type === "llm" || node.type === "agent";
+    const isBareValueNode = node.type === "llm";
 
     for (const [field, value] of Object.entries(inputMapping)) {
       if (!isBareValueNode && validateInterpolationValue(value) !== null) {
@@ -224,12 +224,12 @@ function normalizePluginMention(name: string): string {
 }
 
 /**
- * Walks every "llm"/"agent" node's systemPrompt and flags a mention of a
- * real plugin's name (in any "-"/"_"/space separator variant) that is NOT
- * present in that node's config.plugins. This catches an agent whose
- * instructions promise to use a tool (e.g. "save the file using file-ops")
- * that it was never actually equipped with, so the promised action silently
- * cannot happen.
+ * Walks every "llm" node's systemPrompt and flags a mention of a real
+ * plugin's name (in any "-"/"_"/space separator variant) that is NOT present
+ * in that node's config.plugins. This catches an agent-equipped llm node
+ * whose instructions promise to use a tool (e.g. "save the file using
+ * file-ops") that it was never actually equipped with, so the promised
+ * action silently cannot happen.
  */
 export function validateGraphAgentToolMentions(
   graph: LangGraphAbstraction,
@@ -238,7 +238,7 @@ export function validateGraphAgentToolMentions(
   const violations: InputMappingViolation[] = [];
 
   for (const node of graph.nodes) {
-    if (node.type !== "llm" && node.type !== "agent") continue;
+    if (node.type !== "llm") continue;
     const systemPrompt = node.config?.systemPrompt;
     if (typeof systemPrompt !== "string" || !systemPrompt) continue;
 

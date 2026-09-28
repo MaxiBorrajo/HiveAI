@@ -40,7 +40,7 @@ export interface StatePropertyDefinition {
 // ==========================================
 // 2. NODES
 // ==========================================
-export type NodeType = "start" | "end" | "llm" | "agent" | "plugin" | "condition";
+export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
 
 export interface GraphNode {
   id: string; // Internal ID (e.g. "node_123")

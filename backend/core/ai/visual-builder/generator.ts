@@ -166,14 +166,20 @@ function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
               "Clear, concise title (e.g. 'Search News', 'Analyze Metrics', 'Is Anomaly Detected?'). DO NOT name 'Start' or 'End'.",
             ),
           type: z
-            .enum(["plugin", "llm", "agent", "condition"])
+            .enum(["plugin", "llm", "condition"])
             .describe(
-              "Node type: 'plugin' for a single deterministic tool action; 'llm' for pure cognitive reasoning (no external tools); 'agent' for a goal-driven autonomous agent that combines multiple tools in a dynamic loop to research, explore, or iterate; 'condition' for if/else routing diamond",
+              "Node type: 'plugin' for a single deterministic tool action with fully pre-determined static parameters; 'llm' for cognitive reasoning — either pure (no tools) or an autonomous agent equipped with one or more tools invoked in a dynamic observe->act loop (set 'plugins'); 'condition' for if/else routing diamond",
             ),
           pluginId: pluginEnum
             .optional()
             .describe(
               `Plugin ID if type is 'plugin'. MUST be one of the registered plugins: [${pluginNames.join(", ")}]`,
+            ),
+          plugins: z
+            .array(pluginEnum)
+            .optional()
+            .describe(
+              `ONLY for 'llm' nodes that need an active tool loop (autonomous agent behavior). Leave empty/omitted for pure reasoning/summarizing llm nodes. Available: [${pluginNames.join(", ")}]`,
             ),
           description: z
             .string()
@@ -203,79 +209,6 @@ function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
       )
       .describe(
         "Directed connections between nodes, including loops and condition true/false paths",
-      ),
-  });
-}
-
-/**
- * Dynamic Zod schema for the incremental Topology Compiler: ONE node per
- * call instead of the whole graph at once. Each call either adds exactly one
- * node (with the already-built node(s) it connects FROM — outgoing edges are
- * inferred by the NEXT call, never invented for nodes that don't exist yet),
- * or signals the workflow is fully structured.
- */
-function buildIncrementalStepSchema(availablePlugins: PluginInfo[]) {
-  const pluginNames = availablePlugins.map((p) => p.name);
-  const pluginEnum =
-    pluginNames.length > 0
-      ? z.enum(pluginNames as [string, ...string[]])
-      : z.string();
-
-  return z.object({
-    isComplete: z
-      .boolean()
-      .describe(
-        "true if the workflow described by the plan is now FULLY structured (every step from the plan has a corresponding node) and no more nodes are needed. false to add one more node.",
-      ),
-    node: z
-      .object({
-        id: z
-          .string()
-          .describe(
-            "Unique lowercase identifier (e.g. search_news, analyze_metrics, anomaly_check). DO NOT use 'start' or 'end'.",
-          ),
-        name: z
-          .string()
-          .describe(
-            "Clear, concise title (e.g. 'Search News', 'Analyze Metrics', 'Is Anomaly Detected?'). DO NOT name 'Start' or 'End'.",
-          ),
-        type: z
-          .enum(["plugin", "llm", "agent", "condition"])
-          .describe(
-            "Node type: 'plugin' for a single deterministic tool action; 'llm' for pure cognitive reasoning (no external tools); 'agent' for a goal-driven autonomous agent that combines multiple tools in a dynamic loop to research, explore, or iterate; 'condition' for if/else routing diamond",
-          ),
-        pluginId: pluginEnum
-          .optional()
-          .describe(
-            `Plugin ID if type is 'plugin'. MUST be one of the registered plugins: [${pluginNames.join(", ")}]`,
-          ),
-        description: z
-          .string()
-          .describe("What this specific node does in the flow"),
-      })
-      .optional()
-      .describe(
-        "The next node to add. Omit (or ignore) if isComplete is true.",
-      ),
-    incomingEdges: z
-      .array(
-        z.object({
-          source: z
-            .string()
-            .describe(
-              "Source node ID already built so far, or 'start' if this is the first node",
-            ),
-          path: z
-            .string()
-            .optional()
-            .describe(
-              "MANDATORY 'true'/'false' if source is a condition node",
-            ),
-        }),
-      )
-      .optional()
-      .describe(
-        "Which already-built node(s) connect INTO this new node. Almost always exactly one, except when a condition node's branch or a convergence point feeds this node.",
       ),
   });
 }
@@ -702,30 +635,13 @@ export async function* generateIncrementalGraph(
   // Dynamic schema for Phase 1
   const workflowSkeletonSchema = buildWorkflowSkeletonSchema(availablePlugins);
 
-  // Plain free-text reasoning model: no structured output, so it can think
-  // through what the workflow needs without simultaneously having to commit
-  // to node IDs/types/JSON — that commitment happens next, in the compiler.
-  const plannerLlm = new ChatOllama({
-    model: modelName,
-    temperature: 0.2,
-  });
-
-  // Incremental Topology Compiler: builds ONE node per call instead of the
-  // whole graph at once, to reduce the chance of losing coherence with the
-  // plan across many nodes in a single structured-output call.
-  const incrementalStepSchema = buildIncrementalStepSchema(availablePlugins);
+  // Topology Compiler: decides the whole workflow's node/edge structure in
+  // one structured-output call.
   const compilerAgent = new ChatOllama({
     model: modelName,
     temperature: 0.1,
-  }).withStructuredOutput(incrementalStepSchema, {
-    name: "TopologyCompilerStep",
-  });
-
-  const criticLlm = new ChatOllama({
-    model: modelName,
-    temperature: 0.05,
   }).withStructuredOutput(workflowSkeletonSchema, {
-    name: "ArchitectureCritic",
+    name: "TopologyCompiler",
   });
 
   const configLlm = new ChatOllama({ model: modelName, temperature: 0.05 });
@@ -784,17 +700,17 @@ export async function* generateIncrementalGraph(
   );
 
   // ==========================================
-  // PHASE 0: FREE-TEXT PLANNER (reason BEFORE committing to structured JSON)
+  // PHASE 1: TOPOLOGY COMPILER
   // ==========================================
   yield {
     type: "planning",
-    thoughts: "Thinking through what this workflow actually needs...",
+    thoughts: "Designing the workflow structure...",
   };
 
-  const plannerPrompt = `You are the Lead Workflow Planner for an AI Agent Visual Builder.
-Given the User's Objective and available plugins, describe in clear numbered PROSE (NOT JSON, no node IDs, no structured format) the sequence of steps this workflow needs.
+  const compilerPrompt = `You are the Workflow Topology Compiler for an AI Agent Visual Builder.
+Given the User's Objective and available plugins, design the complete node/edge structure of this workflow.
 
-Host Operating System: "${Deno.build.os}". Ensure any tool or shell steps you describe are compatible with this operating system.
+Host Operating System: "${Deno.build.os}". Ensure any tool or shell steps you design are compatible with this operating system.
 
 Available Plugins and their parameter schemas:
 ${availablePlugins
@@ -804,225 +720,64 @@ ${availablePlugins
   )
   .join("\n")}
 
-For EACH step, say:
-- What it does.
-- What KIND of step it is: a single deterministic tool call with fully pre-determined parameters ("plugin"); pure reasoning with no external tools ("llm"); an autonomous agent that invokes one or more tools in a dynamic observe → act → evaluate → act loop ("agent"); or a branching yes/no decision ("condition").
-- What data it needs from earlier steps, and what data it produces for later steps.
-
-CRITICAL RULES TO APPLY WHILE PLANNING (not just describing, but actually deciding the right shape):
-1. Entry & Exit: the workflow always starts from a built-in "start" and always ends at a built-in "end" — never describe your own start/end step, only the functional steps in between.
+CRITICAL ARCHITECTURE RULES:
+1. Built-in Entry & Exit Terminals: "start" and "end" already exist. DO NOT create any node named "start"/"Start"/"end"/"End" — only the functional steps in between. The first node's source edge is "start"; the last node's target edge is "end".
 2. Node Archetypes:
-   - "plugin": ONLY for a step that executes exactly ONE tool call with fully pre-determined, static parameters — no decisions, no branching, no adaptation. Never chain two raw plugin steps directly if semantic translation, filtering, or decision-making is needed between them — that needs an "llm" step instead.
-   - "llm": pure cognitive reasoning — consumes data already produced, reasons, produces new data. Never invokes an external tool.
-   - "agent": a goal-driven step equipped with one or more tools, invoked in a dynamic loop. Use this whenever a step involves MULTIPLE related tool actions where the result of one action determines what to do next, or the agent must retry/refine/cross-reference across tool outputs.
-   - "condition": an if/else routing decision evaluating a typed value, with exactly two outcomes.
-3. CRITICAL — DO NOT FRAGMENT ONE AGENT'S TOOL CHAIN INTO SEPARATE STEPS: if a tool call's inputs or repetition count depend on a PRIOR tool call's result within the same logical task (e.g. "search for something, then read N of the resulting items"), describe ALL of those tool calls as belonging to ONE "agent" step with ALL the needed tools — not as a standalone tool-call step, followed by a step that only picks which items to use, followed by more standalone tool-call steps to fetch each item. That fragmentation forces later steps to consume a piece of a list/object they cannot cleanly reference, and duplicates work the agent could do itself.
-   - WRONG (fragmented): step 1 "search the web" (plugin) → step 2 "pick the 2 best links" (llm/agent) → step 3 "read link 1" (plugin) → step 4 "read link 2" (plugin) → step 5 "compare" (llm)
-   - RIGHT (collapsed): step 1 "search the web for the topic, pick the 2 most relevant results, and read each one" — ONE "agent" step with tools [web_search, web_read], producing one clear output → step 2 "compare the two articles" (llm) → step 3 "save to file" (plugin)
-   - Only describe a standalone "plugin" step for a tool call whose parameters are ALREADY fully known before the workflow runs — never for a tool call whose target depends on a previous step's dynamic output.
-4. Data Interpolation Constraint (affects what you can ask a later step to read): a later step can only read an EARLIER step's output as a whole value — it CANNOT reach into one specific field of a list/object produced earlier (e.g. it cannot pick "the first URL" out of a list by itself). If a later step needs one specific field/item out of a list/object an earlier step produced, you MUST describe an intermediate step (an "llm" or "agent") whose ONLY job is to read that full list/object and extract JUST the one field/item it needs, producing that as its own simple output. Never assume a step can reach into nested structure by itself.
-5. Condition Patterns: a branching decision step always has exactly two outcomes (pass/fail, true/false) — describe both explicitly, including whether the "fail" branch ends the workflow or loops back to retry an earlier step.
-6. Describe between 2 and 5 real functional steps that fully satisfy the user's objective.`;
+   - "plugin": ONLY for a step that executes exactly ONE tool call with fully pre-determined, static parameters — no decisions, no branching, no adaptation. Never chain two raw plugin nodes directly if semantic translation, filtering, or decision-making is needed between them — use an "llm" node instead.
+   - "llm": cognitive reasoning. Either pure (consumes data already produced, reasons, produces new data, no tools) — leave "plugins" empty; OR an autonomous agent equipped with one or more tools ("plugins" set), invoked in a dynamic observe -> act -> evaluate -> act loop. Use the agent form whenever a step involves MULTIPLE related tool actions where the result of one action determines what to do next, or the node must retry/refine/cross-reference across tool outputs.
+   - "condition": an if/else routing decision evaluating a typed value, with exactly two outgoing edges (path="true"/"false").
+3. CRITICAL — DO NOT FRAGMENT ONE AGENT'S TOOL CHAIN INTO SEPARATE NODES: if a tool call's inputs or repetition count depend on a PRIOR tool call's result within the same logical task (e.g. "search for something, then read N of the resulting items"), describe ALL of those tool calls as belonging to ONE "llm" node with "plugins" set to ALL the needed tools — not as a standalone plugin node, followed by a node that only picks which items to use, followed by more standalone plugin nodes to fetch each item. That fragmentation forces later nodes to consume a piece of a list/object they cannot cleanly reference, and duplicates work the agent could do itself.
+   - WRONG (fragmented): node 1 "search the web" (plugin) -> node 2 "pick the 2 best links" (llm) -> node 3 "read link 1" (plugin) -> node 4 "read link 2" (plugin) -> node 5 "compare" (llm)
+   - RIGHT (collapsed): node 1 "search the web for the topic, pick the 2 most relevant results, and read each one" — ONE "llm" node with plugins [web_search, web_read], producing one clear output -> node 2 "compare the two articles" (llm) -> node 3 "save to file" (plugin)
+   - Only use a standalone "plugin" node for a tool call whose parameters are ALREADY fully known before the workflow runs — never for a tool call whose target depends on a previous node's dynamic output.
+4. Data Interpolation Constraint (affects what a later node can read): a later node can only read an EARLIER node's output as a whole value — it CANNOT reach into one specific field of a list/object produced earlier (e.g. it cannot pick "the first URL" out of a list by itself). If a later node needs one specific field/item out of a list/object an earlier node produced, you MUST insert an intermediate "llm" node whose ONLY job is to read that full list/object and extract JUST the one field/item it needs, producing that as its own simple output. Never assume a node can reach into nested structure by itself.
+5. Condition Patterns: a branching decision node always has exactly two outcomes (pass/fail, true/false) — both must be wired, including whether the "false" branch ends the workflow or loops back to retry an earlier node.
+6. Design between 2 and 5 real functional nodes that fully satisfy the user's objective.
+7. Tool Adequacy Check (MANDATORY — do not skip): before finalizing each node's plugin choice, verify the chosen plugin's description and "Returns" text actually satisfies the LITERAL objective (e.g. searching file CONTENT vs. searching file NAMES are different capabilities — never conflate them). If NO available plugin can literally satisfy a node's requirement, select the closest available plugin that CAN (e.g. prefer "run_shell" with grep/find over a name-only file search plugin for content-based search) — do NOT use a plugin you have identified as inadequate just because it seemed superficially related. If truly no plugin can satisfy the requirement even approximately, say so explicitly in "thought" instead of silently using an inadequate one.
+8. Use clean, descriptive lowercase IDs (e.g. 'search_news', 'analyze_metrics', 'anomaly_check').
+9. Explicit "agent" wording is a HARD signal, not a suggestion: if the user's objective names a step with the word "agent"/"agente" (e.g. "an agent with web_search...", "un agente equipado con..."), that step MUST be an "llm" node with "plugins" set to the named tool(s) — NEVER a standalone "plugin" node, even if the step happens to call only one tool. The user explicitly asked for agentic (reasoning + tool-use) behavior there, not a raw mechanical call.
+10. A verb like "draft"/"redactar", "write"/"escribir", "summarize"/"resumir", "compose"/"componer", "synthesize" describes COGNITIVE SYNTHESIS, not a mechanical tool call — a plugin like "web_search" only returns raw search snippets, it cannot itself "draft" or "write" anything coherent. Any step whose description contains one of these synthesis verbs together with a tool need (e.g. "search AND draft", "read AND summarize") MUST be an "llm" node with that tool in "plugins" — the tool fetches raw material, the LLM reasoning is what actually produces the requested prose.
 
-  const plannerResponse = await invokeWithRetry(
-    plannerLlm,
-    [new SystemMessage(plannerPrompt), new HumanMessage(`User Objective: "${prompt}"`)],
-    "Planner",
-  );
-  const planText = String(plannerResponse.content).trim();
+WORKED EXAMPLES (study the REASONING in each, not just the shape — apply the same judgment to the actual objective below):
 
-  console.log(
-    `[Visual Builder - Generator] Plan drafted:\n${planText}`,
-  );
-  yield {
-    type: "planning",
-    thoughts: planText,
-  };
+Example A — Judgment/evaluation step must be "llm", never a stateful plugin:
+  User objective: "...search recent CVEs for a library, then evaluate if any are critical (boolean is_vulnerable)..."
+  WRONG: a "plugin" node with pluginId "counter" trying to "increment" or "read" a count from the search text — "counter" only manages a persisted numeric counter by name, it cannot read/judge free text at all, and there is no real count to increment here.
+  RIGHT: an "llm" node (no plugins needed — pure reasoning over the search results already in state) with outputKey "is_vulnerable", instructed to output ONLY true/false based on reading the CVE text for critical severity.
+  Rule of thumb: if the step's verb is evaluate/determine/decide/classify/assess/score/judge, it is ALWAYS "llm" — never force it into an available plugin just because one exists.
 
-  // ==========================================
-  // PHASE 1: TOPOLOGY COMPILER (Options 1 & 4)
-  // ==========================================
-  yield {
-    type: "planning",
-    thoughts: "Compiling the plan into the workflow structure...",
-  };
+Example B — "read X, extract Y, then save Y" is TWO steps, not one plugin call:
+  User objective: "...an agent with web_read reads the CVE report, extracts the patched version, and file-ops saves a cve_advisory.json..."
+  WRONG: a single "plugin" node with pluginId "web_read" whose output is saved directly — this saves the RAW page text, never actually extracting the patched version the objective asked for.
+  RIGHT: one "llm" node with plugins: ["web_read"] that reads the report AND reasons out the specific extracted fact (e.g. outputKey "patched_version_info") -> THEN a separate "plugin" node with pluginId "file_ops" (operation "write") that saves that extracted output, not the raw page.
+  Rule of thumb: "extract/summarize/parse X from Y" is always cognitive work — it needs an "llm" step, even when a tool fetches the raw data first.
 
-  const compilerRulesText = `JSON STRUCTURING RULES:
-1. Built-in Entry & Exit Terminals:
-   - "start" and "end" ALREADY exist as the system's entry and exit nodes!
-   - DO NOT create any node named "start", "Start", "end", or "End"!
-   - The first node's incomingEdges source is "start".
-2. Map each step in the plan to exactly one node, using the node "type" the plan already assigned to it (plugin/llm/agent/condition) — do not change a step's type, do not split or merge steps beyond what the plan describes.
-3. For "plugin" nodes, set "pluginId" to the plugin from the available list that best matches the plan's description of that step.
-4. Condition nodes have exactly two outgoing edges (path="true"/"false") — these are declared by the NODES THAT FOLLOW a condition node, via their own incomingEdges (each specifying source: <condition_node_id>, path: "true" or "false").
-5. Use clean, descriptive lowercase IDs (e.g. 'search_news', 'analyze_metrics', 'anomaly_check').`;
+Example C — A condition's two branches must fully diverge to "end", never re-merge:
+  User objective: "...if no vulnerabilities, generate an approval certificate and finish; if vulnerabilities exist, process the CVE advisory and save it..."
+  WRONG: edges condition->certificate_node (false) -> cve_node (true's target) -> end — this silently forces the "approved" path through the "vulnerable" path's logic.
+  RIGHT: condition->certificate_node (false) -> end, AND separately condition->cve_node (true) -> end. Each branch reaches "end" through its OWN nodes only; they never feed into each other.
 
-  const MAX_INCREMENTAL_STEPS = 30; // safety ceiling against a model bug looping forever — NOT a real design limit
-  type IncrementalNode = NonNullable<z.infer<typeof incrementalStepSchema>["node"]>;
-  const incrementalNodes: IncrementalNode[] = [];
-  const incrementalEdges: { source: string; target: string; path?: string }[] = [];
-
-  for (let step = 0; step < MAX_INCREMENTAL_STEPS; step++) {
-    const builtSoFarText =
-      incrementalNodes.length > 0
-        ? incrementalNodes
-            .map((n, i) => `${i + 1}. [${n.type}] "${n.name}" (id: "${n.id}"): ${n.description}`)
-            .join("\n")
-        : "(none yet — this is the first node)";
-
-    const compilerPrompt = `You are the Workflow Topology Compiler, building this workflow ONE NODE AT A TIME for an AI Agent Visual Builder.
-A Planner has already decided WHAT this workflow needs, in prose. Your job is to convert it into nodes, one at a time, in the order the plan describes — do NOT re-invent or second-guess the plan's decisions about step count, step type, or step order.
-
-Host Operating System: "${Deno.build.os}".
-
-Available Plugins and their parameter schemas:
-${availablePlugins
-  .map(
-    (p) =>
-      `- ${p.name}: ${p.description}\n  Parameters: ${p.parametersDescription || "none"}${p.returnDescription ? `\n  Returns: ${p.returnDescription}` : ""}`,
-  )
-  .join("\n")}
-
-THE PLAN TO STRUCTURE:
-${planText}
-
-NODES ALREADY BUILT SO FAR (in order):
-${builtSoFarText}
-
-YOUR TASK: Look at the plan and what's already built above. Either:
-- If EVERY step from the plan now has a corresponding node above, set isComplete=true (omit "node").
-- Otherwise, add EXACTLY ONE more node: whichever step from the plan comes next that isn't built yet. Do not skip ahead, do not add a node for a step already covered above, do not add more than one node.
-
-${compilerRulesText}
-
-For "incomingEdges": list which already-built node(s) (by id) this new node connects FROM. If this is the very first node, use "start". If a condition node's branch feeds this node, include the "path" ('true'/'false').`;
-
-    let stepResult: z.infer<typeof incrementalStepSchema>;
-    try {
-      stepResult = (await invokeWithRetry(
-        compilerAgent,
-        [new SystemMessage(compilerPrompt), new HumanMessage(`User Objective: "${prompt}"`)],
-        `Topology Compiler (step ${step + 1})`,
-      )) as z.infer<typeof incrementalStepSchema>;
-    } catch (err: any) {
-      console.warn(
-        `[Visual Builder - Generator] Topology Compiler step ${step + 1} failed:`,
-        err?.message,
-      );
-      break; // keep whatever partial progress was already made
-    }
-
-    if (stepResult.isComplete || !stepResult.node) break;
-
-    incrementalNodes.push(stepResult.node);
-    for (const inc of stepResult.incomingEdges ?? []) {
-      incrementalEdges.push({
-        source: inc.source,
-        target: stepResult.node.id,
-        path: inc.path,
-      });
-    }
-    yield {
-      type: "planning",
-      thoughts: `Compiled step ${step + 1}: "${stepResult.node.name}"`,
-    };
-  }
+Example D — Numeric quality gates use "number", not a boolean flag:
+  User objective: "...an LLM rates technical depth 1-10 as quality_score; if quality_score >= 8, save and finish; otherwise loop back to rewrite..."
+  WRONG: outputKey "is_good_enough" (boolean) with condition operator "equals" true/false — this discards the actual numeric scale the user asked for.
+  RIGHT: the "llm" node's outputKey is "quality_score", producing a real number (not a 0/1 flag); the "condition" node's field is "quality_score" with a numeric operator ("greater_than_or_equals") and a numeric value (8, not "8" or true/false). Use "string" outputs the same way for category/label judgments (e.g. field "severity", operator "equals", value "critical") — only use a boolean when the objective is a literal yes/no question.`;
 
   let skeleton: z.infer<typeof workflowSkeletonSchema>;
-  if (incrementalNodes.length > 0) {
-    skeleton = {
-      thought: planText,
-      nodes: incrementalNodes,
-      edges: incrementalEdges,
-    };
+  try {
+    skeleton = (await invokeWithRetry(
+      compilerAgent,
+      [new SystemMessage(compilerPrompt), new HumanMessage(`User Objective: "${prompt}"`)],
+      "Topology Compiler",
+    )) as z.infer<typeof workflowSkeletonSchema>;
     console.log(
       `[Visual Builder - Generator] Architecture designed: ${skeleton.nodes.length} nodes, ${skeleton.edges.length} edges`,
     );
-  } else {
-    console.warn(
-      `[Visual Builder - Generator] Incremental Topology Compiler produced no nodes, using context-aware heuristic fallback.`,
-    );
-    skeleton = buildHeuristicSkeleton(prompt, availablePlugins);
-  }
-
-  // ==========================================
-  // PHASE 1.5: ARCHITECTURE CRITIC & VALIDATOR
-  // ==========================================
-  yield {
-    type: "planning",
-    thoughts: "Validating and optimizing workflow node roles and architecture...",
-  };
-
-  const criticPrompt = `You are the Senior Workflow Architecture Critic & Validator for an AI Agent Visual Builder.
-Review the DRAFT workflow proposed by the Compiler for the User's Objective:
-"${prompt}"
-
-THE ORIGINAL PLAN this draft was supposed to structure (use this as the source of truth for intent — the draft must faithfully structure THIS plan, not diverge from it):
-${planText}
-
-Host Operating System: "${Deno.build.os}".
-
-Available Plugins and their Capabilities:
-${availablePlugins
-  .map(
-    (p) =>
-      `- "${p.name}": ${p.description}\n  Parameters: ${p.parametersDescription || "none"}`,
-  )
-  .join("\n")}
-
-Draft Nodes proposed:
-${skeleton.nodes.map((n) => `- [${n.type}] "${n.name}" (ID: "${n.id}", pluginId: "${n.pluginId || "none"}"): ${n.description}`).join("\n")}
-
-Draft Edges proposed:
-${skeleton.edges.map((e) => `- ${e.source} -> ${e.target} ${e.path ? `(${e.path})` : ""}`).join("\n")}
-
-CRITICAL ARCHITECTURE AUDIT RULES:
-1. Plugin Identity & Tool Mapping:
-   - Plugins MUST be strictly chosen from the registered available plugins: [${Array.from(pluginNames).join(", ")}].
-   - Match each plugin node strictly to the available plugin whose description and capability best corresponds to the user's objective and node description.
-   - If the Architect proposed an invented plugin name, map it to the registered available plugin that provides that capability.
-   - Any cognitive reasoning, analyzing, drafting, or summarizing step MUST be type: "llm", NEVER type: "plugin"!
-
-2. Node Type Correctness:
-   - "plugin": Use ONLY for exactly ONE tool call with fully pre-determined, static parameters. If the step needs more than one tool call, or if intermediate results influence what to do next, it is NOT a plugin.
-   - "llm": Pure reasoning — consumes state, produces state. NO tool invocation whatsoever.
-   - "agent": Use when a step involves multiple related tool actions where the agent must evaluate intermediate results to decide next actions, when splitting into separate nodes would be unnatural or brittle, or when the agent needs to retry, refine, or cross-reference across tool outputs dynamically.
-   - NEVER classify a step as "llm" if it needs to actively call external tools to complete its goal — use "agent" instead.
-   - NEVER use an "agent" for a single, fully pre-determined tool call — use "plugin" instead.
-
-3. Edge & ID Integrity:
-   - Ensure clean, descriptive IDs (e.g. 'execute_check', 'summarize_report', 'save_output_file').
-   - Start connects to the first functional node; the final functional node connects to End.
-   - Condition nodes must have both 'true' and 'false' paths.
-
-4. Fidelity to the Plan (CRITICAL):
-   - The number of nodes in your corrected output should match the number of steps in THE ORIGINAL PLAN above — do NOT add extra nodes to "help" or split one planned step into several, and do NOT merge two distinct planned steps into one.
-   - If the plan describes ONE step as a single agent invoking multiple tools in sequence (e.g. "search, then read the results"), the draft MUST have exactly ONE "agent" node for that step, not separate nodes for each tool call. If the draft already fragmented it into separate nodes, your correction MUST collapse them back into one "agent" node — do not add MORE nodes on top of the fragmentation.
-   - Only fix genuine mismatches between the draft and the plan (wrong plugin choice, wrong node type, broken edges) — never restructure a step the plan already described correctly.
-
-Return the refined, perfected workflow skeleton.`;
-
-  try {
-    const validated = (await invokeWithRetry(
-      criticLlm,
-      [
-        new SystemMessage(criticPrompt),
-        new HumanMessage("Validate and refine the workflow skeleton."),
-      ],
-      "Critic",
-    )) as z.infer<typeof workflowSkeletonSchema>;
-
-    if (validated && validated.nodes && validated.nodes.length > 0) {
-      console.log(
-        `[Visual Builder - Generator] Critic validated architecture: ${validated.nodes.length} nodes, ${validated.edges.length} edges`,
-      );
-      skeleton = validated;
-    }
   } catch (err: any) {
     console.warn(
-      `[Visual Builder - Generator] Critic LLM pass error, keeping architect draft:`,
+      `[Visual Builder - Generator] Topology Compiler failed, using context-aware heuristic fallback:`,
       err?.message,
     );
+    skeleton = buildHeuristicSkeleton(prompt, availablePlugins);
   }
 
   yield {
@@ -1110,6 +865,66 @@ Return the refined, perfected workflow skeleton.`;
       cleanPluginId = undefined;
     }
 
+    // INVARIANT: A node that names a REAL registered plugin (by pluginId, or by
+    // name/description explicitly mentioning it) needs that plugin invoked to do its
+    // job — a pure "llm" node has no tool access, so it can never satisfy this on its
+    // own. Reclassify deterministically instead of trusting the LLM's own type choice.
+    let seedPlugins: string[] | undefined;
+    if (nodeType === "llm") {
+      const explicitPluginMatch =
+        normalizePluginName(n.pluginId, availablePlugins) ||
+        (() => {
+          const nodeText = `${n.name} ${n.description || ""}`.toLowerCase();
+          return availablePlugins.find((p) => {
+            const pNameNorm = p.name.toLowerCase().replace(/[-_]/g, "");
+            return nodeText.includes(p.name.toLowerCase()) || nodeText.includes(pNameNorm);
+          })?.name;
+        })();
+
+      if (explicitPluginMatch) {
+        // A single deterministic tool call with no dynamic dependency on this
+        // node's own output -> "plugin". Multiple/iterative tool use implied by
+        // the description -> "llm" node equipped with that tool (agent behavior).
+        // Default to keeping it as an agent-equipped "llm" (safer: it can still
+        // make exactly one tool call) unless the description clearly reads as
+        // one static call.
+        const soundsIterativeOrMultiStep =
+          /\b(each|every|multiple|then\s+\w+\s+(read|fetch|extract)|loop|iterat|retry|cross[- ]?reference)\b/i.test(
+            n.description || "",
+          );
+        if (soundsIterativeOrMultiStep) {
+          seedPlugins = [explicitPluginMatch];
+        } else {
+          nodeType = "plugin";
+          cleanPluginId = explicitPluginMatch;
+        }
+      }
+    }
+
+    // INVARIANT: A "plugin" node whose own description reads as agentic work —
+    // it's explicitly called an "agent"/"agente", or it pairs a tool with a
+    // cognitive-synthesis verb (draft/write/summarize/compose/synthesize) — is
+    // NEVER a raw mechanical tool call. A plugin like "web_search" only returns
+    // raw snippets; it cannot itself "draft" or "write" coherent prose. Force
+    // it to an agent-equipped "llm" node instead of trusting the LLM's own
+    // "plugin" type choice, which repeatedly under-classifies these steps.
+    if (nodeType === "plugin" && cleanPluginId && pluginNames.has(cleanPluginId)) {
+      const nodeText = `${n.name} ${n.description || ""}`.toLowerCase();
+      const namesAgentExplicitly = /\bagents?\b|\bagentes?\b/.test(nodeText);
+      // "write"/"escribir" is ambiguous (creative prose vs. a mechanical file
+      // save via file_ops) — a file-writing plugin already legitimately uses
+      // that verb, so it's excluded here; only the unambiguous synthesis verbs
+      // trigger this check.
+      const pairsToolWithSynthesisVerb =
+        cleanPluginId !== "file_ops" &&
+        /\b(draft|redact|summar|resum|compose|compon|synthesiz|sintetiz)\w*\b/i.test(nodeText);
+      if (namesAgentExplicitly || pairsToolWithSynthesisVerb) {
+        seedPlugins = [cleanPluginId];
+        nodeType = "llm";
+        cleanPluginId = undefined;
+      }
+    }
+
     if (nodeType === "plugin") {
       if (!cleanPluginId || !pluginNames.has(cleanPluginId)) {
         // Dynamically find the best matching available plugin using description keyword scoring
@@ -1143,13 +958,48 @@ Return the refined, perfected workflow skeleton.`;
 
         cleanPluginId = bestMatch?.name || availablePlugins[0]?.name;
       }
+
+      // Deterministic tool-adequacy check: if the user's objective needs file/page
+      // CONTENT and the selected plugin's own description explicitly disclaims that
+      // capability (e.g. "matches by name only, not content"), it cannot literally
+      // satisfy this node — reassign to the best-scoring plugin that doesn't disclaim it.
+      const objectiveWantsContent = /\b(content|text|contain|contenga|contenido|palabra|line|línea)\b/i.test(
+        prompt,
+      );
+      const selectedPlugin = availablePlugins.find((p) => p.name === cleanPluginId);
+      const selectedDisclaimsContent =
+        selectedPlugin &&
+        /\b(not|cannot|does not|no)\b[^.]*\bcontent\b|\bcontent\b[^.]*\b(not|cannot|does not)\b/i.test(
+          `${selectedPlugin.description} ${selectedPlugin.returnDescription || ""}`,
+        );
+
+      if (objectiveWantsContent && selectedDisclaimsContent) {
+        const alternative = availablePlugins.find(
+          (p) =>
+            p.name !== cleanPluginId &&
+            !/\b(not|cannot|does not|no)\b[^.]*\bcontent\b|\bcontent\b[^.]*\b(not|cannot|does not)\b/i.test(
+              `${p.description} ${p.returnDescription || ""}`,
+            ) &&
+            /\bcontent|text\b/i.test(`${p.description} ${p.returnDescription || ""}`),
+        );
+        if (alternative) {
+          cleanPluginId = alternative.name;
+        }
+      }
     }
 
     const node: GraphNode = {
       id: cleanId,
       name: n.name,
       type: nodeType,
-      config: nodeType === "plugin" ? { pluginId: cleanPluginId } : {},
+      config:
+        nodeType === "plugin"
+          ? { pluginId: cleanPluginId }
+          : seedPlugins
+            ? { plugins: seedPlugins }
+            : (n as any).plugins && (n as any).plugins.length > 0
+              ? { plugins: (n as any).plugins }
+              : {},
     };
     intermediateNodes.push(node);
     graph.nodes.push(node);
@@ -1249,12 +1099,20 @@ Return the refined, perfected workflow skeleton.`;
   }
 
   // 3. Invariant: Every intermediate node must have at least one outgoing edge (No dead-ends)
+  // A dead-end node defaults to connecting straight to "end" — NOT to "the next
+  // node in array order". Two condition branches are commonly adjacent in that
+  // array (e.g. the "false" branch's last node sitting right before the "true"
+  // branch's first node), so connecting-to-next-in-array silently fuses two
+  // branches that must stay independent until "end". Only fall back to another
+  // intermediate node when there is no condition node anywhere in the graph
+  // (a simple linear pipeline, where "next in array" is an unambiguous guess).
+  const hasAnyCondition = intermediateNodes.some((n) => n.type === "condition");
   for (let i = 0; i < intermediateNodes.length; i++) {
     const node = intermediateNodes[i];
     const hasOutgoing = rawEdges.some((e) => e.source === node.id);
     if (!hasOutgoing) {
       const nextId =
-        i < intermediateNodes.length - 1
+        !hasAnyCondition && i < intermediateNodes.length - 1
           ? intermediateNodes[i + 1].id
           : "end";
       console.log(
@@ -1347,6 +1205,98 @@ Return the refined, perfected workflow skeleton.`;
         isConditional: true,
         path: "false",
       });
+    }
+  }
+
+  // 4.5. Invariant: A condition's two branches must not converge into each other
+  // before "end". A common LLM/heuristic mistake is wiring the tail of the
+  // "false" branch into the middle of the "true" branch (or vice versa) —
+  // e.g. "no vulnerability -> generate certificate -> [wrongly feeds into]
+  // -> process CVE advisory", silently merging two paths that must stay
+  // independent. Detect any node reachable from BOTH branches of the same
+  // condition (without going through "end" first) and cut the edge that
+  // creates the cross-branch merge, reconnecting that branch's tail to "end".
+  const reachableWithoutEnd = (startId: string): Set<string> => {
+    const seen = new Set<string>();
+    const stack = [startId];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      if (cur === "end" || seen.has(cur)) continue;
+      seen.add(cur);
+      for (const e of rawEdges.filter((edge) => edge.source === cur)) {
+        stack.push(e.target);
+      }
+    }
+    return seen;
+  };
+
+  // Whether following edges forward from startId can ever reach targetId again
+  // WITHOUT going through "end" — used to detect a branch that cycles back
+  // (directly or through other nodes/conditions) rather than one that goes
+  // straight through to a distinct downstream destination.
+  const canCycleBackTo = (startId: string, targetId: string): boolean => {
+    const seen = new Set<string>();
+    const stack = [startId];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      if (cur === "end" || seen.has(cur)) continue;
+      seen.add(cur);
+      if (cur === targetId) return true;
+      for (const e of rawEdges.filter((edge) => edge.source === cur)) {
+        stack.push(e.target);
+      }
+    }
+    return false;
+  };
+
+  for (const cn of intermediateNodes.filter((n) => n.type === "condition")) {
+    const trueEdge = rawEdges.find((e) => e.source === cn.id && e.path === "true");
+    const falseEdge = rawEdges.find((e) => e.source === cn.id && e.path === "false");
+    if (!trueEdge || !falseEdge || trueEdge.target === falseEdge.target) continue;
+
+    // A branch that eventually cycles back to THIS condition node (a legitimate
+    // retry loop, however many nodes/conditions it passes through on the way)
+    // will, by construction, reach everything downstream of this condition
+    // again — including whatever the OTHER branch reaches. That overlap is an
+    // intentional loop, not a bug. Only treat a branch as a real forward path
+    // (subject to the merge check below) when it does NOT cycle back here.
+    const trueIsLoopback = canCycleBackTo(trueEdge.target, cn.id);
+    const falseIsLoopback = canCycleBackTo(falseEdge.target, cn.id);
+    if (trueIsLoopback || falseIsLoopback) continue;
+
+    const trueReachable = reachableWithoutEnd(trueEdge.target);
+    const falseReachable = reachableWithoutEnd(falseEdge.target);
+    const overlap = [...trueReachable].filter((id) => falseReachable.has(id));
+    if (overlap.length === 0) continue;
+
+    // The branches merge at the first shared node. Find whichever branch's
+    // edge INTO that shared node should be cut: prefer cutting the edge from
+    // a node that ALSO already has another edge to "end" or is a tail node,
+    // otherwise just cut the false branch's incoming edge into the merge
+    // point (the "false"/approved path is the one most often meant to end
+    // independently) and reconnect that tail to "end".
+    for (const mergeNodeId of overlap) {
+      const incomingFromFalseSide = rawEdges.find(
+        (e) => e.target === mergeNodeId && falseReachable.has(e.source) && e.source !== mergeNodeId,
+      );
+      const cutEdge = incomingFromFalseSide;
+      if (!cutEdge) continue;
+
+      const idx = rawEdges.indexOf(cutEdge);
+      if (idx === -1) continue;
+      console.log(
+        `[Visual Builder - Generator] Deterministic code: Condition "${cn.id}"'s branches converge at "${mergeNodeId}" — cutting edge "${cutEdge.source}" -> "${cutEdge.target}" and reconnecting "${cutEdge.source}" to "end".`,
+      );
+      rawEdges.splice(idx, 1);
+      if (!rawEdges.some((e) => e.source === cutEdge.source)) {
+        rawEdges.push({
+          id: `edge_${cutEdge.source}_end_branch_split`,
+          source: cutEdge.source,
+          target: "end",
+          isConditional: false,
+        });
+      }
+      break; // one merge fixed per condition node is enough; re-derive on next loop iteration if needed
     }
   }
 
@@ -1471,7 +1421,7 @@ ${
 - Successor(s): ${successors.length ? successors.map(describeNeighbor).join("; ") : "none (this feeds into End)"}
 IMPORTANT: If a predecessor already has a tool and produced an outputKey that already contains what you need, do NOT re-invoke that tool or duplicate its outputKey — read its output via a plain "\${outputKey}" reference instead. Only add a tool to THIS node if the predecessor's output does not already cover it.`;
 
-    if (node.type === "llm" || node.type === "agent") {
+    if (node.type === "llm") {
       // Rebuilt per-node so inputMapping's value enum reflects the CURRENT
       // graph.stateSchema keys at the moment THIS node is configured (same
       // pattern buildConditionNodeSchema uses for condition nodes below).
@@ -1496,9 +1446,7 @@ IMPORTANT: If a predecessor already has a tool and produced an outputKey that al
         nodePlugins.length > 0
           ? `\nNOTE: This LLM node is an autonomous agent equipped with tools: [${nodePlugins.join(", ")}].
 Instruct it in systemPrompt to use its tools iteratively (e.g. searching the web, reading multiple relevant URLs, extracting details, saving files) to compile a rich, thorough response before concluding.`
-          : node.type === "agent"
-            ? `\nCRITICAL: This is an "agent" node — it MUST be equipped with tools. You MUST populate the "plugins" field with at least one plugin from the available list: [${Array.from(pluginNames).join(", ")}], chosen based on this node's mission: "${nodeDescriptions.get(node.id) || node.name}". Instruct it in systemPrompt to use its tools iteratively (observe → act → evaluate → act) to compile a thorough result before concluding.`
-            : "";
+          : "";
 
       const conditionPromptHint = feedsIntoCondition
         ? `\nCRITICAL: This LLM node feeds directly into a condition/decision node.
@@ -1597,18 +1545,15 @@ CRITICAL INSTRUCTIONS:
         );
 
         // If the graph already has dedicated plugin nodes and this LLM node's
-        // role is purely to write/generate code or text, it does NOT need external tools bound!
-        // "agent" nodes are exempt from this heuristic — an agent with zero tools is invalid.
-        let finalPlugins =
-          hasExternalPluginNodes && isCodingOrDraftingNode && node.type !== "agent"
+        // role is purely to write/generate code or text, it does NOT need external
+        // tools bound — UNLESS it was already seeded with tools (an agent-equipped
+        // node with zero tools would be invalid), in which case keep them.
+        const finalPlugins =
+          hasExternalPluginNodes && isCodingOrDraftingNode && nodePlugins.length === 0
             ? undefined
             : deduplicatedPlugins.length > 0
               ? deduplicatedPlugins
               : undefined;
-
-        if (node.type === "agent" && !finalPlugins) {
-          finalPlugins = availablePlugins[0] ? [availablePlugins[0].name] : undefined;
-        }
 
         node.config = {
           model: modelName,
@@ -1663,10 +1608,7 @@ CRITICAL INSTRUCTIONS:
           `[Visual Builder - Generator] LLM Config failed for ${node.id}:`,
           err?.message,
         );
-        let finalPlugins = nodePlugins.length > 0 ? nodePlugins : undefined;
-        if (node.type === "agent" && !finalPlugins) {
-          finalPlugins = availablePlugins[0] ? [availablePlugins[0].name] : undefined;
-        }
+        const finalPlugins = nodePlugins.length > 0 ? nodePlugins : undefined;
         const outKey = feedsIntoCondition
           ? `${node.id}_is_approved`
           : `${node.id}_result`;
@@ -1748,10 +1690,11 @@ CRITICAL RULES FOR inputMapping:
    - For literal values: provide the raw value directly, in its correct type (e.g. command: "git status --short", operation: "write", path: "system_health.md", limit: 5).
    - For state memory references: use ONLY the exact template syntax "\${varName}", where varName is a single bare variable name with NO dots and NO brackets (e.g. "\${cwd}", "\${search_results}").
    - FORBIDDEN — NEVER write dot-path or bracket-index access such as "\${search_results.results[0].url}" or "\${search_results[1].url}". The runtime resolver treats everything inside "\${...}" as one flat literal key and does NOT walk into nested objects or arrays.
-   - If you need a specific field out of a list/object (e.g. the URL of the top search result) rather than the whole variable, do NOT try to express that here. The upstream graph must already contain an "agent" or "llm" node dedicated to extracting that single field into its own scalar outputKey (e.g. "top_result_url") — then reference that scalar here as "\${top_result_url}".
+   - If you need a specific field out of a list/object (e.g. the URL of the top search result) rather than the whole variable, do NOT try to express that here. The upstream graph must already contain an "llm" node dedicated to extracting that single field into its own scalar outputKey (e.g. "top_result_url") — then reference that scalar here as "\${top_result_url}".
      * WRONG: inputMapping: { "url": "\${search_results.results[0].url}" }
-     * RIGHT: upstream "agent" node with outputKey "top_result_url", then this node: inputMapping: { "url": "\${top_result_url}" }
+     * RIGHT: upstream "llm" node with outputKey "top_result_url", then this node: inputMapping: { "url": "\${top_result_url}" }
    - NEVER wrap values in objects like { staticValue: ... } or { value: ... }!
+   - For folder/directory/path parameters: if the User Objective does not give an explicit absolute path, use "\${cwd}" (the real host working directory, available in state). NEVER invent a plausible-looking absolute path like "/project/src" or "/home/user/docs" — that path does not exist on the host and will fail at runtime.
 3. Matching Specific Commands to Specialized Nodes:
    - When the user objective specifies multiple commands (e.g. chained with '&&', ';', or 'and') and the workflow decomposed them into separate specialized nodes (e.g. one node for "Git Status" and one for "Git Log"):
      Assign ONLY the specific sub-command matching THIS node's Operational Role!
@@ -1814,7 +1757,7 @@ ${graphStateText}`),
             const fileMatch = prompt.match(
               /['"]?([a-zA-Z0-9_\-\.\/]+\.(?:log|md|json|txt|js|ts|py|html|sh))['"]?/i,
             );
-            inputMapping[pathKey] = fileMatch ? fileMatch[1] : "output.txt";
+            inputMapping[pathKey] = fileMatch ? fileMatch[1] : "${cwd}";
           }
           if (
             typeof inputMapping[pathKey] === "string" &&
@@ -1874,10 +1817,21 @@ ${graphStateText}`),
           inputMapping[cmdKey] = cmd;
         }
 
-        // 5. Working Directory parameter
-        const cwdKey = hasParam(/^(?:cwd|dir|workingDirectory)$/i);
-        if (cwdKey && !inputMapping[cwdKey]) {
-          inputMapping[cwdKey] = "${cwd}";
+        // 5. Working Directory / Folder parameter
+        const cwdKey = hasParam(/^(?:cwd|dir|workingDirectory|folder|directory)$/i);
+        if (cwdKey) {
+          if (!inputMapping[cwdKey]) {
+            inputMapping[cwdKey] = "${cwd}";
+          } else if (
+            typeof inputMapping[cwdKey] === "string" &&
+            inputMapping[cwdKey].startsWith("/") &&
+            !inputMapping[cwdKey].startsWith("/home/") &&
+            !inputMapping[cwdKey].startsWith("/tmp/") &&
+            !inputMapping[cwdKey].startsWith("/var/")
+          ) {
+            // The LLM invented an absolute path that doesn't exist on the host (e.g. "/project/src").
+            inputMapping[cwdKey] = "${cwd}";
+          }
         }
 
         // 6. URL parameter
@@ -2038,11 +1992,11 @@ CRITICAL TYPING & FIELD SELECTION RULES:
         let condField = config.condition.field;
         const incomingNode = incomingNodes[0];
         const incomingOutKey = incomingNode?.config?.outputKey as string | undefined;
-        const incomingIsLlmOrAgent = incomingNode?.type === "llm" || incomingNode?.type === "agent";
+        const incomingIsLlm = incomingNode?.type === "llm";
 
-        // Always remap to the actual outputKey of an upstream LLM/agent node:
+        // Always remap to the actual outputKey of an upstream LLM node:
         // the LLM configurator already set the field's type in stateSchema, so we trust that.
-        if (incomingIsLlmOrAgent && incomingOutKey && condField !== incomingOutKey) {
+        if (incomingIsLlm && incomingOutKey && condField !== incomingOutKey) {
           condField = incomingOutKey;
         } else if ((condField === "result" || !graph.stateSchema[condField]) && incomingOutKey) {
           // Fallback: remap generic or unknown fields for any node type
@@ -2270,8 +2224,8 @@ CRITICAL DELIVERABLE RULES:
         (v) => typeof v === "string" && (v === "input" || v === "${input}" || v.includes("${input}")),
       );
     }
-    if (n.type === "llm" || n.type === "agent") {
-      // llm/agent inputMapping values are bare state-key names (no "${}"),
+    if (n.type === "llm") {
+      // llm inputMapping values are bare state-key names (no "${}"),
       // so "input" itself (not "${input}") is the value to look for here.
       const mapping = (n.config?.inputMapping || {}) as Record<string, unknown>;
       if (Object.values(mapping).some((v) => v === "input")) return true;
@@ -2295,8 +2249,7 @@ CRITICAL DELIVERABLE RULES:
   const isInputRequired = Boolean(
     endConfig?.requiresUserInput ||
       anyNodeUsesInput ||
-      ((intermediateNodes[0]?.type === "llm" || intermediateNodes[0]?.type === "agent") &&
-        promptExplicitlyDemandsInput),
+      (intermediateNodes[0]?.type === "llm" && promptExplicitlyDemandsInput),
   );
 
   if (graph.stateSchema?.input) {
@@ -2317,7 +2270,7 @@ CRITICAL DELIVERABLE RULES:
   // ==========================================
   // PHASE 2.6: INTERPOLATION GRAMMAR VALIDATION & SELF-CORRECTION
   // ==========================================
-  const MAX_GRAMMAR_RETRIES = 2;
+  const MAX_GRAMMAR_RETRIES = 1;
   for (let attempt = 1; attempt <= MAX_GRAMMAR_RETRIES + 1; attempt++) {
     const violations = [
       ...validateGraphInterpolationGrammar(graph),
@@ -2406,7 +2359,7 @@ ${Object.entries(graph.stateSchema)
       const toolMentionViolations = nodeViolations.filter(
         (v) => v.kind === "unequipped_tool_mention",
       );
-      if (toolMentionViolations.length > 0 && (node.type === "llm" || node.type === "agent")) {
+      if (toolMentionViolations.length > 0 && node.type === "llm") {
         const existingPlugins = Array.isArray(node.config?.plugins)
           ? (node.config.plugins as string[])
           : [];
