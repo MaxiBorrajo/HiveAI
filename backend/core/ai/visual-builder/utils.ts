@@ -93,6 +93,20 @@ export function mapTypeToZod(def: StatePropertyDefinition): z.ZodType {
   return schema;
 }
 
+// Walks `source` following a dot-separated `path` (e.g. "evaluation.score")
+// and returns the value found, or undefined if any segment is missing.
+export function getFieldByPath(
+  source: Record<string, unknown>,
+  path: string,
+): unknown {
+  const parts = path.split(".");
+  let value: unknown = source;
+  for (const part of parts) {
+    value = (value as Record<string, unknown>)?.[part];
+  }
+  return value;
+}
+
 export function evaluateCondition(
   fieldValue: unknown,
   operator: ConditionOperator,

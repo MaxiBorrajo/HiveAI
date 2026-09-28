@@ -90,6 +90,12 @@ export type ConditionOperator =
   // Advanced
   | "regex_match";
 
+export interface ConditionConfig {
+  field: string; // Path in state (e.g. "evaluation.score" or "messages")
+  operator: ConditionOperator;
+  value: unknown; // Static value to compare against
+}
+
 export interface GraphEdge {
   id: string; // Connection ID (e.g. "edge_1")
   source: string; // Source node ID
@@ -99,11 +105,21 @@ export interface GraphEdge {
   isConditional: boolean;
 
   // Rule is evaluated ONLY if isConditional === true
-  condition?: {
-    field: string; // Path in state (e.g. "evaluation.score" or "messages")
-    operator: ConditionOperator;
-    value: unknown; // Static value to compare against
-  };
+  condition?: ConditionConfig;
+}
+
+// Config for a "llm" node. Extra plugin-defined fields are still allowed
+// dynamically (see GraphNode.config), so this intentionally stays an index
+// signature rather than `unknown`/`never` for unlisted keys.
+export interface LlmConfig {
+  model?: string | { name?: string; value?: string };
+  systemPrompt?: string;
+  plugins?: string[];
+  pluginId?: string;
+  structuredOutput?: StatePropertyDefinition;
+  outputKey?: string;
+  inputMapping?: Record<string, string>;
+  [key: string]: unknown;
 }
 
 // ==========================================

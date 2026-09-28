@@ -7,7 +7,7 @@ import { executionContextStorage } from "../../../../core/microkernel/human-inte
 import {
   compileGraph,
   buildStateSchema,
-} from "../../../../core/ai/visual-builder/compiler.ts";
+} from "../../../../core/ai/visual-builder/execution/compiler.ts";
 import type {
   LangGraphAbstraction,
   NodeRegistry,

@@ -7,12 +7,26 @@ import {
   ToolMessage,
   BaseMessage,
 } from "@langchain/core/messages";
-import { ToolProvider, StatePropertyDefinition } from "./types.ts";
-import { mapTypeToZod } from "./utils.ts";
+import { ToolProvider, LlmConfig } from "../types.ts";
+import { mapTypeToZod } from "../utils.ts";
+
+// Interprets a raw LLM text reply as a boolean. Shared by the LLM node's
+// boolean-output mapping and the visual-builder condition semantic fallback,
+// so both agree on what counts as "true".
+export function coerceLlmBooleanReply(text: string): boolean {
+  const clean = text.trim().toLowerCase();
+  return (
+    clean === "true" ||
+    clean.startsWith("true") ||
+    clean.includes("is_valid: true") ||
+    clean.includes('is_valid": true') ||
+    clean.includes("true")
+  );
+}
 
 export function buildLlmInstance(
   nodeId: string,
-  config: Record<string, unknown>,
+  config: LlmConfig,
   toolProvider?: ToolProvider,
 ): Runnable {
   const toolsToBind: unknown[] = [];
@@ -78,7 +92,7 @@ export function buildLlmInstance(
 
   if (structuredOutput) {
     console.log(`[Compiler Native LLM] Applying Structured Output Schema`);
-    const zodSchema = mapTypeToZod(structuredOutput as StatePropertyDefinition);
+    const zodSchema = mapTypeToZod(structuredOutput);
     // @ts-expect-error ChatOllama supports withStructuredOutput but types may mismatch Runnable
     runnableLlm = runnableLlm.withStructuredOutput(zodSchema);
   }
@@ -88,7 +102,7 @@ export function buildLlmInstance(
 
 export function buildPromptMessages(
   state: Record<string, unknown>,
-  config: Record<string, unknown>,
+  config: LlmConfig,
 ): BaseMessage[] {
   const messagesToSend: BaseMessage[] = [];
 
@@ -192,7 +206,7 @@ export function buildPromptMessages(
  */
 export async function executeLlmNode(
   nodeId: string,
-  config: Record<string, unknown>,
+  config: LlmConfig,
   state: Record<string, unknown>,
   toolProvider?: ToolProvider,
 ): Promise<Record<string, unknown>> {
@@ -251,9 +265,7 @@ export async function executeLlmNode(
     if (toolsToBind.length === 0) {
       let runnable: Runnable = baseLlm as unknown as Runnable;
       if (structuredOutput) {
-        const zodSchema = mapTypeToZod(
-          structuredOutput as StatePropertyDefinition,
-        );
+        const zodSchema = mapTypeToZod(structuredOutput);
         runnable = (baseLlm as any).withStructuredOutput(zodSchema);
       }
       const response = await runnable.invoke(messages);
@@ -366,7 +378,7 @@ export async function executeLlmNode(
 
 export function mapResponseToState(
   response: unknown,
-  config: Record<string, unknown>,
+  config: LlmConfig,
   state: Record<string, unknown>,
 ): Record<string, unknown> {
   let resultValue: unknown;
@@ -377,9 +389,9 @@ export function mapResponseToState(
     resultValue = (response as AIMessage).content;
   }
 
-  const outKey = config.outputKey as string | undefined;
+  const outKey = config.outputKey;
   const isBooleanField =
-    (config.structuredOutput as any)?.type === "boolean" ||
+    config.structuredOutput?.type === "boolean" ||
     (outKey &&
       (outKey.startsWith("is_") ||
         outKey.endsWith("_valid") ||
@@ -389,13 +401,7 @@ export function mapResponseToState(
     if (typeof resultValue === "boolean") {
       // already a boolean primitive
     } else if (typeof resultValue === "string") {
-      const clean = resultValue.trim().toLowerCase();
-      resultValue =
-        clean === "true" ||
-        clean.startsWith("true") ||
-        clean.includes("is_valid: true") ||
-        clean.includes("is_valid\": true") ||
-        clean.includes("true");
+      resultValue = coerceLlmBooleanReply(resultValue);
     } else if (typeof resultValue === "object" && resultValue !== null) {
       const firstVal = Object.values(resultValue)[0];
       if (typeof firstVal === "boolean") {
@@ -436,7 +442,7 @@ export function mapResponseToState(
 export function handleLlmError(
   error: unknown,
   nodeId: string,
-  config: Record<string, unknown>,
+  config: LlmConfig,
 ): Record<string, unknown> {
   const errorMsg = error instanceof Error ? error.message : String(error);
   console.error(
@@ -450,7 +456,7 @@ export function handleLlmError(
 
   const stateUpdate: Record<string, unknown> = {};
   if (config.outputKey) {
-    stateUpdate[config.outputKey as string] = resultValue;
+    stateUpdate[config.outputKey] = resultValue;
   } else {
     if (typeof resultValue === "string") {
       stateUpdate.messages = [{ role: "assistant", content: resultValue }];
