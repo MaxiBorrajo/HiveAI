@@ -5,9 +5,9 @@ import type {
   IncrementalEvent,
   LangGraphAbstraction,
   NormalizedSkeleton,
+  PluginInfo,
 } from "./types.ts";
 import {
-  type PluginInfo,
   runTopologyCompilerPhase,
 } from "./generation/topology-compiler.ts";
 import { normalizeSkeletonToGraph } from "./generation/skeleton-normalizer.ts";
@@ -114,12 +114,6 @@ export async function* generateIncrementalGraph(
 
 const MAX_SKELETON_RETRIES = 1;
 
-// Phase 1: gets the workflow skeleton from the Topology Compiler and
-// validates its shape (node type vs. pluginId/plugins, condition edge paths)
-// and that every condition node has both a "true" and a "false" branch. If a branch is missing, the violation is sent back to the LLM as
-// retry feedback (see runTopologyCompilerPhase's correctionContext) instead
-// of being silently invented — the deterministic fill is only applied once
-// MAX_SKELETON_RETRIES is exhausted, as a true last resort.
 async function* requestValidatedSkeleton(
   prompt: string,
   modelName: string,
@@ -141,8 +135,6 @@ async function* requestValidatedSkeleton(
 
     yield { type: "planning", thoughts: skeleton.thought };
 
-    // Undo the previous attempt's node pushes before normalizing again —
-    // normalizeSkeletonToGraph mutates graph.nodes directly.
     graph.nodes.length = nodesBefore;
     const normalized = normalizeSkeletonToGraph(skeleton, graph, availablePlugins);
 
@@ -159,10 +151,6 @@ async function* requestValidatedSkeleton(
     );
 
     if (attempt > MAX_SKELETON_RETRIES) {
-      // A converging true/false branch isn't fatal (LangGraph compiles it
-      // fine, the condition just ends up pointless) so it's left as-is here
-      // — only the missing-branch case needs a deterministic fill to stay
-      // compilable at all.
       fillMissingConditionBranches(normalized.intermediateNodes, normalized.rawEdges);
       return normalized;
     }
@@ -175,7 +163,6 @@ async function* requestValidatedSkeleton(
     };
   }
 
-  // Unreachable: the loop above always returns before exhausting its bound.
   throw new Error("requestValidatedSkeleton: retry loop exited without a result");
 }
 
@@ -201,7 +188,6 @@ function* streamSkeleton(
     };
   }
 
-  // Stream remaining edges
   for (const edge of graph.edges) {
     if (!emittedEdges.has(edge.id)) {
       emittedEdges.add(edge.id);
@@ -349,8 +335,6 @@ async function* configureNode(
         neighborHint,
         graphStateText,
       });
-      // Matches the pre-refactor behavior: the fallback path omits
-      // `stateProperties` from this event, unlike the success path.
       yield usedFallback
         ? { type: "node_updated", node }
         : { type: "node_updated", node, stateProperties: graph.stateSchema };

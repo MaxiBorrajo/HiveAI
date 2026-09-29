@@ -2,24 +2,9 @@ import { ChatOllama } from "@langchain/ollama";
 import { AIMessage, BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import { runConfigStep } from "./generation-step.ts";
+import { PluginInfo, WorkflowSkeleton } from "../types.ts";
 
-export interface PluginInfo {
-  name: string;
-  description: string;
-  parametersDescription?: string;
-  parameterKeys?: string[];
-  requiredKeys?: string[];
-  // The plugin's real Zod schema.shape, e.g. { query: ZodString, limit: ZodOptional<ZodNumber> }.
-  // Used to build a per-node inputMapping schema that enforces each
-  // parameter's ACTUAL type, instead of a generic string|number|boolean
-  // union that would let the LLM emit e.g. "5" for a field that needs 5.
-  parameterSchema?: Record<string, z.ZodTypeAny>;
-  returnDescription?: string;
-}
 
-/**
- * Normalizes plugin names (case-insensitive, ignoring dashes vs underscores).
- */
 export function normalizePluginName(
   rawName: string | undefined,
   availablePlugins: PluginInfo[],
@@ -41,10 +26,6 @@ export function normalizePluginName(
   return undefined;
 }
 
-/**
- * Dynamic Zod schema for Phase 1: Workflow Skeleton.
- * Relaxed and resilient to prevent local LLM formatting glitches from crashing generation.
- */
 export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
   const pluginNames = availablePlugins.map((p) => p.name);
   const pluginEnum =
@@ -120,148 +101,9 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
 }
 
 /**
- * Intelligent heuristic fallback builder when architect LLM call fails or times out.
- * Dynamically pairs user prompt with available plugins based on descriptions and schemas,
- * without hardcoding any specific plugin names.
- */
-export function buildHeuristicSkeleton(
-  prompt: string,
-  availablePlugins: PluginInfo[],
-) {
-  const pLower = prompt.toLowerCase();
-  const promptTokens = pLower.split(/[^a-z0-9_]+/).filter((t) => t.length > 2);
-
-  // Score available plugins dynamically by keyword overlap with their name and description
-  const scoredPlugins = availablePlugins
-    .map((plugin) => {
-      const searchTarget = `${plugin.name} ${plugin.description} ${plugin.parametersDescription || ""}`.toLowerCase();
-      let score = 0;
-      for (const token of promptTokens) {
-        if (searchTarget.includes(token)) {
-          score += 1;
-        }
-      }
-      return { plugin, score };
-    })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map((entry) => entry.plugin);
-
-  const hasCondition = /condition|condici[oó]n|if\b|si\b|evalu|branch|bifurca|check|verif|retry|reintento|bucle|loop/i.test(prompt);
-
-  // Pattern A: Conditional workflow / branching / retry loop
-  if (hasCondition) {
-    const isLoopback = /retry|reintento|bucle|loop|corrija|repeat/i.test(prompt);
-    const firstTool = scoredPlugins[0];
-    const secondTool = scoredPlugins[1];
-    const saveTool = scoredPlugins.find((p) => /save|write|store|log|file/i.test(`${p.name} ${p.description}`));
-
-    const nodes: any[] = [
-      {
-        id: "initial_step",
-        name: "Initial Processing",
-        type: firstTool && !/save|write|store/i.test(firstTool.description) ? "plugin" : "llm",
-        ...(firstTool && !/save|write|store/i.test(firstTool.description) ? { pluginId: firstTool.name } : {}),
-        description: "Process initial input or generate work",
-      },
-      {
-        id: "verification_step",
-        name: "Verification & Evaluation",
-        type: secondTool ? "plugin" : "llm",
-        ...(secondTool ? { pluginId: secondTool.name } : {}),
-        description: "Verify quality, syntax, or conditions",
-      },
-      {
-        id: "quality_gate",
-        name: "Quality Gate",
-        type: "condition" as const,
-        description: "Branch based on verification result",
-      },
-      {
-        id: "finalize_step",
-        name: "Finalize Deliverable",
-        type: saveTool ? "plugin" : "llm",
-        ...(saveTool ? { pluginId: saveTool.name } : {}),
-        description: "Save result or produce finalized output",
-      },
-    ];
-
-    const edges: any[] = [
-      { source: "start", target: "initial_step" },
-      { source: "initial_step", target: "verification_step" },
-      { source: "verification_step", target: "quality_gate" },
-    ];
-
-    if (isLoopback) {
-      edges.push(
-        { source: "quality_gate", target: "finalize_step", path: "true" },
-        { source: "quality_gate", target: "initial_step", path: "false" },
-        { source: "finalize_step", target: "end" },
-      );
-    } else {
-      edges.push(
-        { source: "quality_gate", target: "finalize_step", path: "true" },
-        { source: "quality_gate", target: "end", path: "false" },
-        { source: "finalize_step", target: "end" },
-      );
-    }
-
-    return {
-      thought: "Creating dynamic conditional workflow matching available tools",
-      nodes,
-      edges,
-    };
-  }
-
-  // Pattern B: Multi-step linear tool pipeline
-  if (scoredPlugins.length > 1) {
-    const nodes = scoredPlugins.slice(0, 3).map((plugin, idx) => ({
-      id: `step_${idx + 1}_${plugin.name.replace(/[^a-zA-Z0-9_]/g, "_")}`,
-      name: `Execute ${plugin.name}`,
-      type: "plugin" as const,
-      pluginId: plugin.name,
-      description: plugin.description,
-    }));
-
-    const edges: any[] = [{ source: "start", target: nodes[0].id }];
-    for (let i = 0; i < nodes.length - 1; i++) {
-      edges.push({ source: nodes[i].id, target: nodes[i + 1].id });
-    }
-    edges.push({ source: nodes[nodes.length - 1].id, target: "end" });
-
-    return {
-      thought: "Creating sequential tool execution pipeline",
-      nodes,
-      edges,
-    };
-  }
-
-  // Pattern C: Autonomous Agent equipped with matched tools
-  const toolsToGive = scoredPlugins.slice(0, 4).map((p) => p.name);
-  return {
-    thought: "Creating resilient AI agent workflow with available tools",
-    nodes: [
-      {
-        id: "main_agent",
-        name: "AI Agent",
-        type: "llm" as const,
-        plugins: toolsToGive.length > 0 ? toolsToGive : undefined,
-        description: "Process input and accomplish objective using tools",
-      },
-    ],
-    edges: [
-      { source: "start", target: "main_agent" },
-      { source: "main_agent", target: "end" },
-    ],
-  };
-}
-
-export type WorkflowSkeleton = z.infer<ReturnType<typeof buildWorkflowSkeletonSchema>>;
-
-/**
  * Phase 1: runs the Topology Compiler LLM call (via runConfigStep) to design
- * the whole workflow's node/edge structure in one structured-output call,
- * falling back to the heuristic skeleton builder if the call fails.
+ * the whole workflow's node/edge structure in one structured-output call.
+ * If the call fails after its retries the error propagates to the caller.
  */
 export async function runTopologyCompilerPhase(
   prompt: string,
@@ -359,12 +201,9 @@ Example D — Numeric quality gates use "number", not a boolean flag:
       );
       return skeleton;
     },
-    onFallback: (err: any) => {
-      console.warn(
-        `[Visual Builder - Generator] Topology Compiler failed, using context-aware heuristic fallback:`,
-        err?.message,
-      );
-      return buildHeuristicSkeleton(prompt, availablePlugins) as WorkflowSkeleton;
+    onFallback: (err: unknown) => {
+      console.error(`[Visual Builder - Generator] Topology Compiler failed:`, err instanceof Error ? err.message : err);
+      throw err;
     },
   });
 }

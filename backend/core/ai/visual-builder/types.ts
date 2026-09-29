@@ -1,9 +1,9 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { ChatOllama } from "@langchain/ollama";
-import { PluginInfo, WorkflowSkeleton } from "./generation/topology-compiler.ts";
 import { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
 import z from "zod";
 import { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
+import { buildWorkflowSkeletonSchema } from "./generation/topology-compiler.ts";
 
 export type ReducerStrategy =
   | "overwrite"
@@ -255,3 +255,15 @@ export interface NormalizedSkeleton {
 
 export type SkeletonNode = WorkflowSkeleton["nodes"][number];
 export type SkeletonEdge = WorkflowSkeleton["edges"][number];
+
+export interface PluginInfo {
+  name: string;
+  description: string;
+  parametersDescription?: string;
+  parameterKeys?: string[];
+  requiredKeys?: string[];
+  parameterSchema?: Record<string, z.ZodTypeAny>;
+  returnDescription?: string;
+}
+
+export type WorkflowSkeleton = z.infer<ReturnType<typeof buildWorkflowSkeletonSchema>>;

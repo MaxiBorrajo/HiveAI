@@ -1,5 +1,4 @@
-import { InputMappingViolation } from "../types.ts";
-import { WorkflowSkeleton } from "./topology-compiler.ts";
+import { InputMappingViolation, WorkflowSkeleton } from "../types.ts";
 
 const violation = (
   kind: InputMappingViolation["kind"],
@@ -10,11 +9,7 @@ const violation = (
   reason: string,
 ): InputMappingViolation => ({ kind, nodeId, nodeName, field, invalidValue, reason });
 
-/**
- * Structural checks on the raw skeleton, before it is turned into a graph.
- * Every finding is sent back to the Topology Compiler as retry feedback so
- * the LLM decides how to fix it — nothing here rewrites a node's type or plugin.
- */
+
 export function findSkeletonShapeViolations(skeleton: WorkflowSkeleton): InputMappingViolation[] {
   const violations: InputMappingViolation[] = [];
   const conditionIds = new Set<string>();

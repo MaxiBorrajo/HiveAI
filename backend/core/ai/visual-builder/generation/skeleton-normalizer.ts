@@ -3,10 +3,12 @@ import {
   GraphNode,
   LangGraphAbstraction,
   NormalizedSkeleton,
+  PluginInfo,
   SkeletonEdge,
   SkeletonNode,
+  WorkflowSkeleton,
 } from "../types.ts";
-import { PluginInfo, WorkflowSkeleton, normalizePluginName } from "./topology-compiler.ts";
+import {normalizePluginName } from "./topology-compiler.ts";
 
 function isBoundaryAlias(n: SkeletonNode, boundary: "start" | "end"): boolean {
   const id = n.id.toLowerCase().trim();
@@ -16,8 +18,6 @@ function isBoundaryAlias(n: SkeletonNode, boundary: "start" | "end"): boolean {
   );
 }
 
-// The graph builds its own start/end terminals, so any start/end node the LLM
-// emitted is dropped and its edges are redirected through `bypassMap`.
 function separateBoundaryAliases(skeleton: WorkflowSkeleton) {
   const bypassMap = new Map<string, string>();
   const nodesToKeep: SkeletonNode[] = [];
@@ -41,10 +41,6 @@ function makeUniqueNodeId(rawId: string, graph: LangGraphAbstraction): string {
   return collides ? `${cleanId}_step` : cleanId;
 }
 
-// The skeleton has already been checked by findSkeletonShapeViolations (and
-// sent back to the LLM for correction), so this only maps what is left. A node
-// that is still inconsistent after the retries is reduced to the nearest valid
-// shape structurally — never by guessing from its wording.
 function buildGraphNode(
   n: SkeletonNode,
   cleanId: string,
