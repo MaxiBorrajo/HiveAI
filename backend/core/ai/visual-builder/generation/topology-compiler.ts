@@ -106,10 +106,10 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
             .string()
             .describe("Target node ID (any intermediate node id, or 'end')"),
           path: z
-            .string()
+            .enum(["true", "false"])
             .optional()
             .describe(
-              "MANDATORY if source is a condition node ('true' for pass/proceed, 'false' for loop-back/retry or alert branch)",
+              "MANDATORY if source is a condition node ('true' for pass/proceed, 'false' for loop-back/retry or alert branch); omit for any other source",
             ),
         }),
       )

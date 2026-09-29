@@ -1,6 +1,6 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { ChatOllama } from "@langchain/ollama";
-import { PluginInfo } from "./generation/topology-compiler.ts";
+import { PluginInfo, WorkflowSkeleton } from "./generation/topology-compiler.ts";
 import { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
 import z from "zod";
 import { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
@@ -173,7 +173,9 @@ export type ViolationKind =
   | "unequipped_tool_mention"
   | "unknown_plugin"
   | "missing_condition_branch"
-  | "condition_branches_converge";
+  | "condition_branches_converge"
+  | "invalid_node_shape"
+  | "condition_edge_missing_path";
 
 export interface InputMappingViolation {
   kind: ViolationKind;
@@ -242,3 +244,14 @@ export interface PluginNodeConfiguratorContext {
 }
 
 export type PluginConfigCandidate = z.infer<ReturnType<typeof buildPluginConfigSchema>>;
+
+export interface NormalizedSkeleton {
+  startNode: GraphNode;
+  endNode: GraphNode;
+  intermediateNodes: GraphNode[];
+  nodeDescriptions: Map<string, string>;
+  rawEdges: GraphEdge[];
+}
+
+export type SkeletonNode = WorkflowSkeleton["nodes"][number];
+export type SkeletonEdge = WorkflowSkeleton["edges"][number];

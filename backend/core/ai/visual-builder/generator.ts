@@ -4,15 +4,14 @@ import type {
   GraphNode,
   IncrementalEvent,
   LangGraphAbstraction,
+  NormalizedSkeleton,
 } from "./types.ts";
 import {
   type PluginInfo,
   runTopologyCompilerPhase,
 } from "./generation/topology-compiler.ts";
-import {
-  type NormalizedSkeleton,
-  normalizeSkeletonToGraph,
-} from "./generation/skeleton-normalizer.ts";
+import { normalizeSkeletonToGraph } from "./generation/skeleton-normalizer.ts";
+import { findSkeletonShapeViolations } from "./generation/skeleton-validator.ts";
 import {
   findMissingConditionBranches,
   fillMissingConditionBranches,
@@ -116,8 +115,8 @@ export async function* generateIncrementalGraph(
 const MAX_SKELETON_RETRIES = 1;
 
 // Phase 1: gets the workflow skeleton from the Topology Compiler and
-// validates that every condition node has both a "true" and a "false"
-// branch. If a branch is missing, the violation is sent back to the LLM as
+// validates its shape (node type vs. pluginId/plugins, condition edge paths)
+// and that every condition node has both a "true" and a "false" branch. If a branch is missing, the violation is sent back to the LLM as
 // retry feedback (see runTopologyCompilerPhase's correctionContext) instead
 // of being silently invented — the deterministic fill is only applied once
 // MAX_SKELETON_RETRIES is exhausted, as a true last resort.
@@ -145,16 +144,17 @@ async function* requestValidatedSkeleton(
     // Undo the previous attempt's node pushes before normalizing again —
     // normalizeSkeletonToGraph mutates graph.nodes directly.
     graph.nodes.length = nodesBefore;
-    const normalized = normalizeSkeletonToGraph(skeleton, graph, availablePlugins, prompt);
+    const normalized = normalizeSkeletonToGraph(skeleton, graph, availablePlugins);
 
     const violations = [
+      ...findSkeletonShapeViolations(skeleton),
       ...findMissingConditionBranches(normalized.intermediateNodes, normalized.rawEdges),
       ...findConvergingConditionBranches(normalized.intermediateNodes, normalized.rawEdges),
     ];
     if (violations.length === 0) return normalized;
 
     console.warn(
-      `[Visual Builder - Generator] Skeleton attempt ${attempt} has invalid condition branches:`,
+      `[Visual Builder - Generator] Skeleton attempt ${attempt} is invalid:`,
       violations,
     );
 
