@@ -13,6 +13,7 @@ import { modesRouter } from "./modules/modes/router.ts";
 import { modelsRouter } from "./modules/models/router.ts";
 import { initORM } from "./infrastructure/db/orm.ts";
 import { homeDir } from "./core/env.ts";
+import { executionsRouter } from "./modules/executions/router.ts";
 
 const hive = HiveMicrokernel.getInstance();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = new Hono<{
   Variables: { hive: HiveMicrokernel };
 }>();
+
+app.onError((err, c) => {
+    console.error(`Error: ${err}`);
+    return c.text('Internal Server Error', 500);
+});
 
 app.use("*", async (c, next) => {
   c.set("hive", hive);
@@ -42,6 +48,7 @@ app.route("/api/models", modelsRouter);
 app.route("/api/interactions", interactionsRouter);
 app.route("/api/external-plugin-callbacks", externalPluginCallbacksRouter);
 app.route("/api/drafts", draftsRouter);
+app.route("/api/executions", executionsRouter);
 
 const frontendDistPath = join(__dirname, "../frontend/dist");
 

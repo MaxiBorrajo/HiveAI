@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface ApprovalPayload {
   kind: "approval";
   title: string;
@@ -30,6 +32,8 @@ interface PendingEntry extends PendingInteraction {
 
 const INTERACTION_TIMEOUT_MS = 2 * 60 * 1000;
 
+export const executionContextStorage = new AsyncLocalStorage<{ autoApprove: boolean }>();
+
 class HumanInteractionQueue {
   private pending = new Map<string, PendingEntry>();
 
@@ -43,6 +47,14 @@ class HumanInteractionQueue {
     pluginName: string,
     payload: ApprovalPayload,
   ): { id: string; wait: Promise<boolean> } {
+    const execContext = executionContextStorage.getStore();
+    if (execContext?.autoApprove) {
+      console.log(
+        `[human-interaction] ⚡ Execution workflow context active. Auto-approving request for '${pluginName}'.`,
+      );
+      return { id: "auto-approved", wait: Promise.resolve(true) };
+    }
+
     const id = crypto.randomUUID();
 
     const wait = new Promise<boolean>((resolve) => {

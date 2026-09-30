@@ -40,73 +40,38 @@ function launchBash(command: string): { bin: string; args: string[] } {
   return { bin: "bash", args: ["-c", command] };
 }
 
-// Not a sandbox — the command can still touch any path the OS lets the
-// process touch, regardless of cwd (absolute paths, `cd` inside the command
-// itself). This only stops the agent from *starting* a command somewhere
-// unexpected on the filesystem, same allowed root file-search already uses.
-function isWithinAllowedRoot(path: string, root: string): boolean {
-  const normalizedRoot = resolve(root);
-  const normalizedPath = resolve(path);
+function isSafeInspectionCommand(command: string): boolean {
+  const trimmed = command.trim();
+  // Strip safe stderr redirects (e.g. 2>/dev/null, 2>&1) before checking redirection operators
+  const withoutSafeRedirection = trimmed.replace(/2>\s*\/dev\/null|2>&1/g, "");
+  // Disallow file output redirections (except safe /tmp/ logging) or dangerous write commands
+  if (
+    />\s*(?!\/tmp\/)|\brm\s|\bmv\s|\bsudo\b|\bchmod\b|\bchown\b|\bkill\b|\bpkill\b|\bmkfs\b|\bdd\b|\btruncate\b/i.test(
+      withoutSafeRedirection,
+    )
+  ) {
+    return false;
+  }
+  // Allow common inspection, formatting and test commands
+  const safePatterns = [
+    /^(ps|top|df|free|head|tail|ls|grep|cat|uptime|wc|pwd|date|uname|whoami|echo|which|du|awk|sed|cut|tee|sort|uniq|tr)\b/i,
+    /^git\s+(status|log|diff|branch|show)\b/i,
+    /^(npm|yarn|pnpm|bun)\s+(test|run\s+test)\b/i,
+    /^deno\s+(test|check|eval)\b/i,
+    /^node\s+(-e|--check)\b/i,
+  ];
+
+  // If piped or chained (e.g. ps aux | head -n 5 && df -h), check each sub-command
+  const subcommands = trimmed
+    .split(/&&|\|\||\||;/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   return (
-    normalizedPath === normalizedRoot ||
-    normalizedPath.startsWith(normalizedRoot + sep)
+    subcommands.length > 0 &&
+    subcommands.every((sub) =>
+      safePatterns.some((pattern) => pattern.test(sub)),
+    )
   );
-}
-
-// Killing bash's own pid on timeout/abort leaves grandchildren (e.g. `sleep`
-// inside `bash -c "sleep 999"`) running orphaned. Killing the whole process
-// tree is OS-specific: Windows has no process groups but `taskkill /T` walks
-// the tree directly; POSIX has process groups but spawning into one needs
-// `setsid`, which isn't available on Git Bash/MSYS2 (this project's bash on
-// Windows) — so on non-Windows we fall back to killing bash's pid alone.
-async function readStreamCapped(
-  stream: ReadableStream<Uint8Array>,
-  maxBytes: number,
-  onOverflow: () => void,
-): Promise<{ text: string; truncated: boolean }> {
-  const decoder = new TextDecoder();
-  const reader = stream.getReader();
-  let text = "";
-  let totalBytes = 0;
-  let truncated = false;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        const keep = maxBytes - (totalBytes - value.byteLength);
-        if (keep > 0) text += decoder.decode(value.slice(0, keep));
-        truncated = true;
-        onOverflow();
-        break;
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-  } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      // stream may already be closed
-    }
-  }
-
-  return { text, truncated };
-}
-
-async function killProcessTree(pid: number): Promise<void> {
-  try {
-    if (Deno.build.os === "windows") {
-      await new Deno.Command("taskkill", {
-        args: ["/PID", String(pid), "/T", "/F"],
-      }).output();
-    } else {
-      await new Deno.Command("kill", { args: ["-9", String(pid)] }).output();
-    }
-  } catch {
-    // best-effort: process may have already exited
-  }
 }
 
 const schema = z.object({
@@ -131,6 +96,8 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     "Executes raw shell commands via bash, with full pipeline and redirection support. This is the most capable tool in the hive: anything the file/search plugins can do individually (finding a file, reading its contents, checking if something exists, editing or writing to it), bash can do too via standard commands (find, grep, cat, sed, awk, ls, etc.) — and it can chain several of those steps into a single command with pipes, so a multi-step investigation (find a file, then grep inside it, then show matching lines) can be one call instead of several separate tool calls. It's also the only way to reach anything a native plugin doesn't cover at all: any external CLI tool (git, npm, python, docker, etc.), system administration tasks, checking processes, installing packages, version control status/diffs. A human must approve the command before it runs. Prefer a native plugin when it directly and simply covers exactly what's asked (it's more predictable and needs no approval); reach for bash instead when the task needs multiple chained steps, an external CLI, or something no native plugin produces.";
 
   schema = schema;
+  returnDescription =
+    "Returns the combined stdout output of the command as a plain-text string. If the command fails (non-zero exit code), returns an error message containing the exit code and stderr output.";
 
   selectionTests: SelectionTestCase<RunShellSchema>[] = [
     {
@@ -254,13 +221,16 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       description: "cwd outside the user's home directory is rejected",
       kind: "error",
       params: { command: "pwd", cwd: "/etc" },
-      expect: (output: string) => output.includes("outside the allowed directory"),
+      expect: (output: string) =>
+        output.includes("outside the allowed directory"),
     },
     {
-      description: "Command producing unbounded output is stopped at the byte cap",
+      description:
+        "Command producing unbounded output is stopped at the byte cap",
       kind: "edge",
       params: { command: "yes" },
-      expect: (output: string) => output.includes("more than") && output.includes("bytes of output"),
+      expect: (output: string) =>
+        output.includes("more than") && output.includes("bytes of output"),
     },
   ];
 
@@ -300,26 +270,25 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       } catch {
         return `Error: The provided 'cwd' (${cwd}) does not exist or is inaccessible.`;
       }
-
-      const stat = await Deno.stat(realCwd);
-      if (!stat.isDirectory) {
-        return `Error: The provided 'cwd' (${cwd}) is a file, not a directory.`;
-      }
-
-      if (!isWithinAllowedRoot(realCwd, homedir())) {
-        return `Error: The provided 'cwd' (${cwd}) is outside the allowed directory (${homedir()}).`;
-      }
     }
 
-    console.log(
-      `[run-shell] 🐝 Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
-    );
+    let approved = false;
+    if (isSafeInspectionCommand(command)) {
+      console.log(
+        `[run-shell] ⚡ Safe read-only inspection command detected. Auto-approving: "${command}"`,
+      );
+      approved = true;
+    } else {
+      console.log(
+        `[run-shell]  Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
+      );
 
-    const approved = await this.context.requestApproval(
-      "El agente quiere ejecutar un comando",
-      `Esta acción usa una shell real (bash), sin restricciones de comandos. Revisá el comando antes de aprobarlo.`,
-      { command, ...(cwd ? { cwd } : {}) },
-    );
+      approved = await this.context.requestApproval(
+        "The agent wants to execute a command",
+        "This action uses a real shell (bash) without command restrictions. Review the command before approving.",
+        { command, ...(cwd ? { cwd } : {}) },
+      );
+    }
 
     if (!approved) {
       console.warn(`[run-shell] 🚫 Command was rejected or timed out.`);

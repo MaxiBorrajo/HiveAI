@@ -245,25 +245,23 @@ export function Chat() {
             });
             refreshChats();
 
-            const isBeingViewed =
-              displayKeyRef.current === key && isWindowFocused();
-            if (!isBeingViewed) {
-              markChatUnread(key);
-              const chatTitle =
-                chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
-              notifyChatResponse(
-                chatTitle,
-                finalContent.slice(0, 120) || "Nueva respuesta disponible",
-              );
-            }
-          },
-          onError: (errorMessage) => {
-            reportError([errorMessage]);
-            throw new Error(errorMessage);
-          },
+          const isBeingViewed =
+            displayKeyRef.current === key && isWindowFocused();
+          if (!isBeingViewed) {
+            markChatUnread(key);
+            const chatTitle =
+              chatsRef.current.find((c) => c.id === key)?.title || "HiveAI";
+            notifyChatResponse(
+              chatTitle,
+              finalContent.slice(0, 120) || "New response available",
+            );
+          }
         },
-        abortController.signal,
-      );
+        onError: (errorMessage) => {
+          reportError([errorMessage]);
+          throw new Error(errorMessage);
+        },
+      });
     } catch (error) {
       if (abortController.signal.aborted) {
         setMessagesByChat((prev) => {
@@ -328,10 +326,10 @@ export function Chat() {
         {isEmpty ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6">
             <div className="flex flex-col items-center gap-6 w-full max-w-3xl">
-              <div className="flex items-center justify-center gap-3">
-                <Logo size={40} />
-                <h1 className="text-display text-3xl font-medium">
-                  Welcome to the hive
+              <div className="flex items-center justify-center gap-2">
+                <Logo size={50} />
+                <h1 className="text-display text-5xl font-medium">
+                  HiveAI
                 </h1>
               </div>
               <ChatInput
