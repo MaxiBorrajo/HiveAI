@@ -14,7 +14,9 @@
     "build:desktop": "../build-desktop.sh",
     "db:generate": "deno run -A npm:drizzle-kit@^0.30.0 generate",
     "db:push": "deno run -A npm:drizzle-kit@^0.30.0 push",
-    "test": "deno test -A"
+    "test": "deno test -A",
+    "test:coverage": "deno test -A --coverage=coverage_profile && deno coverage coverage_profile --html",
+    "eval:llm": "deno run -A tests/llm-eval/run.ts"
   },
   "imports": {
     "@langchain/core": "npm:@langchain/core@^1.2.9",

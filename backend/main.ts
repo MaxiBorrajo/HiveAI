@@ -12,6 +12,7 @@ import { draftsRouter } from "./modules/drafts/router.ts";
 import { modesRouter } from "./modules/modes/router.ts";
 import { modelsRouter } from "./modules/models/router.ts";
 import { initORM } from "./infrastructure/db/orm.ts";
+import { PluginStateRepository } from "./infrastructure/db/repositories/PluginStateRepository.ts";
 import { homeDir } from "./core/env.ts";
 import { executionsRouter } from "./modules/executions/router.ts";
 
@@ -75,7 +76,8 @@ hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
 await hive.getConfig().load();
 
 const dataDir = hive.getConfig().get("dataDir");
-await initORM(dataDir);
+const db = await initORM(dataDir);
+hive.setPluginStateRepository(new PluginStateRepository(db));
 
 const server = Deno.serve({ port: 0 }, app.fetch);
 const port = (server.addr as Deno.NetAddr).port;
@@ -137,10 +139,15 @@ async function loadPlugins() {
   }
 
   for (const plugin of hive.getRegisteredPlugins()) {
-    await hive.activate(plugin.name);
+    const persisted = await hive.getPersistedActiveState(plugin.name);
+    if (persisted !== false) {
+      await hive.activate(plugin.name);
+    }
   }
 
   await hive.loadPersistedExternalPlugins();
+
+  await hive.restorePersistedActiveStates();
 
   console.log(
     "Registered plugins:",

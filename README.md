@@ -74,19 +74,57 @@ Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta 
 
 El foco está en el backend: ahí vive la lógica de negocio (grafos de agentes, microkernel de plugins, use cases), mientras que el frontend es mayormente UI de gestión donde los bugs se notan a simple vista.
 
-**Backend** — corre con el test runner nativo de Deno, sin dependencias externas:
+### Tests unitarios/integración (backend)
+
+Corren con el test runner nativo de Deno, sin dependencias externas ni LLM real:
 ```bash
 cd backend
 deno task test
 ```
-Convención: un archivo `nombre.test.ts` junto al módulo que testea (no una carpeta `tests/` separada). Los tests viven cerca del código:
-- `core/ai/strategy/SCOUT/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
-- `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
-- `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`, montando una instancia propia de `HiveMicrokernel` (no el singleton global) para no pisar estado entre tests.
 
-**Mockear el LLM:** cualquier test que pase por un nodo del grafo (`ChatOllama`, `Scout.stream`, etc.) debe mockear la respuesta del modelo — no depender de que Ollama esté corriendo. El LLM es no determinístico y lento; lo que se testea es que el grafo/routing reaccione bien a una respuesta dada, no la calidad de esa respuesta.
+Para correr un solo archivo o carpeta:
+```bash
+deno test -A tests/unit/
+deno test -A tests/unit/setPluginsActive.test.ts
+```
 
-**Cuidado con los singletons:** `HiveMicrokernel` y el cliente de la base de datos (`infrastructure/db/orm.ts`) son singletons de proceso. Para tests, instanciá tu propio `new HiveMicrokernel()` en vez de `HiveMicrokernel.getInstance()`, y apuntá `dataDir` a un `Deno.makeTempDir()` — así los tests no interfieren entre sí ni tocan datos reales del usuario.
+**Ubicación — dos convenciones conviven:**
+- `backend/tests/unit/` — carpeta central para tests de use cases, repositorios y flujos que cruzan varios módulos (ej. `PluginStateRepository.test.ts`, `HiveMicrokernel.pluginState.test.ts`, `setPluginsActive.test.ts`, `pluginsRouter.batchActive.test.ts`).
+- Archivos `nombre.test.ts` junto al módulo, para lo que es puramente local a ese archivo:
+  - `core/ai/strategy/SCOUT/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
+  - `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
+  - `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`.
+
+Al agregar un test nuevo: si prueba un solo archivo aislado, va al lado del archivo; si cruza módulos (microkernel + repo + router, por ejemplo), va a `tests/unit/`.
+
+**Mockear el LLM:** cualquier test que pase por un nodo del grafo (`ChatOllama`, `Scout.stream`, etc.) debe mockear la respuesta del modelo — no depender de que Ollama esté corriendo. El LLM es no determinístico y lento; lo que se testea acá es que el grafo/routing reaccione bien a una respuesta dada, no la calidad de esa respuesta. Para eso está el eval de LLM (ver abajo).
+
+**Cuidado con los singletons:** `HiveMicrokernel` y el cliente de la base de datos (`infrastructure/db/orm.ts`) son singletons de proceso. Para tests, instanciá tu propio `new HiveMicrokernel()` en vez de `HiveMicrokernel.getInstance()`, y apuntá `dataDir`/`configDir` a un `Deno.makeTempDir()` — así los tests no interfieren entre sí ni tocan datos reales del usuario. Excepción: `initORM()` también es singleton de proceso, así que varios tests en el mismo archivo terminan compartiendo la misma DB temporal — usá nombres únicos por test para no pisarte con otros tests del mismo archivo.
+
+### Cobertura (coverage)
+
+```bash
+cd backend
+deno task test:coverage
+```
+
+Corre toda la suite instrumentada y genera un reporte HTML navegable en `backend/coverage_profile/html/index.html` (abrilo directo en el navegador). También deja un `lcov.info` por si se quiere integrar con una herramienta externa (Codecov, extensión de VS Code, etc.). La carpeta `coverage_profile/` no se commitea (está en `.gitignore`) porque es output regenerable.
+
+Dos números por archivo: **líneas** (qué porcentaje del código se ejecutó al menos una vez) y **ramas** (qué porcentaje de los `if`/`switch`/ternarios se ejecutó en todos sus caminos). Es normal que ramas quede más bajo que líneas — significa que se prueba el camino feliz pero no todos los `catch`/edge cases.
+
+### Eval de LLM (routing/abstención de plugins)
+
+Distinto a los tests de arriba: **no es determinístico y no es un gate de CI**. Corre el grafo `Scout` completo contra un modelo real de Ollama para medir si el LLM elige el plugin correcto, se abstiene cuando corresponde, y extrae bien los parámetros — cosas que no se pueden probar mockeando el modelo.
+
+```bash
+cd backend
+deno task eval:llm            # usa qwen3:8b por default
+deno task eval:llm lfm2.5     # o cualquier modelo instalado en Ollama
+```
+
+Requiere Ollama corriendo con un modelo de tool-calling ya descargado (`ollama pull qwen3:8b`); si el modelo pedido no está instalado, el script lo reporta como `SKIPPED` en vez de fallar. Tarda varios minutos (cada caso es una invocación real al modelo).
+
+Los casos viven en `backend/tests/llm-eval/cases.ts` (routing, abstención, extracción de parámetros — fácil de extender agregando entradas al array). El runner (`run.ts`) imprime resultado por caso y un resumen de **pass rate por categoría** al final — un 8/10 puntual no es necesariamente una regresión (varianza propia del modelo), pero una caída sostenida sí es señal de que algo se rompió (un prompt, una descripción de plugin ambigua, etc.). Correrlo manualmente antes de tocar prompts del Agent/Executor o descripciones de plugins, no en cada commit.
 
 **Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/context/` y `src/lib/`, no snapshots de UI.
 
