@@ -15,6 +15,7 @@ export async function sendMessage(
   chatId: string | null,
   content: string,
   handlers: StreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
   const response = await apiClient.post(
     "/api/chats",
@@ -22,6 +23,7 @@ export async function sendMessage(
     {
       responseType: "stream",
       adapter: "fetch",
+      signal,
     },
   );
 
@@ -29,23 +31,27 @@ export async function sendMessage(
     throw new Error(`The backend responded with no body`);
   }
 
-  await readSseStream(response.data, (eventName, payload) => {
-    if (eventName === "chat_created") {
-      handlers.onChatCreated(payload.chatId);
-    } else if (eventName === "thinking") {
-      handlers.onThinking();
-    } else if (eventName === "thinking_delta") {
-      handlers.onThinkingDelta(payload.content, payload.node);
-    } else if (eventName === "token") {
-      handlers.onToken(payload.content);
-    } else if (eventName === "done") {
-      handlers.onDone(
-        payload.content,
-        payload.usedTools ?? [],
-        payload.steps ?? [],
-      );
-    } else if (eventName === "error") {
-      handlers.onError(payload.message);
-    }
-  });
+  await readSseStream(
+    response.data,
+    (eventName, payload) => {
+      if (eventName === "chat_created") {
+        handlers.onChatCreated(payload.chatId);
+      } else if (eventName === "thinking") {
+        handlers.onThinking();
+      } else if (eventName === "thinking_delta") {
+        handlers.onThinkingDelta(payload.content, payload.node);
+      } else if (eventName === "token") {
+        handlers.onToken(payload.content);
+      } else if (eventName === "done") {
+        handlers.onDone(
+          payload.content,
+          payload.usedTools ?? [],
+          payload.steps ?? [],
+        );
+      } else if (eventName === "error") {
+        handlers.onError(payload.message);
+      }
+    },
+    signal,
+  );
 }

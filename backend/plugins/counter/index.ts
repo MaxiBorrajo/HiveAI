@@ -32,6 +32,7 @@ export default class CounterPlugin implements BeePlugin<CounterSchema> {
     "Manages persistent named counters across sessions (increment, read, or reset). USE CASES: Use this when the user asks you to keep track of a tally, count occurrences of an event, remember how many times something happened over time, or check the current count of a previously tracked metric. Do NOT use this for simple math calculations, only for stateful counting.";
 
   schema = schema;
+  returnDescription = "Returns a plain-text confirmation message with the counter's name and its current value after the operation (e.g. 'Counter \"visits\" is now 5').";
 
   selectionTests: SelectionTestCase<CounterSchema>[] = [
     {

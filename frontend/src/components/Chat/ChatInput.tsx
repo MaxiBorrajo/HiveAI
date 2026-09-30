@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
+import { Loader2Icon, SquareIcon, TriangleAlertIcon } from "lucide-react";
 import { PluginsManager } from "../PluginsManager/PluginsManager.tsx";
 import { ModesManager } from "../ModesManager/ModesManager.tsx";
 import { ModelManager } from "../ModelManager/ModelManager.tsx";
@@ -13,11 +13,14 @@ import {
 import { reportError } from "@/lib/toastManager";
 
 interface ChatInputProps {
+  placeholder?: string;
   input: string;
   setInput: (val: string) => void;
   isThinking: boolean;
   handleSend: () => void;
+  handleStop: () => void;
   isEmpty?: boolean;
+  hidePluginsAndModes?: boolean;
 }
 
 export function ChatInput({
@@ -25,7 +28,10 @@ export function ChatInput({
   setInput,
   isThinking,
   handleSend,
+  handleStop,
   isEmpty,
+  hidePluginsAndModes,
+  placeholder,
 }: ChatInputProps) {
   const {
     hasModel,
@@ -77,8 +83,8 @@ export function ChatInput({
   return (
     <div className="flex w-full max-w-3xl flex-col gap-2">
       {!hasModel && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-          <TriangleAlertIcon className="size-4 shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
+          <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
           {hasAvailableModels ? (
             <span>
               No models selected. Choose a respond &amp; verify model and a tool
@@ -102,12 +108,12 @@ export function ChatInput({
       )}
 
       {(embeddingModelMissing || isDownloading) && (
-        <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
           <div className="flex items-center gap-2">
             {isDownloading ? (
-              <Loader2Icon className="size-4 shrink-0 animate-spin" />
+              <Loader2Icon className="size-4 shrink-0 animate-spin text-muted-foreground" />
             ) : (
-              <TriangleAlertIcon className="size-4 shrink-0" />
+              <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
             )}
             {isDownloading ? (
               <span>
@@ -139,9 +145,9 @@ export function ChatInput({
           </div>
 
           {isDownloading && (
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-500/20">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-amber-500 transition-all"
+                className="h-full rounded-full bg-primary transition-all"
                 style={{
                   width: downloadProgress?.total
                     ? `${Math.min(
@@ -163,29 +169,45 @@ export function ChatInput({
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message to the agent..."
+          placeholder={
+            placeholder ||
+            (hidePluginsAndModes
+              ? "I want a workflow that creates a report about..."
+              : "How can I help you?")
+          }
           className="min-h-14 max-h-52 w-full resize-none overflow-y-auto border-0 bg-transparent py-2 px-3 text-base shadow-none focus-visible:ring-0 placeholder:text-muted-foreground dark:bg-transparent md:text-base"
           rows={2}
         />
         <div className="mt-2 flex items-center justify-between">
           <div className="flex gap-2">
-            <PluginsManager forceOpenDownward={isEmpty} />
-            <ModesManager />
+            {!hidePluginsAndModes && (
+              <>
+                <PluginsManager forceOpenDownward={isEmpty} />
+                <ModesManager />
+              </>
+            )}
             <ModelManager forceOpenDownward={isEmpty} />
           </div>
-          <Button
-            onClick={handleSend}
-            disabled={isThinking || !input.trim() || !canSend}
-            title={
-              !hasModel
-                ? "Select a model before sending a message"
-                : embeddingModelMissing
-                  ? `Run 'ollama pull ${embeddingModelStatus?.model}' before sending a message`
-                  : undefined
-            }
-          >
-            Send
-          </Button>
+          {isThinking ? (
+            <Button variant="secondary" onClick={handleStop} title="Stop">
+              <SquareIcon className="size-3 fill-current" />
+              Stop
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || !canSend}
+              title={
+                !hasModel
+                  ? "Select a model before sending a message"
+                  : embeddingModelMissing
+                    ? `Run 'ollama pull ${embeddingModelStatus?.model}' before sending a message`
+                    : undefined
+              }
+            >
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

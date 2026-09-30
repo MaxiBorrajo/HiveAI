@@ -33,6 +33,7 @@ export interface BeePlugin<S extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   schema: S;
+  returnDescription?: string;
   selectionTests: SelectionTestCase<S>[];
   executionTests: ExecutionTestCase<S>[];
   initialize(context: BeeContext): void | Promise<void>;

@@ -22,7 +22,7 @@ export async function initORM(dataDir: string): Promise<AppDatabase> {
   const dbDir = join(dataDir, "memory");
   mkdirSync(dbDir, { recursive: true });
   const dbPath = join(dbDir, "hiveai.db");
-
+console.log(dbPath)
   const client = new DatabaseSync(dbPath);
   client.exec("PRAGMA foreign_keys = ON;");
 

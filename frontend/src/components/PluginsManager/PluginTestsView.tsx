@@ -334,6 +334,8 @@ export function PluginTestsView({
           onClick={onBack}
           disabled={isRunning}
           className="shrink-0 -ml-2"
+          title="Back"
+          aria-label="Back"
         >
           <ArrowLeft size={16} />
         </Button>
@@ -429,7 +431,7 @@ export function PluginTestsView({
                   </span>
                   <div className="flex items-end gap-2">
                     <span
-                      className={`text-2xl font-bold ${summary.passRate === 100 ? "text-green-500" : summary.passRate > 70 ? "text-orange-500" : "text-red-500"}`}
+                      className={`text-2xl font-bold ${summary.passRate < 70 ? "text-destructive" : "text-foreground"}`}
                     >
                       {summary.passRate}%
                     </span>
@@ -447,7 +449,7 @@ export function PluginTestsView({
                     Resilience Score
                   </span>
                   <span
-                    className={`text-2xl font-bold ${summary.resilienceScore === 100 ? "text-green-500" : summary.resilienceScore > 70 ? "text-orange-500" : "text-red-500"}`}
+                    className={`text-2xl font-bold ${summary.resilienceScore < 70 ? "text-destructive" : "text-foreground"}`}
                   >
                     {summary.resilienceScore}%
                   </span>
@@ -490,7 +492,7 @@ export function PluginTestsView({
               <div className="flex gap-4 text-xs font-medium">
                 <div
                   title="Number of successful LLM Selection tests out of total Selection tests run"
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md border border-blue-100 cursor-help"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 text-foreground rounded-md border border-border cursor-help"
                 >
                   <span>Selection:</span>
                   <strong className="font-mono">
@@ -499,7 +501,7 @@ export function PluginTestsView({
                 </div>
                 <div
                   title="Number of successful code Execution tests out of total Execution tests run"
-                  className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-md border border-purple-100 cursor-help"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 text-foreground rounded-md border border-border cursor-help"
                 >
                   <span>Execution:</span>
                   <strong className="font-mono">

@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 const toastIconByType: Record<string, React.ReactNode> = {
   success: <CircleCheckIcon className="size-5 text-primary" />,
   info: <InfoIcon className="size-5 text-primary" />,
-  warning: <TriangleAlertIcon className="size-5 text-amber-500" />,
+  warning: <TriangleAlertIcon className="size-5 text-foreground" />,
   error: <OctagonXIcon className="size-5 text-destructive" />,
 };
 

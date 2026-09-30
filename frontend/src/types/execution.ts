@@ -1,0 +1,117 @@
+export type DataType = "string" | "number" | "boolean" | "object" | "array" | "enum" | "unknown";
+export type ReducerStrategy = "overwrite" | "append" | "prepend" | "unique_append" | "merge_dict" | "sum" | "subtract" | "multiply" | "divide";
+
+export interface StatePropertyDefinition {
+  type: DataType;
+  required: boolean;
+  default?: any;
+  properties?: Record<string, StatePropertyDefinition>;
+  items?: StatePropertyDefinition;
+  options?: string[];
+  reducerStrategy?: ReducerStrategy;
+}
+
+export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: NodeType;
+  uiPosition?: { x: number; y: number };
+  config: Record<string, any>;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  path?: "true" | "false"; // Used if source is a condition node
+  isConditional: boolean;
+  condition?: {
+    field: string;
+    operator: string;
+    value: unknown;
+  };
+}
+
+export interface LangGraphAbstraction {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stateSchema: Record<string, StatePropertyDefinition>;
+}
+
+export interface Execution {
+  id: number;
+  name: string;
+  lastResultId: number | null;
+  lastGraphId: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ExecutionSummary {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ExecutionDetails {
+  execution: any;
+  graph?: {
+    id: number;
+    graph: LangGraphAbstraction;
+    state: any;
+    createdAt: number;
+  };
+  lastResult?: {
+    id: number;
+    executionId: number;
+    iteration: number;
+    result: any;
+    finalState?: Record<string, any>;
+    createdAt: number;
+  } | null;
+}
+
+export type ExecutionResultType =
+  // Documentos y Archivos
+  | "file"
+  | "markdown"
+  | "text"
+  // Datos y Analítica
+  | "table"
+  | "chart"
+  | "json"
+  // Multimedia y Web
+  | "image"
+  | "html"
+  | "url"
+  // Operaciones y Lógica
+  | "terminal"
+  | "boolean"
+  | "error";
+
+export interface ExecutionFileArtifact {
+  name: string;
+  path: string;
+  size?: number;
+  mimeType?: string;
+}
+
+export interface ExecutionResult {
+  type: ExecutionResultType;
+  summary: string;
+  content: any;
+  files?: ExecutionFileArtifact[];
+  metadata?: Record<string, any>;
+}
+
+export interface ExecutionResultData {
+  result: any;
+  finalState?: Record<string, any>;
+  iteration?: number;
+  historyId?: number;
+  createdAt?: number;
+}
+

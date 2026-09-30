@@ -5,7 +5,13 @@ export interface ApprovalPayload {
   details?: Record<string, string>;
 }
 
-export type InteractionPayload = ApprovalPayload;
+export interface ClarifyPayload {
+  kind: "clarify";
+  question: string;
+  options?: string[];
+}
+
+export type InteractionPayload = ApprovalPayload | ClarifyPayload;
 
 export interface PendingInteraction {
   id: string;

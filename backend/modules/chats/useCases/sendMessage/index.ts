@@ -69,7 +69,7 @@ async function persistAssistantMessage(
   });
 }
 
-function appendThinkingDelta(
+export function appendThinkingDelta(
   runs: ThinkingRun[],
   content: string,
   node: string | undefined,
@@ -82,7 +82,7 @@ function appendThinkingDelta(
   }
 }
 
-async function consumeStream(
+export async function consumeStream(
   streamIterable: AsyncIterable<unknown>,
   finalNodeName: string,
   send: (event: string, data: unknown) => void,
@@ -222,7 +222,7 @@ export async function sendMessage(
 
         const streamIterable = await Scout.stream(
           { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
-          { streamMode: ["messages", "values"] },
+          { streamMode: ["messages", "values"], signal: req.signal },
         );
 
         const { fullContent, steps, thinkingRuns } = await consumeStream(

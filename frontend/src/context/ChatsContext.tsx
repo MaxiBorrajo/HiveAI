@@ -1,12 +1,13 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useState,
   type ReactNode,
 } from "react";
-import { listChats as listChatsRequest } from "@/lib/chats/listChats";
-import { deleteChat as deleteChatRequest } from "@/lib/chats/deleteChat";
+import { listChats } from "@/lib/chats/listChats";
+import { deleteChat } from "@/lib/chats/deleteChat";
+import { updateChat as updateChatRequest, type UpdateChatDto } from "@/lib/chats/updateChat";
+import { useEntityListState } from "@/lib/useEntityListState";
 import type { ChatSummary } from "@/types/chat";
 
 interface ChatsContextValue {
@@ -18,6 +19,11 @@ interface ChatsContextValue {
   selectChat: (chatId: string) => void;
   startNewChat: () => void;
   deleteChat: (chatId: string) => Promise<void>;
+  updateChat: (
+    chatId: string,
+    titleOrDto: string | { title: string },
+  ) => Promise<void>;
+  renameChat: (chatId: string, title: string) => Promise<void>;
   onChatCreated: (chatId: string) => void;
   touchChat: (chatId: string) => void;
   unreadChatIds: Set<string>;
@@ -27,25 +33,16 @@ interface ChatsContextValue {
 const ChatsContext = createContext<ChatsContextValue | null>(null);
 
 export function ChatsProvider({ children }: { children: ReactNode }) {
-  const [chats, setChats] = useState<ChatSummary[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [newChatToken, setNewChatToken] = useState(() => crypto.randomUUID());
-  const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [unreadChatIds, setUnreadChatIds] = useState<Set<string>>(new Set());
 
-  function refreshChats() {
-    setIsLoadingChats(true);
-    listChatsRequest()
-      .then(({ data }) => setChats(data ?? []))
-      .finally(() => setIsLoadingChats(false));
-  }
-
-  useEffect(refreshChats, []);
-
-  function selectChat(chatId: string) {
-    setActiveChatId(chatId);
-    markChatRead(chatId);
-  }
+  const state = useEntityListState<ChatSummary, UpdateChatDto>(
+    { list: listChats, remove: deleteChat, update: updateChatRequest },
+    (chat, dto, serverChat) => ({
+      ...chat,
+      title: serverChat?.title ?? dto.title,
+      updatedAt: serverChat?.updatedAt ?? Date.now(),
+    }),
+  );
 
   function markChatRead(chatId: string) {
     setUnreadChatIds((prev) => {
@@ -65,47 +62,33 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  function startNewChat() {
-    setActiveChatId(null);
-    setNewChatToken(crypto.randomUUID());
+  function selectChat(chatId: string) {
+    state.select(chatId);
+    markChatRead(chatId);
   }
 
-  function onChatCreated(chatId: string) {
-    setActiveChatId(chatId);
-    refreshChats();
-  }
-
-  function touchChat(chatId: string) {
-    setChats((prev) => {
-      const index = prev.findIndex((chat) => chat.id === chatId);
-      if (index === -1) return prev;
-
-      const touched = { ...prev[index], updatedAt: Date.now() };
-      const rest = prev.filter((chat) => chat.id !== chatId);
-      return [touched, ...rest];
-    });
-  }
-
-  async function deleteChat(chatId: string) {
-    await deleteChatRequest(chatId);
-    if (activeChatId === chatId) {
-      setActiveChatId(null);
-      setNewChatToken(crypto.randomUUID());
-    }
-    refreshChats();
+  async function updateChat(
+    chatId: string,
+    titleOrDto: string | { title: string },
+  ) {
+    const title =
+      typeof titleOrDto === "string" ? titleOrDto : titleOrDto.title;
+    await state.update(chatId, { title });
   }
 
   const value: ChatsContextValue = {
-    chats,
-    activeChatId,
-    newChatToken,
-    isLoadingChats,
-    refreshChats,
+    chats: state.items,
+    activeChatId: state.activeId,
+    newChatToken: state.newItemToken,
+    isLoadingChats: state.isLoading,
+    refreshChats: state.refresh,
     selectChat,
-    startNewChat,
-    deleteChat,
-    onChatCreated,
-    touchChat,
+    startNewChat: state.startNew,
+    deleteChat: state.remove,
+    updateChat,
+    renameChat: (chatId: string, title: string) => updateChat(chatId, title),
+    onChatCreated: state.onCreated,
+    touchChat: state.touch,
     unreadChatIds,
     markChatUnread,
   };

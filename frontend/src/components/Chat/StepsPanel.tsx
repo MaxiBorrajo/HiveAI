@@ -42,23 +42,23 @@ export function StepsPanel({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/40 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
         <DialogPrimitive.Popup className="fixed top-0 right-0 z-50 flex h-screen w-full max-w-sm flex-col gap-4 border-l border-border bg-popover p-4 text-popover-foreground shadow-xl outline-none duration-150 data-open:animate-in data-open:slide-in-from-right data-closed:animate-out data-closed:slide-out-to-right">
           <div className="flex items-center justify-between gap-2">
             <div>
               <DialogPrimitive.Title className="font-heading text-base font-medium">
-                Pasos de la respuesta
+                Response steps
               </DialogPrimitive.Title>
               <p className="text-xs text-muted-foreground">
-                {steps.length} paso{steps.length === 1 ? "" : "s"} ·{" "}
-                {formatDuration(totalMs)} en total
+                {steps.length} step{steps.length === 1 ? "" : "s"} ·{" "}
+                {formatDuration(totalMs)} total
               </p>
             </div>
             <DialogPrimitive.Close
               render={<Button variant="ghost" size="icon-sm" />}
             >
               <XIcon />
-              <span className="sr-only">Cerrar</span>
+              <span className="sr-only">Close</span>
             </DialogPrimitive.Close>
           </div>
 
@@ -88,7 +88,7 @@ export function StepsPanel({
                       return run?.text ? (
                         <div className="mb-2 rounded-md bg-muted/50 p-2">
                           <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            Razonamiento
+                            Reasoning
                           </p>
                           <p className="whitespace-pre-wrap text-xs italic text-muted-foreground">
                             {run.text}

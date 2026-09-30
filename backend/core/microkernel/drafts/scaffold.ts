@@ -25,6 +25,9 @@ export default class ${className} implements BeePlugin<typeof schema> {
   name = "${pluginName}";
   description = "TODO: describe what this plugin does and when it should be used.";
   schema = schema;
+  // Optional: describe what the returned string looks like/means, so the
+  // caller knows how to interpret it.
+  // returnDescription = "TODO: describe the shape/meaning of the returned string.";
 
   // At least 3 "positive", 3 "negative" and 3 "ambiguous" cases are
   // required before this plugin can be registered.
@@ -50,10 +53,17 @@ export default class ${className} implements BeePlugin<typeof schema> {
     // the plugin needs (e.g. reading context.getDataDir()).
   }
 
-  async process(input: z.infer<typeof schema>): Promise<string> {
+  async process(
+    input: z.infer<typeof schema>,
+    _options?: { signal?: AbortSignal },
+  ): Promise<string> {
     // TODO: implement the plugin's actual behavior.
     return "TODO";
   }
+
+  // Optional: runs when the plugin is deactivated/unregistered. Use it to
+  // release anything acquired in initialize() (timers, connections, etc.).
+  // dispose() {}
 }
 `;
 }

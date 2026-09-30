@@ -102,9 +102,9 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
       {children}
 
       {busyMessage && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/40 backdrop-blur-xs">
-          <Loader2 className="size-8 animate-spin text-white" />
-          <p className="max-w-xs text-center text-sm text-white">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-xs">
+          <Loader2 className="size-8 animate-spin text-foreground" />
+          <p className="max-w-xs text-center text-sm text-foreground">
             {busyMessage}
           </p>
         </div>

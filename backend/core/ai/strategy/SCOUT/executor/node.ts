@@ -17,6 +17,7 @@ function summarize(text: string, maxChars = 200): string {
 async function runToolCall(
   toolCall: ToolCall,
   chatId: string,
+  signal: AbortSignal | undefined,
 ): Promise<{ message: ToolMessage; steps: ChatStep[]; ok: boolean }> {
   const microkernel = HiveMicrokernel.getInstance();
   const tool =
@@ -55,7 +56,7 @@ async function runToolCall(
 
   try {
     const { result: toolResult, steps: pluginSteps } = await captureSteps(() =>
-      tool.invoke(toolCall),
+      tool.invoke(toolCall, { signal }),
     );
     const durationMs = performance.now() - start;
 
@@ -110,7 +111,10 @@ async function runToolCall(
   }
 }
 
-export const Executor: GraphNode<typeof ScoutState> = async (state) => {
+export const Executor: GraphNode<typeof ScoutState> = async (
+  state,
+  config,
+) => {
   const lastMessage = state.messages[state.messages.length - 1];
 
   if (!AIMessage.isInstance(lastMessage) || !lastMessage.tool_calls?.length) {
@@ -153,7 +157,7 @@ export const Executor: GraphNode<typeof ScoutState> = async (state) => {
       message,
       steps: callSteps,
       ok,
-    } = await runToolCall(toolCall, state.chatId);
+    } = await runToolCall(toolCall, state.chatId, config.signal);
     messages.push(message);
     steps.push(...callSteps);
     if (ok) {

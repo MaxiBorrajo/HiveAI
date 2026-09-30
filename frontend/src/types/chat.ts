@@ -24,19 +24,13 @@ export interface Message {
   role: "user" | "agent";
   content: string;
   isError?: boolean;
+  wasStopped?: boolean;
   timestamp: number;
   usedTools?: string[];
   steps?: ChatStep[];
   thinkingRuns?: ThinkingRun[];
 }
 
-export interface ChatSummary {
-  id: string;
-  title: string;
-  createdAt: number;
-  updatedAt: number;
-  messageCount: number;
-}
 
 export interface StoredMessage {
   id: string;
@@ -71,4 +65,11 @@ export interface ChatModeParameter {
   maxValue?: number | null;
   note?: string;
   requiresServiceRestart: boolean;
+}
+
+export interface ChatSummary {
+  id: string;
+  title?: string;
+  createdAt: number;
+  updatedAt: number;
 }
