@@ -31,7 +31,10 @@ export async function fetchAvailableModels(
   return modelInfos.filter((model) => matchesFilters(model, filters));
 }
 
-function matchesFilters(model: ModelInfo, filters: ModelFilters): boolean {
+export function matchesFilters(
+  model: ModelInfo,
+  filters: ModelFilters,
+): boolean {
   if (
     filters.name &&
     !model.name.toLowerCase().includes(filters.name.toLowerCase())
