@@ -201,7 +201,7 @@ export function ExecutionResultSidebar({
       </div>
 
       <div className="px-4 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center justify-between">
-        <SegmentedTabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
+        <SegmentedTabs<Tab> tabs={tabs} active={activeTab} onChange={setActiveTab} />
         {resObj.summary && (
           <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[220px]">
             {resObj.summary}
