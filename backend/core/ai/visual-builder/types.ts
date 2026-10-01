@@ -58,8 +58,8 @@ export interface ToolProvider {
   getTool(name: string): StructuredToolInterface | undefined;
 }
 
-export type { ConditionOperator } from "./condition-operators.ts";
-import type { ConditionOperator } from "./condition-operators.ts";
+export type { ConditionOperator } from "./constants.ts";
+import type { ConditionOperator } from "./constants.ts";
 
 export interface ConditionConfig {
   field: string; 

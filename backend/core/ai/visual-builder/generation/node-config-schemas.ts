@@ -1,4 +1,4 @@
-import { CONDITION_OPERATORS } from "../condition-operators.ts";
+import { CONDITION_OPERATORS } from "../constants.ts";
 import { z } from "zod";
 
 export const statePropertyDefinitionSchema = z.object({

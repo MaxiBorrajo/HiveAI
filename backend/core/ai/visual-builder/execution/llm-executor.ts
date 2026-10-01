@@ -8,7 +8,7 @@ import {
   BaseMessage,
 } from "@langchain/core/messages";
 import { ToolProvider, LlmConfig } from "../types.ts";
-import { mapTypeToZod } from "../utils.ts";
+import { mapTypeToZod } from "./state.ts";
 
 // Interprets a raw LLM text reply as a boolean. Shared by the LLM node's
 // boolean-output mapping and the visual-builder condition semantic fallback,

@@ -3,35 +3,12 @@ import { fileURLToPath } from "node:url";
 import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { initORM } from "./infrastructure/db/orm.ts";
 import { homeDir } from "./core/env.ts";
-import { createApp } from "./app.ts";
-import { openDesktopWindow } from "./desktop.ts";
+import { createApp } from "./bootstrap/create-app.ts";
+import { openDesktopWindow } from "./bootstrap/desktop.ts";
+import { loadPlugins } from "./bootstrap/load-plugins.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const hive = HiveMicrokernel.getInstance();
-
-async function loadPlugins() {
-  const pluginsDir = join(__dirname, "plugins");
-
-  for await (const entry of Deno.readDir(pluginsDir)) {
-    if (!entry.isDirectory) continue;
-    try {
-      await hive.loadAndRegister(join(pluginsDir, entry.name));
-    } catch (error) {
-      console.error(`Failed to load bundled plugin '${entry.name}':`, error);
-    }
-  }
-
-  for (const plugin of hive.getRegisteredPlugins()) {
-    await hive.activate(plugin.name);
-  }
-
-  await hive.loadPersistedExternalPlugins();
-
-  console.log(
-    "Registered plugins:",
-    hive.getRegisteredPlugins().map((p) => p.name),
-  );
-}
 
 hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
 hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
@@ -57,4 +34,4 @@ hive.configure({
   callbackBaseUrl: `http://localhost:${port}/api/external-plugin-callbacks`,
 });
 
-await loadPlugins();
+await loadPlugins(hive, join(__dirname, "plugins"));

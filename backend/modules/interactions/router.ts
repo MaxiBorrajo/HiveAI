@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { handleListInteractions } from "./useCases/listInteractions/index.ts";
+import { handleListInteractions } from "./use-cases/list-interactions.ts";
 import {
   handleResolveInteraction,
   handleResolveClarification,
-} from "./useCases/resolveInteraction/index.ts";
+} from "./use-cases/resolve-interaction.ts";
 import { ResponseBuilder } from "../../core/api/response.ts";
 
 export const interactionsRouter = new Hono();

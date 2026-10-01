@@ -1,5 +1,5 @@
 import { stateKeySchema } from "./shared.ts";
-import { CONDITION_OPERATORS } from "../condition-operators.ts";
+import { CONDITION_OPERATORS } from "../constants.ts";
 import { ChatOllama } from "@langchain/ollama";
 import { AIMessage, BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";

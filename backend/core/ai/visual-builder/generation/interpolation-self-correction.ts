@@ -14,7 +14,7 @@ import {
   validateGraphVariableReferences,
   validateGraphPluginParameters,
   validateGraphAgentToolMentions,
-} from "../validation.ts";
+} from "./validation.ts";
 import { runConfigStep } from "./generation-step.ts";
 import { buildPluginConfigSchema } from "./plugin-node-configurator.ts";
 

@@ -10,7 +10,8 @@ import {
   ConditionConfig,
 } from "../types.ts";
 import { START_NODE_ID, END_NODE_ID } from "../constants.ts";
-import { getReducerFunction, evaluateCondition, getFieldByPath } from "../utils.ts";
+import { getReducerFunction } from "./state.ts";
+import { evaluateCondition, getFieldByPath } from "./conditions.ts";
 import { executeLlmNode } from "./llm-executor.ts";
 import { evaluateConditionWithFallback } from "./condition-evaluator.ts";
 

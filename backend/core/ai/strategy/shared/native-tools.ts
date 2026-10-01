@@ -1,7 +1,7 @@
 import { tool, type DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { getORM } from "../../../../infrastructure/db/orm.ts";
-import { MessageRepository } from "../../../../infrastructure/db/repositories/MessageRepository.ts";
+import { MessageRepository } from "../../../../infrastructure/db/repositories/message-repository.ts";
 import { humanInteractionQueue } from "../../../microkernel/human-interaction.ts";
 
 const RECALL_TOOL_NAME = "recall_past_conversations";

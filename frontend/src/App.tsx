@@ -6,26 +6,26 @@ import {
   ToastViewport,
   ToastList,
 } from "@/components/ui/toast";
-import { Chat } from "@/components/Chat";
+import { Chat } from "@/features/chats";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
-import { ExecutionsMain } from "@/components/Executions/ExecutionsMain";
+import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain";
 import { toastManager } from "@/lib/toastManager";
-import { ModelsProvider } from "@/context/ModelsContext";
-import { ChatsProvider, useChats } from "@/context/ChatsContext";
-import { ExecutionsProvider, useExecutions } from "@/context/ExecutionsContext";
+import { ModelsProvider } from "@/features/models/ModelsContext";
+import { ChatsProvider, useChats } from "@/features/chats/ChatsContext";
+import { ExecutionsProvider, useExecutions } from "@/features/executions/ExecutionsContext";
 import {
   DraftEditorProvider,
   useDraftEditor,
-} from "@/components/PluginsManager/draft-editor-context";
-import { DraftEditorPage } from "@/components/PluginsManager/DraftEditorPage";
+} from "@/features/drafts/DraftEditorContext";
+import { DraftEditorPage } from "@/features/drafts/components/DraftEditorPage";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { RenameDialog } from "@/components/RenameDialog";
 import {
   buildSidebarProps,
   type DeleteTarget,
   type RenameTarget,
-} from "@/lib/buildSidebarProps";
+} from "@/components/buildSidebarProps";
 
 function AppContent() {
   const { openDraftName, closeDraft, notifyPluginImported } = useDraftEditor();

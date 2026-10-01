@@ -4,13 +4,13 @@ import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
 import { requireModelsConfigured } from "../../core/api/guards.ts";
 
-import { generateExecution } from "./useCases/generateExecution/index.ts";
-import { listExecutions } from "./useCases/listExecutions/index.ts";
-import { getExecution } from "./useCases/getExecution/index.ts";
-import { deleteExecution } from "./useCases/deleteExecution/index.ts";
-import { updateExecution } from "./useCases/updateExecution/index.ts";
-import { updateExecutionGraph } from "./useCases/updateExecutionGraph/index.ts";
-import { runExecution } from "./useCases/runExecution/index.ts";
+import { generateExecution } from "./use-cases/generate-execution/generate-execution.ts";
+import { listExecutions } from "./use-cases/list-executions.ts";
+import { getExecution } from "./use-cases/get-execution.ts";
+import { deleteExecution } from "./use-cases/delete-execution.ts";
+import { updateExecution } from "./use-cases/update-execution.ts";
+import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
+import { runExecution } from "./use-cases/run-execution/run-execution.ts";
 
 export const executionsRouter = new Hono<{
   Variables: { hive: HiveMicrokernel };

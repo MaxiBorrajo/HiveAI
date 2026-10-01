@@ -80,7 +80,7 @@ cd backend
 deno task test
 ```
 Convención: un archivo `nombre.test.ts` junto al módulo que testea (no una carpeta `tests/` separada). Los tests viven cerca del código:
-- `core/ai/strategy/SCOUT/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
+- `core/ai/strategy/scout/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
 - `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
 - `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`, montando una instancia propia de `HiveMicrokernel` (no el singleton global) para no pisar estado entre tests.
 
@@ -88,7 +88,38 @@ Convención: un archivo `nombre.test.ts` junto al módulo que testea (no una car
 
 **Cuidado con los singletons:** `HiveMicrokernel` y el cliente de la base de datos (`infrastructure/db/orm.ts`) son singletons de proceso. Para tests, instanciá tu propio `new HiveMicrokernel()` en vez de `HiveMicrokernel.getInstance()`, y apuntá `dataDir` a un `Deno.makeTempDir()` — así los tests no interfieren entre sí ni tocan datos reales del usuario.
 
-**Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/context/` y `src/lib/`, no snapshots de UI.
+**Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/features/*/lib/`, `src/features/*/api/`, `src/hooks/` y `src/lib/`, no snapshots de UI.
+
+---
+
+## Estructura del proyecto y convenciones
+
+### Backend (`backend/`)
+```
+main.ts                 entrada (la usan build-desktop.sh y deno.json)
+bootstrap/              arranque: create-app.ts, desktop.ts, load-plugins.ts
+core/                   plataforma transversal, sin lógica de features
+  api/ ollama/ files/ memory/ microkernel/ ai/ env.ts
+modules/<feature>/      un slice por feature: router.ts, types.ts, use-cases/, lib/
+infrastructure/db/      orm, schema/, repositories/, migrations/
+plugins/                plugins incluidos (cada uno con su bee-plugin.ts)
+config/  experiments/
+```
+- Archivos y carpetas en `kebab-case` (`send-message.ts`, `use-cases/`); las clases dentro siguen en PascalCase.
+- Un caso de uso es un archivo con su nombre (`use-cases/send-message.ts`); solo tiene carpeta si necesita archivos auxiliares (`run-execution/run-execution.ts` + `plugin-node-executor.ts`).
+- Tests junto al archivo: `send-message.test.ts`. Sin `index.ts` en el backend.
+
+### Frontend (`frontend/src/`)
+```
+features/<feature>/     chats, drafts, executions, interactions, models, modes, plugins
+  api/ components/ hooks/ lib/ types.ts   (+ Contexto.tsx si hay)
+components/             ui/ (shadcn) y componentes compartidos de la app
+hooks/                  hooks compartidos (useCopyFeedback, useKeyedState...)
+lib/                    infraestructura (apiClient, sse, toastManager...) y utils.ts de shadcn
+```
+- Componentes `PascalCase.tsx`; hooks `useAlgo.ts`; el resto `camelCase.ts`. `components/ui/` y `lib/utils.ts` mantienen su nombre por shadcn.
+- Las features usan los mismos nombres que los módulos del backend.
+- Una feature no importa los componentes internos de otra salvo a través de su `types.ts`, su `api/` o su `index.ts` raíz.
 
 ---
 
