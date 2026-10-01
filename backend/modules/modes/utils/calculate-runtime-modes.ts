@@ -63,25 +63,25 @@ export function applyRuntimeHints(mode: ChatMode, hints: RuntimeHints) {
   }
 
   for (const parameter of mode.parameters ?? []) {
+    const applyHint = (value: number | boolean) => {
+      const untouched =
+        parameter.currentValue == null ||
+        parameter.currentValue === parameter.defaultValue;
+      parameter.defaultValue = value;
+      if (untouched) parameter.currentValue = value;
+    };
+
     if (parameter.name === "n_gpu_layers") {
       parameter.maxValue = hints.maxGpuLayers;
     }
 
     if (parameter.name === "n_threads") {
       parameter.maxValue = hints.physicalCores;
-      parameter.defaultValue = hints.physicalCores;
-      parameter.currentValue = hints.physicalCores;
+      applyHint(hints.physicalCores);
     }
 
-    if (parameter.name === "mlock") {
-      parameter.defaultValue = hints.mlockSafe;
-      parameter.currentValue = hints.mlockSafe;
-    }
-
-    if (parameter.name === "mmap") {
-      parameter.defaultValue = !hints.mlockSafe;
-      parameter.currentValue = !hints.mlockSafe;
-    }
+    if (parameter.name === "mlock") applyHint(hints.mlockSafe);
+    if (parameter.name === "mmap") applyHint(!hints.mlockSafe);
   }
 }
 

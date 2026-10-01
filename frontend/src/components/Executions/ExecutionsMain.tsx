@@ -9,6 +9,10 @@ import { RunExecutionModal } from "./RunExecutionModal";
 import { ExecutionResultSidebar } from "./ExecutionResultSidebar";
 import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { reportError } from "@/lib/toastManager";
+import { getErrorMessage } from "@/lib/errors";
+import { useCopyFeedback } from "@/lib/useCopyFeedback";
+import { graphRequiresInput } from "@/lib/executions/inputs";
 
 export function ExecutionsMain() {
   const {
@@ -31,7 +35,7 @@ export function ExecutionsMain() {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [runInputs, setRunInputs] = useState<Record<string, any>>({});
-  const [isCopied, setIsCopied] = useState(false);
+  const { copied: isCopied, copy: copyText } = useCopyFeedback();
 
   const {
     isThinking,
@@ -43,6 +47,7 @@ export function ExecutionsMain() {
     executionResult,
     activeToolName,
     handleGenerate,
+    handleStop,
     handleRun: runExecution,
   } = useExecutionWorkspace({
     key,
@@ -55,9 +60,7 @@ export function ExecutionsMain() {
 
   const handleCopyGraph = () => {
     if (!graph) return;
-    navigator.clipboard.writeText(JSON.stringify(graph, null, 2));
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+    copyText(JSON.stringify(graph, null, 2));
   };
 
   const handleGenerateClick = async () => {
@@ -65,33 +68,9 @@ export function ExecutionsMain() {
     const userPrompt = input;
     setInput("");
     await handleGenerate(userPrompt);
-    setInput("");
   };
 
-  const hasRequiredInputs = Boolean(
-    graph &&
-      (
-        Boolean(
-          graph.stateSchema &&
-            Object.entries(graph.stateSchema).some(
-              ([key, def]: [string, any]) => key === "input" && def.required === true
-            )
-        ) ||
-        graph.nodes?.some((n) => {
-          if (n.type === "plugin") {
-            const mapping = (n.config?.inputMapping || {}) as Record<string, any>;
-            return Object.values(mapping).some(
-              (v) => typeof v === "string" && (v === "input" || v === "${input}" || v.includes("${input}"))
-            );
-          }
-          if (n.type === "llm") {
-            const prompt = String(n.config?.systemPrompt || "");
-            return prompt.includes("${input}") || prompt.includes("input message") || prompt.includes("input ticket");
-          }
-          return false;
-        })
-      )
-  );
+  const hasRequiredInputs = graphRequiresInput(graph);
 
   const handleOpenRunModal = () => {
     if (!graph) return;
@@ -105,16 +84,11 @@ export function ExecutionsMain() {
 
   const handleRun = async (overrideInputs?: Record<string, any>) => {
     setIsRunModalOpen(false);
-    const isExplicitRecord =
-      overrideInputs &&
-      typeof overrideInputs === "object" &&
-      !("nativeEvent" in overrideInputs);
-    const inputsSource = isExplicitRecord ? overrideInputs : runInputs;
 
     try {
-      await runExecution(inputsSource, () => setIsResultSidebarOpen(true));
+      await runExecution(overrideInputs ?? runInputs, () => setIsResultSidebarOpen(true));
     } catch (e: any) {
-      alert("Stream error: " + e.message);
+      reportError([`Stream error: ${getErrorMessage(e)}`]);
     }
   };
 
@@ -137,6 +111,7 @@ export function ExecutionsMain() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isThinking, isRunning, graph, hasRequiredInputs]);
 
   const isEmpty = !graph && !isThinking;
@@ -393,6 +368,7 @@ export function ExecutionsMain() {
                   setInput={setInput}
                   isThinking={isThinking}
                   handleSend={handleGenerateClick}
+                  handleStop={handleStop}
                   isEmpty={isEmpty}
                   hidePluginsAndModes
                   placeholder={

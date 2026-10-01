@@ -1,5 +1,4 @@
-import { apiClient } from "../apiClient";
-import { readSseStream } from "../sse";
+import { postSse } from "../sse";
 
 export interface RunExecutionStreamHandlers {
   onDone?: (data: {
@@ -13,34 +12,12 @@ export interface RunExecutionStreamHandlers {
   onToolEnd?: (toolName: string | null) => void;
 }
 
-/**
- * Streams a running execution's server-sent events, reusing the same
- * `readSseStream` parser as `generateExecutionStream` instead of
- * hand-rolling a second SSE reader. The backend emits both dedicated
- * `done`/`error` events and raw LangGraph callback events (e.g.
- * `on_chain_start`, `on_tool_start`, `on_tool_end`) under an `event`
- * field on the payload itself — this normalizes both shapes into the
- * handlers above.
- */
 export async function runExecutionStream(
   executionId: string,
   input: Record<string, any>,
   handlers: RunExecutionStreamHandlers,
 ): Promise<void> {
-  const response = await apiClient.post(
-    `/api/executions/${executionId}/run`,
-    { input },
-    {
-      responseType: "stream",
-      adapter: "fetch",
-    },
-  );
-
-  if (!response.data) {
-    throw new Error("The backend responded with no body");
-  }
-
-  await readSseStream(response.data, (eventName, data) => {
+  await postSse(`/api/executions/${executionId}/run`, { input }, (eventName, data) => {
     if (eventName === "done" || data.result !== undefined) {
       handlers.onDone?.({
         iteration: data.iteration || 1,
@@ -51,7 +28,7 @@ export async function runExecutionStream(
     }
 
     if (eventName === "error") {
-      handlers.onError?.(data.error || "Unknown error");
+      handlers.onError?.(data.message || "Unknown error");
       return;
     }
 

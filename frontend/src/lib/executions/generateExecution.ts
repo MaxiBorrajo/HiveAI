@@ -1,5 +1,4 @@
-import { apiClient } from "../apiClient";
-import { readSseStream } from "../sse";
+import { postSse } from "../sse";
 import type {
   LangGraphAbstraction,
   GraphNode,
@@ -45,21 +44,9 @@ export interface GenerateStreamHandlers {
 export async function generateExecutionStream(
   payload: GenerateExecutionPayload,
   handlers: GenerateStreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const response = await apiClient.post(
-    "/api/executions/generate",
-    payload,
-    {
-      responseType: "stream",
-      adapter: "fetch",
-    },
-  );
-
-  if (!response.data) {
-    throw new Error("The backend responded with no body");
-  }
-
-  await readSseStream(response.data, (eventName, data) => {
+  await postSse("/api/executions/generate", payload, (eventName, data) => {
     if (eventName === "execution_created") {
       handlers.onExecutionCreated?.(String(data.executionId));
     } else if (eventName === "planning") {
@@ -79,36 +66,5 @@ export async function generateExecutionStream(
     } else if (eventName === "error") {
       handlers.onError?.(data.message);
     }
-  });
+  }, signal);
 }
-
-export async function generateExecution(
-  payload: GenerateExecutionPayload,
-): Promise<{
-  data: {
-    executionId: number;
-    graphId: number;
-    graph: LangGraphAbstraction;
-  };
-}> {
-  return new Promise((resolve, reject) => {
-    let finalData: any = null;
-    generateExecutionStream(payload, {
-      onDone: (data) => {
-        finalData = data;
-      },
-      onError: (msg) => {
-        reject(new Error(msg));
-      },
-    })
-      .then(() => {
-        if (finalData) {
-          resolve({ data: finalData });
-        } else {
-          reject(new Error("Stream ended without done event"));
-        }
-      })
-      .catch(reject);
-  });
-}
-

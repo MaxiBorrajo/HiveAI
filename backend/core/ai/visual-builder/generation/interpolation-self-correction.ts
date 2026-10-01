@@ -7,6 +7,7 @@ import {
   InputMappingViolation,
   InterpolationSelfCorrectionContext,
   LangGraphAbstraction,
+  PluginInfo,
 } from "../types.ts";
 import {
   validateGraphInterpolationGrammar,
@@ -16,7 +17,6 @@ import {
 } from "../validation.ts";
 import { runConfigStep } from "./generation-step.ts";
 import { buildPluginConfigSchema } from "./plugin-node-configurator.ts";
-import { PluginInfo } from "./topology-compiler.ts";
 
 const MAX_GRAMMAR_RETRIES = 1;
 

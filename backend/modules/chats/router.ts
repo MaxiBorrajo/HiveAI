@@ -1,3 +1,4 @@
+import { parseId } from "../../core/api/errors.ts";
 import { Hono } from "hono";
 import { listChats } from "./useCases/listChats/index.ts";
 import { getChatMessages } from "./useCases/getChatMessages/index.ts";
@@ -53,19 +54,19 @@ chatsRouter.get("/:id", async (c) => {
 chatsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return deleteChat(db, parseInt(c.req.param("id")), headers);
+  return deleteChat(db, parseId(c.req.param("id")), headers);
 });
 
 chatsRouter.patch("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
-  return updateChat(db, parseInt(c.req.param("id")), body, headers);
+  return updateChat(db, parseId(c.req.param("id")), body, headers);
 });
 
 chatsRouter.put("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
-  return updateChat(db, parseInt(c.req.param("id")), body, headers);
+  return updateChat(db, parseId(c.req.param("id")), body, headers);
 });

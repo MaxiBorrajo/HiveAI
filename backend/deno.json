@@ -6,7 +6,11 @@
   "esModuleInterop": true,
   "moduleResolution": "node",
   "compilerOptions": {
+     "lib": ["deno.desktop", "deno.unstable", "deno.ns"],
     "types": ["npm:@types/node@^22.10.0"]
+  },
+  "lint": {
+    "exclude": ["experiments"]
   },
   "tasks": {
     "dev": "deno run --watch -A main.ts",
@@ -14,6 +18,7 @@
     "build:desktop": "../build-desktop.sh",
     "db:generate": "deno run -A npm:drizzle-kit@^0.30.0 generate",
     "db:push": "deno run -A npm:drizzle-kit@^0.30.0 push",
+    "check": "deno check main.ts plugins/*/index.ts",
     "test": "deno test -A"
   },
   "imports": {

@@ -2,12 +2,7 @@ import { join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
-import type {
-  BeeContext,
-  BeePlugin,
-  ExecutionTestCase,
-  SelectionTestCase,
-} from "./bee-plugin.ts";
+import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
@@ -19,8 +14,6 @@ import {
 } from "./external-plugins/external-plugin-manager.ts";
 import {
   validatePlugin as validatePluginQuality,
-  validateSelectionTests as validateSelectionTestsQuality,
-  validateExecutionTests as validateExecutionTestsQuality,
   type TestSuiteQualityReport,
 } from "./plugin-quality-validator.ts";
 
@@ -151,19 +144,6 @@ export class HiveMicrokernel {
     }
   }
 
-  validateExecutionTests<S extends z.ZodType = z.ZodType>(
-    schema: S,
-    tests: ExecutionTestCase<S>[] = [],
-  ): TestSuiteQualityReport {
-    return validateExecutionTestsQuality(schema, tests);
-  }
-
-  validateSelectionTests(
-    tests: SelectionTestCase[] = [],
-  ): TestSuiteQualityReport {
-    return validateSelectionTestsQuality(tests);
-  }
-
   async unregister(name: string): Promise<void> {
     const plugin = this.plugins.get(name);
 
@@ -224,7 +204,7 @@ export class HiveMicrokernel {
   }
 
   getRegisteredPlugins(): BeePlugin[] {
-    return Array.from(this.plugins.values()).map((bp) => bp);
+    return Array.from(this.plugins.values());
   }
 
   getPlugin(name: string) {
@@ -237,10 +217,6 @@ export class HiveMicrokernel {
     const plugins = Array.from(this.activePlugins)
       .map((name) => this.plugins.get(name))
       .filter((plugin): plugin is BeePlugin => plugin != null);
-
-    console.log(
-      `Bees offered to the Selector: [${plugins.map((p) => p.name).join(", ")}]`,
-    );
 
     return plugins.map((plugin) => this.transformToTool(plugin));
   }

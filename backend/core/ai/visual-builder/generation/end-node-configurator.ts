@@ -7,21 +7,14 @@ import {
   LangGraphAbstraction,
 } from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
+import { stateKeySchema } from "./shared.ts";
 
 export function buildEndNodeConfigSchema(availableStateKeys: string[] = []) {
-  const validKeys = availableStateKeys.filter((k) => k && k.trim().length > 0);
-  const contentKeySchema =
-    validKeys.length > 0
-      ? z
-          .enum(validKeys as [string, ...string[]])
-          .describe(
-            `The exact state variable that holds the primary deliverable. Must be exactly one of: [${validKeys.join(", ")}]`,
-          )
-      : z
-          .string()
-          .describe(
-            "The exact state memory variable that holds the primary deliverable (e.g. 'generate_summary_output', 'analysis_result', etc.)",
-          );
+  const contentKeySchema = stateKeySchema(
+    availableStateKeys,
+    "The exact state variable that holds the primary deliverable. Must be exactly one of:",
+    "The exact state memory variable that holds the primary deliverable (e.g. 'generate_summary_output', 'analysis_result', etc.)",
+  );
 
   return z.object({
     thought: z

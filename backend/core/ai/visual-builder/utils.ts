@@ -210,7 +210,11 @@ export function evaluateCondition(
     case "not_in":
       return Array.isArray(targetValue) && !targetValue.includes(fieldValue);
     case "regex_match":
-      return new RegExp(targetValue as string).test(fieldValue as string);
+      try {
+        return new RegExp(targetValue as string).test(fieldValue as string);
+      } catch {
+        return false;
+      }
     default:
       return false;
   }

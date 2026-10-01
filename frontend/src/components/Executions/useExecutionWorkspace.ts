@@ -42,6 +42,18 @@ export function useExecutionWorkspace({
   const executionResult = useKeyedState<ExecutionResultData | null>(key, null);
   const activeToolName = useKeyedState<string | null>(key, null);
 
+  const moveAllKeys = (from: string, to: string) =>
+    [
+      isThinking,
+      isRunning,
+      graph,
+      activeNodeId,
+      planningThought,
+      logs,
+      executionResult,
+      activeToolName,
+    ].forEach((state) => state.moveKey(from, to));
+
   useEffect(() => {
     if (!activeExecutionId) return;
 
@@ -66,7 +78,13 @@ export function useExecutionWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExecutionId, key]);
 
+  const generateAbortRef = useRef<AbortController | null>(null);
+
+  const handleStop = () => generateAbortRef.current?.abort();
+
   const handleGenerate = async (userPrompt: string) => {
+    const controller = new AbortController();
+    generateAbortRef.current = controller;
     let currentKey = key;
     isThinking.set(true, currentKey);
     planningThought.set(null, currentKey);
@@ -89,13 +107,7 @@ export function useExecutionWorkspace({
             const newId = String(id);
             justCreatedIdRef.current = newId;
 
-            isThinking.moveKey(currentKey, newId);
-            isRunning.moveKey(currentKey, newId);
-            graph.moveKey(currentKey, newId);
-            activeNodeId.moveKey(currentKey, newId);
-            logs.moveKey(currentKey, newId);
-            executionResult.moveKey(currentKey, newId);
-            activeToolName.moveKey(currentKey, newId);
+            moveAllKeys(currentKey, newId);
 
             currentKey = newId;
             onExecutionCreated(newId);
@@ -149,12 +161,17 @@ export function useExecutionWorkspace({
             isThinking.set(false, currentKey);
           },
         },
+        controller.signal,
       );
     } catch (e: any) {
-      // The API client already toasts errors if we don't silence them.
       planningThought.set(null, currentKey);
-      logs.set((prev) => [...prev, `❌ Streaming error: ${e.message}`], currentKey);
+      if (controller.signal.aborted) {
+        logs.set((prev) => [...prev, "⏹ Generation stopped."], currentKey);
+      } else {
+        logs.set((prev) => [...prev, `❌ Streaming error: ${e.message}`], currentKey);
+      }
     } finally {
+      if (generateAbortRef.current === controller) generateAbortRef.current = null;
       isThinking.set(false, currentKey);
       planningThought.set(null, currentKey);
     }
@@ -229,6 +246,7 @@ export function useExecutionWorkspace({
     activeToolName: activeToolName.value,
     setExecutionResult: executionResult.set,
     handleGenerate,
+    handleStop,
     handleRun,
   };
 }

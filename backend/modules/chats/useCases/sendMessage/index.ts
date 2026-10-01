@@ -1,3 +1,4 @@
+import { createSseResponse } from "../../../../core/api/sse.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 import { type HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import {
@@ -150,119 +151,96 @@ export async function sendMessage(
   req: Request,
   headers: Record<string, string>,
 ): Promise<Response> {
-  const streamHeaders = {
-    ...headers,
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache",
-    connection: "keep-alive",
-  };
+  return createSseResponse(headers, async (send) => {
+    if (!userText.trim()) {
+      send("error", { message: "The message cannot be empty." });
+      return;
+    }
+    if (userText.length > MAX_MESSAGE_LENGTH) {
+      send("error", {
+        message: `The message is too long (${userText.length} characters, max ${MAX_MESSAGE_LENGTH}).`,
+      });
+      return;
+    }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+    const chatRepo = new ChatRepository(db);
 
-      try {
-        const chatRepo = new ChatRepository(db);
-
-        // Resolve or create chat
-        let resolvedChatId: number;
-        if (chatId !== null) {
-          const existing = await chatRepo.findById(chatId);
-          if (!existing) {
-            send("error", { message: `Chat ${chatId} not found.` });
-            controller.close();
-            return;
-          }
-          resolvedChatId = chatId;
-        } else {
-          const generatedTitle =
-            userText.length > 50 ? userText.slice(0, 47) + "..." : userText;
-          resolvedChatId = await chatRepo.create({
-            title: generatedTitle,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            messageCount: 0,
-          });
-          send("chat_created", { chatId: resolvedChatId.toString() });
-        }
-
-        if (userText.length > MAX_MESSAGE_LENGTH) {
-          send("error", {
-            message: `The message is too long (${userText.length} characters, max ${MAX_MESSAGE_LENGTH}).`,
-          });
-          return;
-        }
-
-        console.log(
-          `/chat received. Active bees right now: [${hive
-            .getRegisteredPlugins()
-            .filter((p: BeePlugin) => hive.isActive(p.name))
-            .map((p: BeePlugin) => p.name)
-            .join(", ")}]`,
-        );
-
-        await persistUserMessage(db, resolvedChatId, userText);
-
-        send("thinking", {});
-
-        const modelOptions = await resolveModelOptions(
-          hive.getConfig().get("currentMode"),
-        );
-
-        const msgRepo = new MessageRepository(db);
-        const contextMessages = await msgRepo.buildTurnContext(
-          resolvedChatId,
-          userText,
-        );
-
-        const streamIterable = await Scout.stream(
-          { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
-          { streamMode: ["messages", "values"], signal: req.signal },
-        );
-
-        const { fullContent, steps, thinkingRuns } = await consumeStream(
-          streamIterable,
-          "Agent",
-          send,
-        );
-
-        const usedTools = Array.from(
-          new Set(
-            steps
-              .filter((step) => step.node === "Executor")
-              .map((step) => step.label),
-          ),
-        );
-
-        await persistAssistantMessage(
-          db,
-          resolvedChatId,
-          fullContent,
-          usedTools,
-          steps,
-          thinkingRuns,
-        );
-
-        send("done", {
-          content: fullContent,
-          usedTools,
-          steps,
-          thinkingRuns,
-        });
-        controller.close();
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        send("error", { message: detail });
-      } finally {
-        controller.close();
+    // Resolve or create chat
+    let resolvedChatId: number;
+    if (chatId !== null) {
+      const existing = await chatRepo.findById(chatId);
+      if (!existing) {
+        send("error", { message: `Chat ${chatId} not found.` });
+        return;
       }
-    },
-  });
+      resolvedChatId = chatId;
+    } else {
+      const generatedTitle =
+        userText.length > 50 ? userText.slice(0, 47) + "..." : userText;
+      resolvedChatId = await chatRepo.create({
+        title: generatedTitle,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messageCount: 0,
+      });
+      send("chat_created", { chatId: resolvedChatId.toString() });
+    }
 
-  return new Response(stream, { headers: streamHeaders });
+    console.log(
+      `/chat received. Active bees right now: [${hive
+        .getRegisteredPlugins()
+        .filter((p: BeePlugin) => hive.isActive(p.name))
+        .map((p: BeePlugin) => p.name)
+        .join(", ")}]`,
+    );
+
+    await persistUserMessage(db, resolvedChatId, userText);
+
+    send("thinking", {});
+
+    const modelOptions = await resolveModelOptions(
+      hive.getConfig().get("currentMode"),
+    );
+
+    const msgRepo = new MessageRepository(db);
+    const contextMessages = await msgRepo.buildTurnContext(
+      resolvedChatId,
+      userText,
+    );
+
+    const streamIterable = await Scout.stream(
+      { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
+      { streamMode: ["messages", "values"], signal: req.signal },
+    );
+
+    const { fullContent, steps, thinkingRuns } = await consumeStream(
+      streamIterable,
+      "Agent",
+      send,
+    );
+
+    const usedTools = Array.from(
+      new Set(
+        steps
+          .filter((step) => step.node === "Executor")
+          .map((step) => step.label),
+      ),
+    );
+
+    await persistAssistantMessage(
+      db,
+      resolvedChatId,
+      fullContent,
+      usedTools,
+      steps,
+      thinkingRuns,
+    );
+
+    send("done", {
+      content: fullContent,
+      usedTools,
+      steps,
+      thinkingRuns,
+    });
+  });
 }

@@ -49,12 +49,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   async function handleImportPlugin(files: FileList) {
     setIsImporting(true);
     try {
-      const { data, success, errors } = await importPlugin(files);
-      console.log("[PluginsManager] importPlugin response:", {
-        success,
-        data,
-        errors,
-      });
+      const { data, success } = await importPlugin(files);
       if (success && data) {
         await refreshPlugins();
         toastManager.add({
@@ -70,8 +65,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   }
 
   async function handleRemovePlugin(plugin: Plugin) {
-    const { success, errors } = await removePlugin(plugin.name);
-    console.log("[PluginsManager] removePlugin response:", { success, errors });
+    const { success } = await removePlugin(plugin.name);
     if (success) {
       await refreshPlugins();
       toastManager.add({ type: "success", title: `'${plugin.name}' removed.` });
@@ -79,12 +73,7 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
   }
 
   async function handleEditPlugin(plugin: Plugin) {
-    const { success, data, errors } = await editPlugin(plugin.name);
-    console.log("[PluginsManager] editPlugin response:", {
-      success,
-      data,
-      errors,
-    });
+    const { success } = await editPlugin(plugin.name);
     if (success) {
       await refreshPlugins();
       setIsModalOpen(false);
@@ -107,7 +96,6 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         pluginsToChange.map((p) => setPluginActive(p.name, nextActive)),
       );
     } catch {
-      getPlugins().then(({ data }) => setPlugins(data ?? []));
       getPlugins().then(({ data }) => setPlugins(data ?? []));
     }
   }

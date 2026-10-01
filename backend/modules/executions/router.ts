@@ -1,3 +1,4 @@
+import { parseId } from "../../core/api/errors.ts";
 import { Hono } from "hono";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
@@ -45,27 +46,27 @@ executionsRouter.get("/", async (c) => {
 executionsRouter.get("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return getExecution(db, parseInt(c.req.param("id")), headers);
+  return getExecution(db, parseId(c.req.param("id")), headers);
 });
 
 executionsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return deleteExecution(db, parseInt(c.req.param("id")), headers);
+  return deleteExecution(db, parseId(c.req.param("id")), headers);
 });
 
 executionsRouter.patch("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
-  return updateExecution(db, parseInt(c.req.param("id")), body, headers);
+  return updateExecution(db, parseId(c.req.param("id")), body, headers);
 });
 
 executionsRouter.put("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
-  return updateExecution(db, parseInt(c.req.param("id")), body, headers);
+  return updateExecution(db, parseId(c.req.param("id")), body, headers);
 });
 
 executionsRouter.put("/:id/graph", async (c) => {
@@ -74,7 +75,7 @@ executionsRouter.put("/:id/graph", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   return updateExecutionGraph(
     db,
-    parseInt(c.req.param("id")),
+    parseId(c.req.param("id")),
     body.graph,
     body.stateSchema,
     headers,
@@ -89,8 +90,9 @@ executionsRouter.post("/:id/run", async (c) => {
   return runExecution(
     db,
     hive,
-    parseInt(c.req.param("id")),
+    parseId(c.req.param("id")),
     body.input,
     headers,
+    body.autoApprove !== false,
   );
 });

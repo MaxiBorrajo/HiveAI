@@ -18,7 +18,7 @@ import {
   exportDraft,
   type DraftFile,
   type DraftValidationResult,
-} from "@/lib/get-drafts";
+} from "@/lib/drafts";
 
 const ZOD_TYPES_STUB = `
 declare module "zod" {

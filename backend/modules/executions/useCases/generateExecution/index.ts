@@ -1,10 +1,94 @@
+import { createSseResponse } from "../../../../core/api/sse.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../../infrastructure/db/repositories/ExecutionRepository.ts";
 import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import { generateIncrementalGraph } from "../../../../core/ai/visual-builder/generator.ts";
-import type { LangGraphAbstraction } from "../../../../core/ai/visual-builder/types.ts";
-import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
-import type { z } from "zod";
+import type {
+  IncrementalEvent,
+  LangGraphAbstraction,
+} from "../../../../core/ai/visual-builder/types.ts";
+import { parseMaybeJson } from "../../parseMaybeJson.ts";
+import { describeActivePlugins } from "./describePlugins.ts";
+
+const LOG = "[Executions Generator]";
+const MAX_NAME_LENGTH = 50;
+const MAX_PROMPT_LOG_LENGTH = 100;
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+async function loadCurrentGraph(
+  repo: ExecutionRepository,
+  executionId: number,
+): Promise<LangGraphAbstraction | undefined> {
+  const execution = await repo.findById(executionId);
+  if (!execution?.lastGraphId) return undefined;
+
+  const record = await repo.findGraphById(execution.lastGraphId);
+  if (!record) return undefined;
+
+  const graph = parseMaybeJson(record.graph) as LangGraphAbstraction;
+  console.log(
+    `${LOG} Loaded graph #${record.id} of execution #${executionId}: ${
+      graph.nodes?.length ?? 0
+    } nodes, ${graph.edges?.length ?? 0} edges.`,
+  );
+  return graph;
+}
+
+async function resolveExecutionId(
+  repo: ExecutionRepository,
+  executionId: number | undefined,
+  prompt: string,
+): Promise<number> {
+  if (executionId) return executionId;
+
+  const created = await repo.create({
+    name: prompt.substring(0, MAX_NAME_LENGTH) +
+      (prompt.length > MAX_NAME_LENGTH ? "..." : ""),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  console.log(`${LOG} Created execution #${created.id}: "${created.name}"`);
+  return created.id;
+}
+
+function logStreamEvent(event: IncrementalEvent): void {
+  switch (event.type) {
+    case "planning":
+      console.log(`${LOG} [planning] "${event.thoughts}"`);
+      break;
+    case "node_added":
+      console.log(
+        `${LOG} [node_added] "${event.node.name}" (${event.node.id}, ${event.node.type})${
+          event.edge ? ` <- "${event.edge.source}"` : ""
+        }`,
+      );
+      break;
+    case "edge_added":
+      console.log(
+        `${LOG} [edge_added] "${event.edge.id}": "${event.edge.source}" -> "${event.edge.target}"`,
+      );
+      break;
+  }
+}
+
+async function saveGeneratedGraph(
+  repo: ExecutionRepository,
+  executionId: number,
+  graph: LangGraphAbstraction,
+) {
+  const saved = await repo.createGraph({
+    executionId,
+    graph,
+    state: graph.stateSchema,
+    createdAt: Date.now(),
+  });
+  await repo.update(executionId, { lastGraphId: saved.id });
+  console.log(`${LOG} Saved graph #${saved.id} for execution #${executionId}.`);
+  return saved;
+}
 
 export async function generateExecution(
   db: AppDatabase,
@@ -15,196 +99,48 @@ export async function generateExecution(
   targetNodeId: string | undefined,
   headers: Record<string, string>,
 ): Promise<Response> {
-  const streamHeaders = {
-    ...headers,
-    "content-type": "text/event-stream",
-    "cache-control": "no-cache",
-    connection: "keep-alive",
-  };
+  return createSseResponse(headers, async (send) => {
+    if (!content) {
+      send("error", { message: "Missing 'content' in request body." });
+      return;
+    }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
-      };
+    console.log(
+      `${LOG} Model: "${model}" | Execution: ${executionId ?? "new"} | Target node: ${
+        targetNodeId ?? "none"
+      } | Prompt: "${truncate(content, MAX_PROMPT_LOG_LENGTH)}"`,
+    );
 
-      try {
-        if (!content) {
-          send("error", { message: "Missing 'content' in request body." });
-          controller.close();
-          return;
-        }
+    const repo = new ExecutionRepository(db);
+    const currentGraph = executionId
+      ? await loadCurrentGraph(repo, executionId)
+      : undefined;
+    const targetExecutionId = await resolveExecutionId(repo, executionId, content);
 
-        console.log(
-          `/executions/generate received. Active bees right now: [${hive
-            .getRegisteredPlugins()
-            .filter((p: BeePlugin) => hive.isActive(p.name))
-            .map((p: BeePlugin) => p.name)
-            .join(", ")}]`,
-        );
-        console.log(
-          `[Executions Generator] Model: "${model}" | Execution ID: ${executionId ?? "new"} | Target Node: ${targetNodeId ?? "none"}`,
-        );
-        console.log(
-          `[Executions Generator] Prompt: "${content.length > 100 ? content.slice(0, 97) + "..." : content}"`,
-        );
+    send("execution_created", { executionId: targetExecutionId });
 
-        const availablePlugins = hive.getTools().map((t) => {
-          const plugin = hive.getPlugin(t.name);
-          let parametersDescription = "";
-          const parameterKeys: string[] = [];
-          const requiredKeys: string[] = [];
-          let parameterSchema: Record<string, z.ZodTypeAny> | undefined;
-          if (plugin && (plugin.schema as any)?.shape) {
-            const shape = (plugin.schema as any).shape;
-            parameterSchema = shape;
-            parametersDescription = Object.entries(shape)
-              .map(([k, v]: [string, any]) => {
-                parameterKeys.push(k);
-                const isOpt = v.safeParse?.(undefined)?.success ?? false;
-                if (!isOpt) requiredKeys.push(k);
-                return `${k} (${isOpt ? "optional" : "REQUIRED"}${v.description ? `: ${v.description}` : ""})`;
-              })
-              .join("; ");
-          }
-          return {
-            name: t.name,
-            description: t.description,
-            parametersDescription,
-            parameterKeys,
-            requiredKeys,
-            parameterSchema,
-            returnDescription: (plugin as any)?.returnDescription as string | undefined,
-          };
-        });
+    const generator = generateIncrementalGraph(
+      content,
+      model,
+      describeActivePlugins(hive),
+      currentGraph,
+      targetNodeId,
+    );
 
-        const repo = new ExecutionRepository(db);
-        let currentGraph: LangGraphAbstraction | undefined = undefined;
-        let targetExecutionId = executionId;
+    let result = await generator.next();
+    while (!result.done) {
+      logStreamEvent(result.value);
+      send(result.value.type, result.value);
+      result = await generator.next();
+    }
+    const finalGraph: LangGraphAbstraction | null = result.value ?? null;
+    if (!finalGraph) return;
 
-        if (executionId) {
-          console.log(
-            `[Executions Generator] Looking up existing execution ID: ${executionId}`,
-          );
-          const existing = await repo.findById(executionId);
-          if (existing && existing.lastGraphId) {
-            console.log(
-              `[Executions Generator] Found existing execution #${executionId} with lastGraphId: ${existing.lastGraphId}`,
-            );
-            const dbGraph = await repo.findGraphById(existing.lastGraphId);
-            if (dbGraph) {
-              let parsedGraph = dbGraph.graph;
-              if (typeof parsedGraph === "string") {
-                try {
-                  parsedGraph = JSON.parse(parsedGraph);
-                } catch (e) {}
-              }
-              currentGraph = parsedGraph as LangGraphAbstraction;
-              console.log(
-                `[Executions Generator] Loaded existing graph with ${currentGraph.nodes?.length ?? 0} nodes and ${currentGraph.edges?.length ?? 0} edges.`,
-              );
-            }
-          }
-        }
-
-        if (!targetExecutionId) {
-          const newExecution = await repo.create({
-            name: content.substring(0, 50) + (content.length > 50 ? "..." : ""),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          });
-          targetExecutionId = newExecution.id;
-          console.log(
-            `[Executions Generator] Created new execution record #${targetExecutionId}: "${newExecution.name}"`,
-          );
-        }
-
-        send("execution_created", { executionId: targetExecutionId });
-
-        console.log(
-          `[Executions Generator] Initializing incremental graph generation stream...`,
-        );
-
-        const generator = generateIncrementalGraph(
-          content,
-          model,
-          availablePlugins,
-          currentGraph,
-          targetNodeId,
-        );
-
-        let finalGraph: LangGraphAbstraction | null = null;
-
-        while (true) {
-          const result = await generator.next();
-          if (result.done) {
-            finalGraph = result.value as LangGraphAbstraction;
-            console.log(
-              `[Executions Generator] Incremental generation completed. Final graph contains ${finalGraph?.nodes?.length ?? 0} nodes and ${finalGraph?.edges?.length ?? 0} edges.`,
-            );
-            break;
-          }
-
-          const event = result.value as any;
-          if (event.type === "planning") {
-            console.log(
-              `[Executions Generator] [Stream event: planning] Thought: "${event.thoughts}"`,
-            );
-          } else if (event.type === "node_added") {
-            console.log(
-              `[Executions Generator] [Stream event: node_added] Node: "${event.node.name}" (${event.node.id}, type: ${event.node.type})${event.edge ? ` <- connected from "${event.edge.source}"` : ""}`,
-            );
-          } else if (event.type === "edge_added") {
-            console.log(
-              `[Executions Generator] [Stream event: edge_added] Edge: "${event.edge.id}" from "${event.edge.source}" to "${event.edge.target}"`,
-            );
-          } else if (event.type === "edge_added") {
-            console.log(
-              `[Executions Generator] [Stream event: edge_added] Edge: from "${event.edge.source}" to "${event.edge.target}"`,
-            );
-          }
-
-          send(event.type, event);
-        }
-
-        if (finalGraph) {
-          console.log(
-            `[Executions Generator] Persisting new graph for execution #${targetExecutionId}...`,
-          );
-          const newGraph = await repo.createGraph({
-            executionId: targetExecutionId,
-            graph: finalGraph,
-            state: finalGraph.stateSchema,
-            createdAt: Date.now(),
-          });
-
-          await repo.update(targetExecutionId!, { lastGraphId: newGraph.id });
-          console.log(
-            `[Executions Generator] Successfully saved graph #${newGraph.id} for execution #${targetExecutionId}. Emitting 'done' event.`,
-          );
-
-          send("done", {
-            executionId: targetExecutionId,
-            graphId: newGraph.id,
-            graph: finalGraph,
-          });
-        }
-
-        controller.close();
-      } catch (error) {
-        console.error(
-          "[Executions Generator] Error in streaming generation:",
-          error,
-        );
-        const detail = error instanceof Error ? error.message : String(error);
-        send("error", { message: detail });
-        controller.close();
-      }
-    },
+    const saved = await saveGeneratedGraph(repo, targetExecutionId, finalGraph);
+    send("done", {
+      executionId: targetExecutionId,
+      graphId: saved.id,
+      graph: finalGraph,
+    });
   });
-
-  return new Response(stream, { headers: streamHeaders });
 }

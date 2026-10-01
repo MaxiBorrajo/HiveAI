@@ -17,6 +17,7 @@ import {
 import type { Plugin } from "@/types/plugin";
 import { DraftListView } from "./DraftListView";
 import { exportPlugin } from "@/lib/plugins/exportPlugin";
+import { reportSuccess } from "@/lib/toastManager";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,13 +57,8 @@ export function PluginListView({
   async function handleExport(plugin: Plugin) {
     try {
       const { data } = await exportPlugin(plugin.name);
-      if (data?.path) {
-        alert(`Plugin exported to:\n${data.path}`);
-      }
-    } catch (err) {
-      alert(
-        `Failed to export plugin: ${err instanceof Error ? err.message : err}`,
-      );
+      if (data?.path) reportSuccess("Plugin exported", data.path);
+    } catch {
     }
   }
 

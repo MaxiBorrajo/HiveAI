@@ -6,6 +6,5 @@ export async function getExecution(
   id: string,
 ): Promise<ResponseEntity<ExecutionDetails>> {
   const response = await apiClient.get(`/api/executions/${id}`);
-  console.log(response.data);
   return response.data;
 }

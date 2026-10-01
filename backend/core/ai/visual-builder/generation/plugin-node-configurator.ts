@@ -5,10 +5,12 @@ import {
   GraphNode,
   LangGraphAbstraction,
   PluginConfigCandidate,
+  PluginInfo,
   PluginNodeConfiguratorContext,
 } from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
-import { normalizePluginName, PluginInfo } from "./topology-compiler.ts";
+import { resolveOutputKey } from "./shared.ts";
+import { normalizePluginName } from "./topology-compiler.ts";
 import {
   statePropertyDefinitionSchema,
   edgeConditionSchema,
@@ -26,7 +28,7 @@ function buildPluginParameterFieldSchemas(
   if (!pluginDef?.parameterSchema) return undefined;
   const fieldSchemas: Record<string, z.ZodTypeAny> = {};
   for (const [key, fieldSchema] of Object.entries(pluginDef.parameterSchema)) {
-    fieldSchemas[key] = z.union([fieldSchema, templateRefSchema]);
+    fieldSchemas[key] = z.union([fieldSchema as z.ZodTypeAny, templateRefSchema]);
   }
   return fieldSchemas;
 }
@@ -173,32 +175,14 @@ function resolveEffectivePluginId(
   availablePlugins: PluginInfo[],
   pluginNames: Set<string>,
 ): string {
-  let effectivePluginId = fallbackPluginId;
-  if (config.pluginId) {
-    const normalized = normalizePluginName(config.pluginId, availablePlugins);
-    if (normalized && pluginNames.has(normalized)) {
-      effectivePluginId = normalized;
-    }
-  }
-  if (!effectivePluginId || !pluginNames.has(effectivePluginId)) {
-    effectivePluginId = availablePlugins[0]?.name || "tool";
-  }
-  return effectivePluginId;
+  const normalized = config.pluginId
+    ? normalizePluginName(config.pluginId, availablePlugins)
+    : undefined;
+  if (normalized && pluginNames.has(normalized)) return normalized;
+  if (fallbackPluginId && pluginNames.has(fallbackPluginId)) return fallbackPluginId;
+  return availablePlugins[0]?.name || "tool";
 }
 
-
-function resolveOutputKey(
-  config: PluginConfigCandidate,
-  node: GraphNode,
-  intermediateNodes: GraphNode[],
-): string {
-  const outKey = config.outputKey || `${node.id}_data`;
-  const isLastIntermediate =
-    intermediateNodes[intermediateNodes.length - 1]?.id === node.id;
-  return outKey === "result" && !isLastIntermediate
-    ? `${node.id}_data`
-    : outKey;
-}
 
 function validatePluginInputMapping(
   pluginDef: PluginInfo | undefined,
@@ -269,7 +253,7 @@ function finalizePluginConfig(
   usedFallback: boolean,
 ): { usedFallback: boolean } {
   const { graph, intermediateNodes } = ctx;
-  const outKey = resolveOutputKey(config, node, intermediateNodes);
+  const outKey = resolveOutputKey(node, config.outputKey, "_data", intermediateNodes);
 
   node.config = {
     pluginId: effectivePluginId,

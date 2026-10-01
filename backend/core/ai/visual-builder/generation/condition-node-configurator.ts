@@ -1,3 +1,5 @@
+import { stateKeySchema } from "./shared.ts";
+import { CONDITION_OPERATORS } from "../condition-operators.ts";
 import { ChatOllama } from "@langchain/ollama";
 import { AIMessage, BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
@@ -51,19 +53,11 @@ function validateConditionCandidate(
 }
 
 export function buildConditionNodeSchema(availableStateKeys: string[]) {
-  const validKeys = availableStateKeys.filter((k) => k && k.trim().length > 0);
-  const fieldSchema =
-    validKeys.length > 0
-      ? z
-          .enum(validKeys as [string, ...string[]])
-          .describe(
-            `The state memory variable to check. Must be one of: [${validKeys.join(", ")}]`,
-          )
-      : z
-          .string()
-          .describe(
-            "The exact state memory variable to check (e.g. 'is_valid', 'is_approved', 'is_anomaly')",
-          );
+  const fieldSchema = stateKeySchema(
+    availableStateKeys,
+    "The state memory variable to check. Must be one of:",
+    "The exact state memory variable to check (e.g. 'is_valid', 'is_approved', 'is_anomaly')",
+  );
 
   return z.object({
     nodeId: z
@@ -75,24 +69,7 @@ export function buildConditionNodeSchema(availableStateKeys: string[]) {
     condition: z
       .object({
         field: fieldSchema,
-        operator: z
-          .enum([
-            "equals",
-            "not_equals",
-            "greater_than",
-            "greater_than_or_equals",
-            "less_than",
-            "less_than_or_equals",
-            "contains",
-            "not_contains",
-            "starts_with",
-            "ends_with",
-            "is_empty",
-            "is_not_empty",
-            "in",
-            "not_in",
-            "regex_match",
-          ])
+        operator: z.enum(CONDITION_OPERATORS)
           .describe("Comparison operator"),
         value: z
           .any()

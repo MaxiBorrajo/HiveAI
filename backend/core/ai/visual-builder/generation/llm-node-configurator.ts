@@ -9,9 +9,11 @@ import {
   LlmConfig,
   LlmConfigCandidate,
   LlmNodeConfiguratorContext,
+  PluginInfo,
 } from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
-import { normalizePluginName, PluginInfo } from "./topology-compiler.ts";
+import { resolveOutputKey, stateKeySchema } from "./shared.ts";
+import { normalizePluginName } from "./topology-compiler.ts";
 import {
   statePropertyDefinitionSchema,
   edgeConditionSchema,
@@ -22,15 +24,11 @@ export function buildLlmConfigSchema(
   availableStateKeys: string[] = [],
 ) {
   const pluginNames = availablePlugins.map((p) => p.name);
-  const validKeys = availableStateKeys.filter((k) => k && k.trim().length > 0);
-  const stateKeySchema =
-    validKeys.length > 0
-      ? z
-          .enum(validKeys as [string, ...string[]])
-          .describe(
-            `Must be exactly one of the existing state variables: [${validKeys.join(", ")}]`,
-          )
-      : z.string().describe("Exact name of an existing state variable");
+  const stateKeyField = stateKeySchema(
+    availableStateKeys,
+    "Must be exactly one of the existing state variables:",
+    "Exact name of an existing state variable",
+  );
 
   return z.object({
     nodeId: z
@@ -58,7 +56,7 @@ export function buildLlmConfigSchema(
         "Descriptive memory key for this node's output (e.g. 'summary_report', 'analysis', 'extracted_data', 'quality_score'). Avoid 'result' unless this is the final deliverable node!",
       ),
     inputMapping: z
-      .record(z.string(), stateKeySchema)
+      .record(z.string(), stateKeyField)
       .optional()
       .describe(
         "Maps a descriptive label (shown to this node as its context header) to the BARE NAME (no '${}') of an existing state variable this node needs to read, e.g. { articles_to_compare: 'search_results' }. This REPLACES the full state dump at runtime — only what you declare here will be visible to this node.",
@@ -136,20 +134,6 @@ function buildLlmNodeSystemPrompt(
     4. Populate "inputMapping" with EVERY state variable this node's mission actually needs to read (using the exact state variable names listed above, or a Predecessor's outputKey shown above) — this determines EXACTLY what data this node sees at runtime; a variable NOT listed here will be invisible to it. Do not list variables it doesn't need; do not omit ones it does.
     5. CRITICAL: In "systemPrompt", when you refer to data from "inputMapping", use ONLY the exact LABEL (the key you chose in inputMapping, e.g. if inputMapping is { "news_urls": "search_news_output" }, refer to it in systemPrompt as "news_urls" — NEVER as "search_news_output"). At runtime this node only sees its context blocks under the label names, not the underlying state variable names — mentioning the wrong name will make this node unable to find its own data.`;
 }
-
-function resolveInitialOutputKey(
-  config: LlmConfigCandidate,
-  node: GraphNode,
-  intermediateNodes: GraphNode[],
-): string {
-  const outKey = config.outputKey || `${node.id}_output`;
-  const isLastIntermediate =
-    intermediateNodes[intermediateNodes.length - 1]?.id === node.id;
-  return outKey === "result" && !isLastIntermediate
-    ? `${node.id}_output`
-    : outKey;
-}
-
 
 function inferOutputFieldType(
   outKey: string,
@@ -268,7 +252,7 @@ function applyLlmConfigCandidate(
   const { modelName, availablePlugins, pluginNames, graph, intermediateNodes } =
     ctx;
 
-  let outKey = resolveInitialOutputKey(config, node, intermediateNodes);
+  let outKey = resolveOutputKey(node, config.outputKey, "_output", intermediateNodes);
   const fieldType = inferOutputFieldType(outKey, config);
   const isNumeric = fieldType === "number";
   const isBooleanField = fieldType === "boolean";

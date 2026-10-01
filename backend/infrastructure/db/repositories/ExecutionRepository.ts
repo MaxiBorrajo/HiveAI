@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { count, eq, desc } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
 import {
   executions,
@@ -68,11 +68,11 @@ export class ExecutionRepository {
   }
 
   async countHistories(executionId: number): Promise<number> {
-    const records = await this.db
-      .select()
+    const [row] = await this.db
+      .select({ total: count() })
       .from(executionHistory)
       .where(eq(executionHistory.executionId, executionId));
-    return records.length;
+    return row?.total ?? 0;
   }
 
   async findHistoryById(id: number): Promise<ExecutionHistory | undefined> {

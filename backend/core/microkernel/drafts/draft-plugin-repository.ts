@@ -1,3 +1,5 @@
+import { JsonManifestStore } from "../json-manifest-store.ts";
+
 export interface DraftPluginRecord {
   name: string;
   dir: string;
@@ -12,60 +14,30 @@ export interface DraftPluginRepository {
   remove(name: string): Promise<boolean>;
 }
 
-interface ManifestFile {
-  drafts: DraftPluginRecord[];
-}
-
 export class JsonDraftPluginRepository implements DraftPluginRepository {
-  constructor(private readonly draftsDir: string) {}
+  private readonly store: JsonManifestStore<DraftPluginRecord>;
 
-  private get manifestPath(): string {
-    return `${this.draftsDir}/manifest.json`;
+  constructor(draftsDir: string) {
+    this.store = new JsonManifestStore(draftsDir, "drafts");
   }
 
-  private async readManifest(): Promise<ManifestFile> {
-    try {
-      const text = await Deno.readTextFile(this.manifestPath);
-      return JSON.parse(text);
-    } catch {
-      return { drafts: [] };
-    }
-  }
-
-  private async writeManifest(manifest: ManifestFile): Promise<void> {
-    await Deno.mkdir(this.draftsDir, { recursive: true });
-    await Deno.writeTextFile(
-      this.manifestPath,
-      JSON.stringify(manifest, null, 2),
-    );
-  }
-
-  async list(): Promise<DraftPluginRecord[]> {
-    return (await this.readManifest()).drafts;
+  list(): Promise<DraftPluginRecord[]> {
+    return this.store.read();
   }
 
   async get(name: string): Promise<DraftPluginRecord | undefined> {
-    const manifest = await this.readManifest();
-    return manifest.drafts.find((d) => d.name === name);
+    return (await this.store.read()).find((d) => d.name === name);
   }
 
-  async save(record: DraftPluginRecord): Promise<void> {
-    const manifest = await this.readManifest();
-    const withoutExisting = manifest.drafts.filter(
-      (d) => d.name !== record.name,
-    );
-    await this.writeManifest({ drafts: [...withoutExisting, record] });
+  save(record: DraftPluginRecord): Promise<void> {
+    return this.store.upsert(record);
   }
 
   async remove(name: string): Promise<boolean> {
-    const manifest = await this.readManifest();
-    const record = manifest.drafts.find((d) => d.name === name);
+    const record = await this.store.delete(name);
     if (!record) return false;
 
     await Deno.remove(record.dir, { recursive: true }).catch(() => {});
-    await this.writeManifest({
-      drafts: manifest.drafts.filter((d) => d.name !== name),
-    });
     return true;
   }
 }

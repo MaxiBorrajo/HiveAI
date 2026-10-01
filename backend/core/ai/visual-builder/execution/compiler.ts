@@ -9,9 +9,13 @@ import {
   StatePropertyDefinition,
   ConditionConfig,
 } from "../types.ts";
+import { START_NODE_ID, END_NODE_ID } from "../constants.ts";
 import { getReducerFunction, evaluateCondition, getFieldByPath } from "../utils.ts";
 import { executeLlmNode } from "./llm-executor.ts";
 import { evaluateConditionWithFallback } from "./condition-evaluator.ts";
+
+const toSource = (id: string) => (id === START_NODE_ID ? START : id);
+const toTarget = (id: string) => (id === END_NODE_ID ? END : id);
 
 export function buildStateSchema(
   definitions: Record<string, StatePropertyDefinition>,
@@ -173,25 +177,17 @@ function wireConditionalEdge(
       const trueEdge = edges.find((e) => e.path === "true");
       const falseEdge = edges.find((e) => e.path === "false");
 
-      if (isMatch && trueEdge) {
-        return trueEdge.target === "end" ? END : trueEdge.target;
-      }
-      if (!isMatch && falseEdge) {
-        return falseEdge.target === "end" ? END : falseEdge.target;
-      }
+      if (isMatch && trueEdge) return toTarget(trueEdge.target);
+      if (!isMatch && falseEdge) return toTarget(falseEdge.target);
 
       const fallback = trueEdge || falseEdge || edges[0];
-      return fallback
-        ? fallback.target === "end"
-          ? END
-          : fallback.target
-        : END;
+      return fallback ? toTarget(fallback.target) : END;
     }
 
     for (const edge of edges) {
       if (!edge.condition) continue;
 
-      const targetId = edge.target === "end" ? END : edge.target;
+      const targetId = toTarget(edge.target);
       const fieldValue = getFieldByPath(state, edge.condition.field);
       const match = evaluateCondition(
         fieldValue,
@@ -231,13 +227,13 @@ export function compileGraph(
     partitionEdges(abstraction);
 
   for (const edge of normalEdges) {
-    const sourceId = edge.source === "start" ? START : edge.source;
-    const targetId = edge.target === "end" ? END : edge.target;
+    const sourceId = toSource(edge.source);
+    const targetId = toTarget(edge.target);
     workflow.addEdge(sourceId as any, targetId as any);
   }
 
   for (const [source, edges] of Object.entries(conditionalEdgesBySource)) {
-    const sourceId = source === "start" ? START : source;
+    const sourceId = toSource(source);
     const condNode = conditionNodesMap.get(source);
 
     workflow.addConditionalEdges(

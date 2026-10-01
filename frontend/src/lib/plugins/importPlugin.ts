@@ -18,6 +18,5 @@ export async function importPlugin(
   }
 
   const response = await apiClient.post("/api/plugins/import", form);
-  console.log("[importPlugin] raw response:", response.status, response.data);
   return response.data;
 }

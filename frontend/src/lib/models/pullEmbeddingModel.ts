@@ -1,5 +1,4 @@
-import { apiClient } from "../apiClient";
-import { readSseStream } from "../sse";
+import { postSse } from "../sse";
 
 export interface PullProgress {
   status: string;
@@ -17,20 +16,7 @@ export interface PullEmbeddingModelHandlers {
 export async function pullEmbeddingModel(
   handlers: PullEmbeddingModelHandlers,
 ): Promise<void> {
-  const response = await apiClient.post(
-    "/api/models/embedding-model/pull",
-    undefined,
-    {
-      responseType: "stream",
-      adapter: "fetch",
-    },
-  );
-
-  if (!response.data) {
-    throw new Error("The backend responded with no body");
-  }
-
-  await readSseStream(response.data, (eventName, payload) => {
+  await postSse("/api/models/embedding-model/pull", undefined, (eventName, payload) => {
     if (eventName === "progress") {
       handlers.onProgress(payload);
     } else if (eventName === "done") {

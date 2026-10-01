@@ -1,5 +1,4 @@
-import { apiClient } from "../apiClient";
-import { readSseStream } from "../sse";
+import { postSse } from "../sse";
 import type { ChatStep } from "@/types/chat";
 
 export interface StreamHandlers {
@@ -17,22 +16,9 @@ export async function sendMessage(
   handlers: StreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await apiClient.post(
+  await postSse(
     "/api/chats",
     { chatId: chatId ?? undefined, message: content },
-    {
-      responseType: "stream",
-      adapter: "fetch",
-      signal,
-    },
-  );
-
-  if (!response.data) {
-    throw new Error(`The backend responded with no body`);
-  }
-
-  await readSseStream(
-    response.data,
     (eventName, payload) => {
       if (eventName === "chat_created") {
         handlers.onChatCreated(payload.chatId);

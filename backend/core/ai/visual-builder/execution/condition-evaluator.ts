@@ -2,13 +2,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { ConditionConfig } from "../types.ts";
 import { buildLlmInstance, coerceLlmBooleanReply } from "./llm-executor.ts";
 
-/**
- * Semantic fallback evaluator for condition nodes. Only meant to run when the
- * condition's field is missing from state: it asks a local LLM to decide
- * whether the condition holds based on the surrounding context, and writes
- * the evaluated value back into state under `cond.field` so downstream
- * routing (evaluateCondition in utils.ts) can proceed normally.
- */
+
 export async function evaluateConditionWithFallback(
   nodeId: string,
   nodeName: string,
@@ -16,7 +10,7 @@ export async function evaluateConditionWithFallback(
   state: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   try {
-    const modelName = (state.model as string) || "qwen3:8b";
+    const modelName = (state.model as string);
 
     // temperature: 0 to keep the true/false evaluation deterministic.
     const llm = buildLlmInstance(nodeId, {

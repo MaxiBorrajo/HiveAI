@@ -89,13 +89,13 @@ function buildAskUserTool(): NativeTool {
   );
 }
 
-export function buildNativeTools(chatId: number): NativeTool[] {
-  return [buildRecallTool(chatId), buildAskUserTool()];
+export function buildNativeTools(chatId: number | string): NativeTool[] {
+  return [buildRecallTool(Number(chatId)), buildAskUserTool()];
 }
 
 export function getNativeTool(
   name: string,
-  chatId: number,
+  chatId: number | string,
 ): NativeTool | undefined {
   return buildNativeTools(chatId).find((t) => t.name === name);
 }

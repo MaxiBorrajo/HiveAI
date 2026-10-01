@@ -7,7 +7,7 @@ import {
   createDraft,
   removeDraft,
   type Draft,
-} from "@/lib/get-drafts";
+} from "@/lib/drafts";
 
 interface DraftListViewProps {
   onOpenDraft: (name: string) => void;

@@ -38,6 +38,20 @@ function sanitizeFtsQuery(query: string): string {
   return `"${clean}"`;
 }
 
+function scoreMessages(
+  candidates: MessageRecord[],
+  queryVector: number[],
+  textMatches: Record<number, number>,
+) {
+  return candidates.map((msg) => {
+    const vec = JSON.parse(msg.vector) as number[];
+    const distance = 1 - cosineSimilarity(queryVector, vec);
+    const textScore = textMatches[msg.id] ?? 0;
+    const combinedScore = distance * 0.7 + textScore * 0.3;
+    return { msg, distance, combinedScore };
+  });
+}
+
 export class MessageRepository {
   constructor(private db: AppDatabase) {}
 
@@ -57,6 +71,23 @@ export class MessageRepository {
     return result.id;
   }
 
+  private ftsScores(text: string): Record<number, number> {
+    const scores: Record<number, number> = {};
+    try {
+      const rows = this.db.$client
+        .prepare(
+          `SELECT msgId, bm25(messages_fts) as score
+           FROM messages_fts
+           WHERE messages_fts MATCH ?`,
+        )
+        .all(sanitizeFtsQuery(text)) as { msgId: number; score: number }[];
+      for (const r of rows) scores[r.msgId] = r.score;
+    } catch {
+      // FTS syntax error — fall back to vector-only scoring
+    }
+    return scores;
+  }
+
   async buildTurnContext(
     chatId: number,
     userText: string,
@@ -72,39 +103,18 @@ export class MessageRepository {
 
     const recentIds = new Set(recent.map((r) => r.id));
 
-    const ftsStmt = this.db.$client.prepare(`
-      SELECT msgId, bm25(messages_fts) as score
-      FROM messages_fts
-      WHERE messages_fts MATCH ?
-    `);
-
-    let textMatches: Record<number, number> = {};
-    try {
-      const rows = ftsStmt.all(sanitizeFtsQuery(userText)) as {
-        msgId: number;
-        score: number;
-      }[];
-      for (const r of rows) {
-        textMatches[r.msgId] = r.score;
-      }
-    } catch (_e) {
-      // FTS syntax error fallback — ignore and proceed with vector-only
-    }
+    const textMatches = this.ftsScores(userText);
 
     const allChatMsgs = await this.db
       .select()
       .from(messages)
       .where(eq(messages.chatId, chatId));
 
-    const scored = allChatMsgs
-      .filter((m) => !recentIds.has(m.id))
-      .map((m) => {
-        const vec = JSON.parse(m.vector) as number[];
-        const distance = 1 - cosineSimilarity(queryVector, vec);
-        const textScore = textMatches[m.id] ?? 0;
-        const combinedScore = distance * 0.7 + textScore * 0.3;
-        return { msg: m, distance, combinedScore };
-      });
+    const scored = scoreMessages(
+      allChatMsgs.filter((m) => !recentIds.has(m.id)),
+      queryVector,
+      textMatches,
+    );
 
     const relevant = scored
       .filter((s) => s.distance < 0.6 || textMatches[s.msg.id] !== undefined)
@@ -130,35 +140,14 @@ export class MessageRepository {
   ): Promise<MessageRecord[]> {
     const queryVector = await embedText(query);
 
-    const ftsStmt = this.db.$client.prepare(`
-      SELECT msgId, bm25(messages_fts) as score
-      FROM messages_fts
-      WHERE messages_fts MATCH ?
-    `);
-
-    let textMatches: Record<number, number> = {};
-    try {
-      const rows = ftsStmt.all(sanitizeFtsQuery(query)) as {
-        msgId: number;
-        score: number;
-      }[];
-      for (const r of rows) {
-        textMatches[r.msgId] = r.score;
-      }
-    } catch (_e) {}
+    const textMatches = this.ftsScores(query);
 
     const allMsgs = await this.db
       .select()
       .from(messages)
       .where(ne(messages.chatId, excludeChatId));
 
-    const scored = allMsgs.map((m) => {
-      const vec = JSON.parse(m.vector) as number[];
-      const distance = 1 - cosineSimilarity(queryVector, vec);
-      const textScore = textMatches[m.id] ?? 0;
-      const combinedScore = distance * 0.7 + textScore * 0.3;
-      return { msg: m, distance, combinedScore };
-    });
+    const scored = scoreMessages(allMsgs, queryVector, textMatches);
 
     return scored
       .filter((s) => s.distance < 0.6 || textMatches[s.msg.id] !== undefined)

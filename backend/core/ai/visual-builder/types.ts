@@ -1,9 +1,9 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { ChatOllama } from "@langchain/ollama";
-import { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
-import z from "zod";
-import { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
-import { buildWorkflowSkeletonSchema } from "./generation/topology-compiler.ts";
+import type { ChatOllama } from "@langchain/ollama";
+import type { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
+import type z from "zod";
+import type { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
+import type { buildWorkflowSkeletonSchema } from "./generation/topology-compiler.ts";
 
 export type ReducerStrategy =
   | "overwrite"
@@ -58,22 +58,8 @@ export interface ToolProvider {
   getTool(name: string): StructuredToolInterface | undefined;
 }
 
-export type ConditionOperator =
-  | "equals"
-  | "not_equals"
-  | "greater_than"
-  | "greater_than_or_equals"
-  | "less_than"
-  | "less_than_or_equals"
-  | "contains"
-  | "not_contains"
-  | "starts_with"
-  | "ends_with"
-  | "is_empty"
-  | "is_not_empty"
-  | "in"
-  | "not_in"
-  | "regex_match";
+export type { ConditionOperator } from "./condition-operators.ts";
+import type { ConditionOperator } from "./condition-operators.ts";
 
 export interface ConditionConfig {
   field: string; 
