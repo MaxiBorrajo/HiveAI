@@ -140,7 +140,18 @@ export function evaluateCondition(
     return false;
   }
 
-  if (typeof targetValue === "number") {
+  const isCollectionOperator =
+    operator === "contains" ||
+    operator === "not_contains" ||
+    operator === "in" ||
+    operator === "not_in" ||
+    operator === "starts_with" ||
+    operator === "ends_with" ||
+    operator === "is_empty" ||
+    operator === "is_not_empty" ||
+    operator === "regex_match";
+
+  if (typeof targetValue === "number" && !isCollectionOperator) {
     const fieldNum =
       typeof fieldValue === "number" ? fieldValue : Number(fieldValue);
     if (Number.isNaN(fieldNum)) return false;

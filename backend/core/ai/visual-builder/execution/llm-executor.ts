@@ -203,12 +203,17 @@ export function buildPromptMessages(
  * Executes an LLM node. If plugins are assigned, it executes an autonomous ReAct
  * tool loop (up to maxTurns turns), invoking the tools and feeding back the results
  * so the agent can read multiple URLs, compute, or search iteratively.
+ *
+ * `llmFactory` is test-only: pass it to substitute a fake chat model instead of
+ * a real ChatOllama instance (e.g. to unit-test the ReAct loop deterministically).
  */
 export async function executeLlmNode(
   nodeId: string,
   config: LlmConfig,
   state: Record<string, unknown>,
   toolProvider?: ToolProvider,
+  llmFactory: (opts: { model: string; temperature: number; [key: string]: unknown }) => any = (opts) =>
+    new ChatOllama(opts as any),
 ): Promise<Record<string, unknown>> {
   try {
     const rawPlugins = config.plugins;
@@ -253,7 +258,7 @@ export async function executeLlmNode(
       modelName = "qwen3:8b";
     }
 
-    const baseLlm = new ChatOllama({
+    const baseLlm = llmFactory({
       model: modelName,
       temperature: 0.2,
       ...customLlmConfig,

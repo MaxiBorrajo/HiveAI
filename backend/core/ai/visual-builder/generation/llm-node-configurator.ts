@@ -9,9 +9,10 @@ import {
   LlmConfig,
   LlmConfigCandidate,
   LlmNodeConfiguratorContext,
+  PluginInfo,
 } from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
-import { normalizePluginName, PluginInfo } from "./topology-compiler.ts";
+import { normalizePluginName } from "./topology-compiler.ts";
 import {
   statePropertyDefinitionSchema,
   edgeConditionSchema,

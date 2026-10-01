@@ -5,10 +5,11 @@ import {
   GraphNode,
   LangGraphAbstraction,
   PluginConfigCandidate,
+  PluginInfo,
   PluginNodeConfiguratorContext,
 } from "../types.ts";
 import { runConfigStep } from "./generation-step.ts";
-import { normalizePluginName, PluginInfo } from "./topology-compiler.ts";
+import { normalizePluginName } from "./topology-compiler.ts";
 import {
   statePropertyDefinitionSchema,
   edgeConditionSchema,
@@ -26,7 +27,7 @@ function buildPluginParameterFieldSchemas(
   if (!pluginDef?.parameterSchema) return undefined;
   const fieldSchemas: Record<string, z.ZodTypeAny> = {};
   for (const [key, fieldSchema] of Object.entries(pluginDef.parameterSchema)) {
-    fieldSchemas[key] = z.union([fieldSchema, templateRefSchema]);
+    fieldSchemas[key] = z.union([fieldSchema as z.ZodTypeAny, templateRefSchema]);
   }
   return fieldSchemas;
 }
@@ -181,7 +182,7 @@ function resolveEffectivePluginId(
     }
   }
   if (!effectivePluginId || !pluginNames.has(effectivePluginId)) {
-    effectivePluginId = availablePlugins[0]?.name || "tool";
+    return availablePlugins[0]?.name || "tool";
   }
   return effectivePluginId;
 }
