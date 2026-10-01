@@ -10,9 +10,6 @@ import {
 import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
 
-// Interprets a raw LLM text reply as a boolean. Shared by the LLM node's
-// boolean-output mapping and the visual-builder condition semantic fallback,
-// so both agree on what counts as "true".
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
   if (clean.startsWith("true")) return true;
@@ -37,7 +34,6 @@ function resolveModelName(model: unknown): string {
 }
 
 function createChatModel(config: LlmConfig, temperature: number): ChatOllama {
-  // Node-level fields must not leak into the model options.
   const {
     model,
     plugins: _plugins,
@@ -122,6 +118,17 @@ export function buildLlmInstance(
   return runnableLlm;
 }
 
+export function interpolateState(
+  template: string,
+  state: Record<string, unknown>,
+): string {
+  return template.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => {
+    const value = state[name];
+    if (value === undefined || value === null) return match;
+    return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  });
+}
+
 export function buildPromptMessages(
   state: Record<string, unknown>,
   config: LlmConfig,
@@ -129,7 +136,9 @@ export function buildPromptMessages(
   const messagesToSend: BaseMessage[] = [];
 
   if (config.systemPrompt) {
-    messagesToSend.push(new SystemMessage(config.systemPrompt as string));
+    messagesToSend.push(
+      new SystemMessage(interpolateState(config.systemPrompt as string, state)),
+    );
   }
 
   if (state.feedback) {
@@ -161,16 +170,10 @@ export function buildPromptMessages(
     }
   }
 
-  // Format contextual state data (input, variables created by previous steps)
   const contextParts: string[] = [];
   if (state.input && typeof state.input === "string") {
     contextParts.push(`USER GOAL / INPUT:\n${state.input}`);
   }
-
-  // If this node declares an inputMapping (label -> bare state key), it
-  // REPLACES the full-state dump below with only the declared subset —
-  // this is what makes a node's data dependencies explicit and auditable
-  // instead of every node seeing the entire accumulated state.
   const inputMapping = config.inputMapping as
     | Record<string, string>
     | undefined;
@@ -195,7 +198,6 @@ export function buildPromptMessages(
       ) {
         const valStr =
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
-        // Include reasonable slice to prevent prompt explosion
         contextParts.push(
           `CONTEXT [${key}]:\n${valStr.slice(0, MAX_CONTEXT_VALUE_CHARS)}`,
         );
@@ -215,7 +217,6 @@ export function buildPromptMessages(
       );
     }
   } else if (contextParts.length > 0) {
-    // If state context exists, inject it as supplementary context
     messagesToSend.push(
       new HumanMessage(
         `CURRENT MEMORY STATE CONTEXT:\n${contextParts.join("\n\n")}`,
@@ -305,11 +306,6 @@ async function runToolCall(
   }
 }
 
-/**
- * Autonomous ReAct loop: the model requests tools, we run them and feed the
- * results back until it answers without tool calls (or the iteration cap is
- * hit, in which case the last message is used as the answer).
- */
 async function runReactLoop(
   nodeId: string,
   baseLlm: ChatOllama,
@@ -355,12 +351,6 @@ async function runReactLoop(
 
   return conversation[conversation.length - 1];
 }
-
-/**
- * Executes an LLM node. Without plugins it is a single model call; with
- * plugins it runs an autonomous ReAct tool loop. Failures propagate so the
- * run is reported as failed instead of feeding placeholder text downstream.
- */
 export async function executeLlmNode(
   nodeId: string,
   config: LlmConfig,
@@ -417,7 +407,6 @@ export function mapResponseToState(
 
   if (isBooleanField) {
     if (typeof resultValue === "boolean") {
-      // already a boolean primitive
     } else if (typeof resultValue === "string") {
       resultValue = coerceLlmBooleanReply(resultValue);
     } else if (typeof resultValue === "object" && resultValue !== null) {
@@ -437,7 +426,6 @@ export function mapResponseToState(
 
   if (outKey) {
     stateUpdate[outKey] = resultValue;
-    // Guarantee state.result is always populated for any primary content node
     if (outKey !== "result" && !isBooleanField) {
       stateUpdate.result = resultValue;
     }

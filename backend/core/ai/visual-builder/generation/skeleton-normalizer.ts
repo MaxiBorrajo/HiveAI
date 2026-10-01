@@ -115,11 +115,13 @@ export function normalizeSkeletonToGraph(
   ]);
   const intermediateNodes: GraphNode[] = [];
   const nodeDescriptions = new Map<string, string>();
+  const modifiedIds = new Set<string>();
 
   for (const n of nodesToKeep) {
     const cleanId = makeUniqueNodeId(n.id, graph);
     idMap.set(n.id, cleanId);
     nodeDescriptions.set(cleanId, n.description);
+    if (n.modified) modifiedIds.add(cleanId);
 
     const node = buildGraphNode(n, cleanId, availablePlugins);
     intermediateNodes.push(node);
@@ -131,5 +133,5 @@ export function normalizeSkeletonToGraph(
 
   const rawEdges = buildEdges(skeleton.edges, idMap, bypassMap, graph);
 
-  return { startNode, endNode, intermediateNodes, nodeDescriptions, rawEdges };
+  return { startNode, endNode, intermediateNodes, nodeDescriptions, rawEdges, modifiedIds };
 }

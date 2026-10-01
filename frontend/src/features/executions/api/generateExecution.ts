@@ -10,6 +10,8 @@ export interface GenerateExecutionPayload {
   content: string;
   executionId?: number;
   targetNodeId?: string;
+  currentGraph?: LangGraphAbstraction;
+  dryRun?: boolean;
 }
 
 
@@ -47,24 +49,34 @@ export async function generateExecutionStream(
   signal?: AbortSignal,
 ): Promise<void> {
   await postSse("/api/executions/generate", payload, (eventName, data) => {
-    if (eventName === "execution_created") {
-      handlers.onExecutionCreated?.(String(data.executionId));
-    } else if (eventName === "planning") {
-      handlers.onPlanning?.(data.thoughts);
-    } else if (eventName === "node_added") {
-      handlers.onNodeAdded?.(data);
-    } else if (eventName === "node_configuring") {
-      handlers.onNodeConfiguring?.(data);
-    } else if (eventName === "node_updated") {
-      handlers.onNodeUpdated?.(data);
-    } else if (eventName === "node_deleted") {
-      handlers.onNodeDeleted?.(data);
-    } else if (eventName === "edge_added") {
-      handlers.onEdgeAdded?.(data);
-    } else if (eventName === "done") {
-      handlers.onDone?.(data);
-    } else if (eventName === "error") {
-      handlers.onError?.(data.message);
+    switch (eventName) {
+      case "execution_created":
+        handlers.onExecutionCreated?.(String(data.executionId));
+        break;
+      case "planning":
+        handlers.onPlanning?.(data.thoughts);
+        break;
+      case "node_added":
+        handlers.onNodeAdded?.(data);
+        break;
+      case "node_configuring":
+        handlers.onNodeConfiguring?.(data);
+        break;
+      case "node_updated":
+        handlers.onNodeUpdated?.(data);
+        break;
+      case "node_deleted":
+        handlers.onNodeDeleted?.(data);
+        break;
+      case "edge_added":
+        handlers.onEdgeAdded?.(data);
+        break;
+      case "done":
+        handlers.onDone?.(data);
+        break;
+      case "error":
+        handlers.onError?.(data.message);
+        break;
     }
   }, signal);
 }

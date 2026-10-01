@@ -3,6 +3,7 @@ export type ReducerStrategy = "overwrite" | "append" | "prepend" | "unique_appen
 
 export interface StatePropertyDefinition {
   type: DataType;
+  description?: string;
   required: boolean;
   default?: any;
   properties?: Record<string, StatePropertyDefinition>;
@@ -12,6 +13,18 @@ export interface StatePropertyDefinition {
 }
 
 export type NodeType = "start" | "end" | "llm" | "plugin" | "condition";
+
+export type PaletteNodeType = "start" | "end" | "llm" | "agent" | "plugin" | "condition";
+
+export interface GraphViolation {
+  kind: string;
+  nodeId: string;
+  nodeName: string;
+  edgeId?: string;
+  field: string;
+  invalidValue: string;
+  reason: string;
+}
 
 export interface GraphNode {
   id: string;

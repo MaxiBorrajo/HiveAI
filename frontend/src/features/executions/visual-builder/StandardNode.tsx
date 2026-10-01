@@ -27,6 +27,7 @@ export interface StandardNodeData {
   isUpdating?: boolean;
   isExecuting?: boolean;
   isSelected?: boolean;
+  hasError?: boolean;
   activeTool?: string | null;
 }
 
@@ -67,11 +68,8 @@ export function StandardNode({
     ? data.config.plugins
     : [];
   const hasTools = data.type === "llm" && plugins.length > 0;
-
-  // Auto-expand if the node is actively executing or explicitly selected
   const showTools = isExpanded || isExecuting || isSelected;
 
-  // Outer border & glow
   let borderColor = "border-zinc-800";
   let boxShadow = "0 8px 24px -4px rgba(0,0,0,0.5)";
 
@@ -81,12 +79,14 @@ export function StandardNode({
   } else if (isExecuting) {
     borderColor = "border-emerald-500";
     boxShadow = "0 0 28px rgba(16, 185, 129, 0.55)";
+  } else if (data.hasError) {
+    borderColor = "border-red-500";
+    boxShadow = "0 0 20px rgba(239, 68, 68, 0.45)";
   } else if (isSelected) {
     borderColor = "border-primary";
     boxShadow = "0 0 16px rgba(var(--primary-rgb, 59, 130, 246), 0.4)";
   }
 
-  // Header styling per type
   const getHeaderTheme = () => {
     switch (data.type) {
       case "start":
@@ -132,7 +132,7 @@ export function StandardNode({
 
   return (
     <div
-      className={`relative min-w-[240px] max-w-[280px] rounded-xl overflow-hidden border ${borderColor} bg-zinc-950/95 transition-all duration-200 text-left select-none`}
+      className={`relative min-w-60 max-w-70 rounded-xl overflow-hidden border ${borderColor} bg-zinc-950/95 transition-all duration-200 text-left select-none`}
       style={{ boxShadow }}
     >
       {/* Target handle (Left socket) */}
@@ -140,11 +140,9 @@ export function StandardNode({
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !bg-zinc-500 hover:!bg-primary !border-2 !border-zinc-950 transition-colors shadow-sm"
+          className="w-3! h-3! bg-zinc-500! hover:bg-primary! border-2! border-zinc-950! transition-colors shadow-sm"
         />
       )}
-
-      {/* Blueprint Top Header Banner (Loved in Option 3) */}
       <div
         className={`px-3 py-1.5 flex items-center justify-between text-[10px] font-mono tracking-wider font-semibold ${headerTheme.bg}`}
       >
@@ -152,8 +150,6 @@ export function StandardNode({
           {headerTheme.icon}
           <span>{headerTheme.label}</span>
         </div>
-
-        {/* Real-time status / model tag */}
         {isExecuting ? (
           <div className="flex items-center gap-1 text-emerald-400">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -165,13 +161,11 @@ export function StandardNode({
             <span className="text-[9px] font-bold">EDITING</span>
           </div>
         ) : data.config?.model ? (
-          <span className="text-[9px] text-zinc-300 opacity-90 truncate max-w-[90px]">
+          <span className="text-[9px] text-zinc-300 opacity-90 truncate max-w-22.5">
             {String(data.config.model)}
           </span>
         ) : null}
       </div>
-
-      {/* Node Identification & Meta */}
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -182,8 +176,6 @@ export function StandardNode({
               ID: {id}
             </span>
           </div>
-
-          {/* Model chip */}
           {data.config?.model && hasTools && (
             <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-white/5 text-[9px] font-mono text-zinc-400">
               <Cpu className="size-2.5 text-zinc-500" />
@@ -191,11 +183,8 @@ export function StandardNode({
             </div>
           )}
         </div>
-
-        {/* OPTION 4: Collapsible Interactive Tool Bar */}
         {hasTools && (
           <div className="mt-2.5">
-            {/* Interactive Toggle Pill Button */}
             <button
               type="button"
               onClick={(e) => {
@@ -229,8 +218,6 @@ export function StandardNode({
                 )}
               </div>
             </button>
-
-            {/* Expanded Detailed Tool Slots */}
             {showTools && (
               <div className="mt-2 space-y-1.5 pt-2 border-t border-zinc-900/80">
                 <div className="text-[10px] font-mono font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 px-0.5">
@@ -270,13 +257,11 @@ export function StandardNode({
           </div>
         )}
       </div>
-
-      {/* Source handle (Right socket) */}
       {data.type !== "end" && (
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !bg-zinc-500 hover:!bg-primary !border-2 !border-zinc-950 transition-colors shadow-sm"
+          className="w-3! h-3! bg-zinc-500! hover:bg-primary! border-2! border-zinc-950! transition-colors shadow-sm"
         />
       )}
     </div>

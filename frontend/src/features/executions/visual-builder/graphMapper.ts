@@ -56,6 +56,7 @@ export function getLayoutedElements(nodes: Node[], edges: Edge[]) {
   Dagre.layout(g);
 
   const layoutedNodes = nodes.map((node) => {
+    if ((node.data as { manualPosition?: boolean })?.manualPosition) return node;
     const position = g.node(node.id);
     const { width, measuredHeight } = getNodeSize(node);
     return {
@@ -77,6 +78,9 @@ export interface GraphViewState {
   planningThought?: string | null;
   selectedNodeId?: string | null;
   selectedEdgeId?: string | null;
+  editable?: boolean;
+  errorNodeIds?: ReadonlySet<string>;
+  errorEdgeIds?: ReadonlySet<string>;
 }
 
 function toReactFlowNode(n: GraphNode, view: GraphViewState): Node {
@@ -85,14 +89,23 @@ function toReactFlowNode(n: GraphNode, view: GraphViewState): Node {
   const isActive = activeNodeId === n.id;
   const isUpdating = (isActive && isGenerating) || (isGenerating && isSelected);
   const isExecuting = isActive && !isGenerating;
-  const state = { isActive, isUpdating, isExecuting, isSelected };
+  const hasError = view.errorNodeIds?.has(n.id) ?? false;
+  const state = {
+    isActive,
+    isUpdating,
+    isExecuting,
+    isSelected,
+    hasError,
+    manualPosition: !!n.uiPosition,
+  };
   const style = { zIndex: isSelected || isUpdating || isExecuting ? 10 : 1 };
 
   if (n.type === "condition") {
     return {
       id: n.id,
       type: "condition",
-      position: { x: 0, y: 0 },
+      selected: isSelected,
+      position: n.uiPosition ?? { x: 0, y: 0 },
       data: { name: n.name, config: n.config, ...state },
       style,
     };
@@ -101,7 +114,8 @@ function toReactFlowNode(n: GraphNode, view: GraphViewState): Node {
   return {
     id: n.id,
     type: "standard",
-    position: { x: 0, y: 0 },
+    selected: isSelected,
+    position: n.uiPosition ?? { x: 0, y: 0 },
     data: {
       name: n.name,
       type: n.type,
@@ -126,7 +140,10 @@ function toReactFlowEdge(
     nodes.find((n) => n.id === e.source)?.type === "condition";
   const isFalseBranch = isFromCondition && e.path === "false";
   const isActive = activeNodeId === e.source || activeNodeId === e.target;
-  const edgeColor = isSelected
+  const hasError = view.errorEdgeIds?.has(e.id) ?? false;
+  const edgeColor = hasError
+    ? EDGE_COLORS.falseBranch
+    : isSelected
     ? EDGE_COLORS.selected
     : isFromCondition && e.path === "true"
       ? EDGE_COLORS.trueBranch
@@ -138,6 +155,7 @@ function toReactFlowEdge(
 
   return {
     id: e.id,
+    selected: isSelected,
     source: e.source,
     target: e.target,
     sourceHandle: isFromCondition ? (e.path === "false" ? "false" : "true") : undefined,
@@ -163,7 +181,7 @@ export function buildFlowElements(
   const rfEdges = currentEdges.map((e) => toReactFlowEdge(e, currentNodes, view));
 
   const hasEndNode = currentNodes.some((n) => n.type === "end");
-  if (view.isGenerating && !hasEndNode && !view.selectedNodeId) {
+  if (view.isGenerating && (!hasEndNode || view.editable) && !view.selectedNodeId) {
     rfNodes.push({
       id: GHOST_NODE_ID,
       type: "ghost",
@@ -173,7 +191,7 @@ export function buildFlowElements(
       data: { label: view.planningThought || undefined },
     });
 
-    const lastNode = currentNodes[currentNodes.length - 1];
+    const lastNode = [...currentNodes].reverse().find((n) => n.type !== "end");
     if (lastNode) {
       rfEdges.push({
         id: `edge_${lastNode.id}_${GHOST_NODE_ID}`,

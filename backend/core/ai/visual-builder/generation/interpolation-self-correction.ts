@@ -9,28 +9,11 @@ import {
   LangGraphAbstraction,
   PluginInfo,
 } from "../types.ts";
-import {
-  validateGraphInterpolationGrammar,
-  validateGraphVariableReferences,
-  validateGraphPluginParameters,
-  validateGraphAgentToolMentions,
-} from "./validation.ts";
+import { validateGraphInputMappings } from "../validation/validate-graph.ts";
 import { runConfigStep } from "./generation-step.ts";
 import { buildPluginConfigSchema } from "./plugin-node-configurator.ts";
 
 const MAX_GRAMMAR_RETRIES = 1;
-
-function runValidationPass(
-  graph: LangGraphAbstraction,
-  availablePlugins: PluginInfo[],
-): InputMappingViolation[] {
-  return [
-    ...validateGraphInterpolationGrammar(graph),
-    ...validateGraphVariableReferences(graph),
-    ...validateGraphPluginParameters(graph, availablePlugins),
-    ...validateGraphAgentToolMentions(graph, availablePlugins),
-  ];
-}
 
 function extractMentionedToolName(reason: string): string | undefined {
   return reason.match(/mentions using the "([^"]+)" tool/)?.[1];
@@ -250,7 +233,7 @@ export async function* runInterpolationSelfCorrection(
   const { graph, availablePlugins } = ctx;
 
   for (let attempt = 1; attempt <= MAX_GRAMMAR_RETRIES + 1; attempt++) {
-    const violations = runValidationPass(graph, availablePlugins);
+    const violations = validateGraphInputMappings(graph, availablePlugins);
     if (violations.length === 0) break;
 
     console.warn(

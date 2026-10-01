@@ -98,7 +98,9 @@ export async function generateExecution(
   executionId: number | undefined,
   targetNodeId: string | undefined,
   headers: Record<string, string>,
+  options: { currentGraph?: LangGraphAbstraction; dryRun?: boolean } = {},
 ): Promise<Response> {
+  const { dryRun = false } = options;
   return createSseResponse(headers, async (send) => {
     if (!content) {
       send("error", { message: "Missing 'content' in request body." });
@@ -111,13 +113,20 @@ export async function generateExecution(
       } | Prompt: "${truncate(content, MAX_PROMPT_LOG_LENGTH)}"`,
     );
 
-    const repo = new ExecutionRepository(db);
-    const currentGraph = executionId
-      ? await loadCurrentGraph(repo, executionId)
-      : undefined;
-    const targetExecutionId = await resolveExecutionId(repo, executionId, content);
+    if (dryRun && !executionId) {
+      send("error", { message: "A dry run needs an existing execution." });
+      return;
+    }
 
-    send("execution_created", { executionId: targetExecutionId });
+    const repo = new ExecutionRepository(db);
+    const currentGraph = options.currentGraph ?? (executionId
+      ? await loadCurrentGraph(repo, executionId)
+      : undefined);
+    const targetExecutionId = dryRun
+      ? executionId!
+      : await resolveExecutionId(repo, executionId, content);
+
+    if (!dryRun) send("execution_created", { executionId: targetExecutionId });
 
     const generator = generateIncrementalGraph(
       content,
@@ -136,10 +145,12 @@ export async function generateExecution(
     const finalGraph: LangGraphAbstraction | null = result.value ?? null;
     if (!finalGraph) return;
 
-    const saved = await saveGeneratedGraph(repo, targetExecutionId, finalGraph);
+    const graphId = dryRun
+      ? null
+      : (await saveGeneratedGraph(repo, targetExecutionId, finalGraph)).id;
     send("done", {
       executionId: targetExecutionId,
-      graphId: saved.id,
+      graphId,
       graph: finalGraph,
     });
   });

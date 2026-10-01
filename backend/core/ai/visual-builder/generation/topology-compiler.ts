@@ -7,7 +7,7 @@ import {
 } from "@langchain/core/messages";
 import { z } from "zod";
 import { runConfigStep } from "./generation-step.ts";
-import { PluginInfo, WorkflowSkeleton } from "../types.ts";
+import { LangGraphAbstraction, PluginInfo, WorkflowSkeleton } from "../types.ts";
 
 export function normalizePluginName(
   rawName: string | undefined,
@@ -75,6 +75,12 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
           description: z
             .string()
             .describe("What this specific node does in the flow"),
+          modified: z
+            .boolean()
+            .optional()
+            .describe(
+              "ONLY when editing an existing workflow: true if this node already exists (same id) and its behavior must CHANGE to satisfy the request. Omit for untouched and for brand-new nodes.",
+            ),
         }),
       )
       .min(1)
@@ -104,6 +110,33 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
   });
 }
 
+export function describeExistingGraph(graph: LangGraphAbstraction): string {
+  const nodes = graph.nodes
+    .filter((n) => n.type !== "start" && n.type !== "end")
+    .map((n) => {
+      const config = (n.config ?? {}) as Record<string, any>;
+      const details: string[] = [`type: ${n.type}`];
+      if (n.type === "plugin") details.push(`pluginId: ${config.pluginId}`);
+      if (n.type === "llm" && Array.isArray(config.plugins) && config.plugins.length > 0) {
+        details.push(`tools: [${config.plugins.join(", ")}]`);
+      }
+      if (config.outputKey) details.push(`outputKey: ${config.outputKey}`);
+      if (n.type === "condition" && config.condition) {
+        details.push(
+          `rule: ${config.condition.field} ${config.condition.operator} ${JSON.stringify(config.condition.value)}`,
+        );
+      }
+      if (n.type === "llm" && config.systemPrompt) {
+        details.push(`prompt: ${String(config.systemPrompt).slice(0, 200)}`);
+      }
+      return `- id "${n.id}" ("${n.name}") — ${details.join(" | ")}`;
+    });
+  const edges = graph.edges.map(
+    (e) => `- ${e.source} -> ${e.target}${e.path ? ` [${e.path}]` : ""}`,
+  );
+  return `Nodes:\n${nodes.join("\n")}\nEdges:\n${edges.join("\n")}`;
+}
+
 export async function runTopologyCompilerPhase(
   prompt: string,
   modelName: string,
@@ -112,6 +145,7 @@ export async function runTopologyCompilerPhase(
     previousSkeleton: WorkflowSkeleton;
     violations: string[];
   },
+  existingGraph?: LangGraphAbstraction,
 ): Promise<WorkflowSkeleton> {
   const workflowSkeletonSchema = buildWorkflowSkeletonSchema(availablePlugins);
 
@@ -177,9 +211,24 @@ export async function runTopologyCompilerPhase(
     WRONG: outputKey "is_good_enough" (boolean) with condition operator "equals" true/false — this discards the actual numeric scale the user asked for.
     RIGHT: the "llm" node's outputKey is "quality_score", producing a real number (not a 0/1 flag); the "condition" node's field is "quality_score" with a numeric operator ("greater_than_or_equals") and a numeric value (8, not "8" or true/false). Use "string" outputs the same way for category/label judgments (e.g. field "severity", operator "equals", value "critical") — only use a boolean when the objective is a literal yes/no question.`;
 
+  const editRules = existingGraph
+    ? `
+
+  EDIT MODE — THE WORKFLOW ALREADY EXISTS (this overrides rule 6 and any instruction to design from scratch):
+  ${describeExistingGraph(existingGraph)}
+
+  The user's message is a CHANGE REQUEST for this workflow, not a new objective. Return the COMPLETE resulting structure:
+  - Reuse the EXACT id of every existing node you keep. Do not rename or renumber them.
+  - Existing nodes the request does not touch must stay, with the same id, type and tools. Set "modified": true ONLY on kept nodes whose behavior must change to satisfy the request.
+  - Add new nodes (new unique ids) only when the request needs them. Omit a node only if the request asks to remove it.
+  - Return ALL edges of the final workflow, rewiring around added/removed nodes. The number of nodes is whatever the final workflow needs (ignore the 2-5 limit).`
+    : "";
+
   const messages: BaseMessage[] = [
-    new SystemMessage(compilerPrompt),
-    new HumanMessage(`User Objective: "${prompt}"`),
+    new SystemMessage(compilerPrompt + editRules),
+    new HumanMessage(
+      existingGraph ? `Change request: "${prompt}"` : `User Objective: "${prompt}"`,
+    ),
   ];
 
   if (correctionContext) {

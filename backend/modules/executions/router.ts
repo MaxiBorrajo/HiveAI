@@ -9,6 +9,7 @@ import { listExecutions } from "./use-cases/list-executions.ts";
 import { getExecution } from "./use-cases/get-execution.ts";
 import { deleteExecution } from "./use-cases/delete-execution.ts";
 import { updateExecution } from "./use-cases/update-execution.ts";
+import { createExecution } from "./use-cases/create-execution.ts";
 import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
 import { runExecution } from "./use-cases/run-execution/run-execution.ts";
 
@@ -34,7 +35,18 @@ executionsRouter.post("/generate", async (c) => {
     body.executionId ? parseInt(body.executionId) : undefined,
     body.targetNodeId,
     headers,
+    {
+      currentGraph: body.currentGraph,
+      dryRun: body.dryRun === true,
+    },
   );
+});
+
+executionsRouter.post("/", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  const body = await c.req.json().catch(() => ({}));
+  return createExecution(db, body.name, headers);
 });
 
 executionsRouter.get("/", async (c) => {
@@ -71,10 +83,12 @@ executionsRouter.put("/:id", async (c) => {
 
 executionsRouter.put("/:id/graph", async (c) => {
   const headers = { "content-type": "application/json" };
+  const hive = c.get("hive");
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
   return updateExecutionGraph(
     db,
+    hive,
     parseId(c.req.param("id")),
     body.graph,
     body.stateSchema,

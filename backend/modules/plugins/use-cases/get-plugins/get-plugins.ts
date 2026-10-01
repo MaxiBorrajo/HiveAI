@@ -1,7 +1,19 @@
 import type { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { BeePlugin } from "../../../../core/microkernel/bee-plugin.ts";
+import type { z } from "zod";
+import type { PluginParameterDto } from "../../types.ts";
 import type { GetPluginsResponse } from "./types.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
+
+function describeParameters(plugin: BeePlugin): PluginParameterDto[] {
+  const shape = (plugin.schema as { shape?: Record<string, z.ZodTypeAny> })
+    ?.shape;
+  return Object.entries(shape ?? {}).map(([name, field]) => ({
+    name,
+    required: !field.safeParse(undefined).success,
+    description: field.description,
+  }));
+}
 
 export function getPlugins(hive: HiveMicrokernel): GetPluginsResponse {
   return hive
@@ -13,6 +25,7 @@ export function getPlugins(hive: HiveMicrokernel): GetPluginsResponse {
       selectionTests: plugin.selectionTests || [],
       executionTests: plugin.executionTests || [],
       isExternal: hive.isExternalPlugin(plugin.name),
+      parameters: describeParameters(plugin),
     }))
     .sort((a, b) => {
       if (a.name < b.name) {

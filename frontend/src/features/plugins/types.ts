@@ -15,6 +15,12 @@ export interface ExecutionTestCase {
   params: Record<string, unknown>;
 }
 
+export interface PluginParameter {
+  name: string;
+  required: boolean;
+  description?: string;
+}
+
 export interface Plugin {
   id: string;
   name: string;
@@ -23,6 +29,7 @@ export interface Plugin {
   selectionTests?: SelectionTestCase[];
   executionTests?: ExecutionTestCase[];
   isExternal?: boolean;
+  parameters?: PluginParameter[];
 }
 
 export interface PluginSelectionTestItem extends SelectionTestCase {

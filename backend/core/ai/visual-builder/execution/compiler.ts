@@ -9,6 +9,7 @@ import {
   StatePropertyDefinition,
   ConditionConfig,
 } from "../types.ts";
+import { validateGraphStructure } from "../validation/validate-graph.ts";
 import { START_NODE_ID, END_NODE_ID } from "../constants.ts";
 import { getReducerFunction } from "./state.ts";
 import { evaluateCondition, getFieldByPath } from "./conditions.ts";
@@ -47,38 +48,14 @@ export function buildStateSchema(
   return schema;
 }
 
-// Validates structural invariants of the abstraction: unique node IDs and
-// exactly one start/end node. Throws a "Compiler Error: ..." on violation.
 function validateAbstraction(abstraction: LangGraphAbstraction): void {
-  const nodeIds = new Set<string>();
-  let startCount = 0;
-  let endCount = 0;
-
-  for (const node of abstraction.nodes) {
-    if (nodeIds.has(node.id)) {
-      throw new Error(
-        `Compiler Error: Duplicate node ID found: '${node.id}'. All node IDs must be unique.`,
-      );
-    }
-    nodeIds.add(node.id);
-    if (node.type === "start") startCount++;
-    if (node.type === "end") endCount++;
+  const violations = validateGraphStructure(abstraction);
+  if (violations.length > 0) {
+    throw new Error(`Compiler Error: ${violations[0].reason}`);
   }
-
-  if (startCount !== 1)
-    throw new Error(
-      `Compiler Error: The graph must have exactly one node of type 'start'. Found: ${startCount}`,
-    );
-  if (endCount !== 1)
-    throw new Error(
-      `Compiler Error: The graph must have exactly one node of type 'end'. Found: ${endCount}`,
-    );
 }
 
-// Builds the executor function for a single (non start/end) node, dispatching
-// by node type: llm nodes delegate to executeLlmNode, condition nodes act as
-// decision gateways (with a semantic LLM fallback when the field is missing
-// from state), and any other type is resolved from the registry.
+
 function buildNodeRunnable(
   node: GraphNode,
   registry: NodeRegistry,
@@ -94,13 +71,9 @@ function buildNodeRunnable(
     return async (state: Record<string, unknown>) => {
       const cond = node.config?.condition as ConditionConfig | undefined;
       if (!cond || !cond.field) return {};
-
-      // If field already exists in state, pass through
       if (getFieldByPath(state, cond.field) !== undefined) {
         return {};
       }
-
-      // Semantic evaluator: If field is missing, evaluate contextually with an LLM
       return evaluateConditionWithFallback(node.id, node.name, cond, state);
     };
   }
@@ -125,9 +98,6 @@ function buildNodeRunnable(
   };
 }
 
-// Splits edges into plain edges (added with workflow.addEdge) and edges that
-// originate from a conditional source (a condition node, or an edge
-// explicitly flagged isConditional/carrying a `path`), grouped by source.
 function partitionEdges(abstraction: LangGraphAbstraction): {
   normalEdges: GraphEdge[];
   conditionalEdgesBySource: Record<string, GraphEdge[]>;
@@ -156,11 +126,6 @@ function partitionEdges(abstraction: LangGraphAbstraction): {
 
   return { normalEdges, conditionalEdgesBySource, conditionNodesMap };
 }
-
-// Builds the router function passed to workflow.addConditionalEdges for a
-// given source: if the source is a condition node, routes by evaluating its
-// condition against state (true/false path edges); otherwise routes by
-// checking each edge's own `condition` in order (first match wins).
 function wireConditionalEdge(
   sourceId: string,
   edges: GraphEdge[],

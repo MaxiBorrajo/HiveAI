@@ -141,6 +141,7 @@ export type IncrementalEvent =
       stateProperties?: Record<string, any>;
     }
   | { type: "edge_added"; edge: GraphEdge }
+  | { type: "node_deleted"; nodeId: string }
   | {
       type: "validation_error";
       violations: InputMappingViolation[];
@@ -161,11 +162,21 @@ export type ViolationKind =
   | "missing_condition_branch"
   | "condition_branches_converge"
   | "invalid_node_shape"
-  | "condition_edge_missing_path";
+  | "condition_edge_missing_path"
+  | "duplicate_node_id"
+  | "duplicate_edge_id"
+  | "invalid_start_end_count"
+  | "dangling_edge"
+  | "invalid_edge"
+  | "unreachable_node"
+  | "cannot_reach_end"
+  | "invalid_output_key"
+  | "invalid_node_config";
 
 export interface InputMappingViolation {
   kind: ViolationKind;
   nodeId: string;
+  edgeId?: string;
   nodeName: string;
   field: string;
   invalidValue: string;
@@ -237,6 +248,7 @@ export interface NormalizedSkeleton {
   intermediateNodes: GraphNode[];
   nodeDescriptions: Map<string, string>;
   rawEdges: GraphEdge[];
+  modifiedIds: Set<string>;
 }
 
 export type SkeletonNode = WorkflowSkeleton["nodes"][number];

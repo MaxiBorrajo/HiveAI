@@ -4,6 +4,7 @@ import type {
   Plugin,
   SelectionTestCase,
   ExecutionTestCase,
+  PluginParameter,
 } from "@/features/plugins/types";
 
 interface BackendPlugin {
@@ -13,6 +14,7 @@ interface BackendPlugin {
   selectionTests?: SelectionTestCase[];
   executionTests?: ExecutionTestCase[];
   isExternal?: boolean;
+  parameters?: PluginParameter[];
 }
 
 export async function getPlugins(): Promise<ResponseEntity<Plugin[]>> {
@@ -28,6 +30,7 @@ export async function getPlugins(): Promise<ResponseEntity<Plugin[]>> {
       selectionTests: plugin.selectionTests || [],
       executionTests: plugin.executionTests || [],
       isExternal: plugin.isExternal ?? false,
+      parameters: plugin.parameters ?? [],
     })),
   };
 }

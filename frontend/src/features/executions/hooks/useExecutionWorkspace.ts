@@ -36,6 +36,8 @@ export function useExecutionWorkspace({
   const isThinking = useKeyedState(key, false);
   const isRunning = useKeyedState(key, false);
   const graph = useKeyedState<LangGraphAbstraction | null>(key, null);
+  const isEditing = useKeyedState(key, false);
+  const draftGraph = useKeyedState<LangGraphAbstraction | null>(key, null);
   const activeNodeId = useKeyedState<string | undefined>(key, undefined);
   const planningThought = useKeyedState<string | null>(key, null);
   const logs = useKeyedState<string[]>(key, []);
@@ -47,6 +49,8 @@ export function useExecutionWorkspace({
       isThinking,
       isRunning,
       graph,
+      isEditing,
+      draftGraph,
       activeNodeId,
       planningThought,
       logs,
@@ -62,7 +66,6 @@ export function useExecutionWorkspace({
       return;
     }
 
-    // Only load if we haven't loaded it yet
     if (graph.has(activeExecutionId)) return;
 
     getExecution(activeExecutionId)
@@ -86,12 +89,13 @@ export function useExecutionWorkspace({
     const controller = new AbortController();
     generateAbortRef.current = controller;
     let currentKey = key;
+    const editing = isEditing.value && !!draftGraph.value;
+    const graphState = editing ? draftGraph : graph;
     isThinking.set(true, currentKey);
     planningThought.set(null, currentKey);
     logs.set(["Pollinating flow: starting design..."], currentKey);
 
-    // If starting a brand new execution, reset graph so canvas displays incremental stream
-    if (!activeExecutionId && !selectedNodeId) {
+    if (!editing && !activeExecutionId && !selectedNodeId) {
       graph.set(null, currentKey);
     }
 
@@ -100,7 +104,8 @@ export function useExecutionWorkspace({
         {
           content: userPrompt,
           executionId: activeExecutionId ? Number(activeExecutionId) : undefined,
-          targetNodeId: selectedNodeId ?? undefined,
+          targetNodeId: editing ? (selectedNodeId ?? undefined) : undefined,
+          ...(editing ? { currentGraph: draftGraph.value!, dryRun: true } : {}),
         },
         {
           onExecutionCreated: (id) => {
@@ -118,7 +123,7 @@ export function useExecutionWorkspace({
           },
           onNodeAdded: ({ node, edge, stateProperties }) => {
             planningThought.set(null, currentKey);
-            graph.set((prev) => {
+            graphState.set((prev) => {
               const current = prev || { nodes: [], edges: [], stateSchema: {} };
               if (current.nodes.some((n) => n.id === node.id)) {
                 return current;
@@ -137,7 +142,7 @@ export function useExecutionWorkspace({
           onNodeUpdated: ({ node, stateProperties }) => {
             planningThought.set(null, currentKey);
             activeNodeId.set(undefined, currentKey);
-            graph.set((prev) => {
+            graphState.set((prev) => {
               if (!prev) return prev;
               return {
                 ...prev,
@@ -148,10 +153,27 @@ export function useExecutionWorkspace({
             logs.set((prev) => [...prev, `✨ Configured: ${node.name}`], currentKey);
             setSelectedNodeId(null, activeExecutionId || newExecutionToken);
           },
+          onNodeDeleted: ({ nodeId }) => {
+            graphState.set((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                nodes: prev.nodes.filter((n) => n.id !== nodeId),
+                edges: prev.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+              };
+            }, currentKey);
+            logs.set((prev) => [...prev, `- Removed node: ${nodeId}`], currentKey);
+          },
+          onEdgeAdded: ({ edge }) => {
+            graphState.set((prev) => {
+              if (!prev || prev.edges.some((e) => e.id === edge.id)) return prev;
+              return { ...prev, edges: [...prev.edges, edge] };
+            }, currentKey);
+          },
           onDone: (data) => {
             activeNodeId.set(undefined, currentKey);
             planningThought.set(null, currentKey);
-            graph.set(data.graph, currentKey);
+            graphState.set(data.graph, currentKey);
             logs.set((prev) => [...prev, "✨ Flow assembled successfully!"], currentKey);
             isThinking.set(false, currentKey);
           },
@@ -185,8 +207,6 @@ export function useExecutionWorkspace({
     const currentKey = activeExecutionId;
     isRunning.set(true, currentKey);
     logs.set((prev) => [...prev, "--- Starting Execution ---"], currentKey);
-
-    // Clean up empty strings from inputs so we don't override defaults with ""
     const finalInputs = { ...inputs };
     Object.keys(finalInputs).forEach((k) => {
       if (finalInputs[k] === "") delete finalInputs[k];
@@ -235,10 +255,25 @@ export function useExecutionWorkspace({
     }
   };
 
+  const adoptCreatedExecution = (id: string, created: LangGraphAbstraction) => {
+    justCreatedIdRef.current = id;
+    graph.set(created, id);
+    draftGraph.set(created, id);
+    isEditing.set(true, id);
+    logs.set([], id);
+    onExecutionCreated(id);
+  };
+
   return {
     isThinking: isThinking.value,
     isRunning: isRunning.value,
     graph: graph.value,
+    setGraph: graph.set,
+    isEditing: isEditing.value,
+    setIsEditing: isEditing.set,
+    draftGraph: draftGraph.value,
+    setDraftGraph: draftGraph.set,
+    adoptCreatedExecution,
     activeNodeId: activeNodeId.value,
     planningThought: planningThought.value,
     logs: logs.value,

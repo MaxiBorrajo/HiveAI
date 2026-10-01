@@ -1,4 +1,5 @@
 import { ChatOllama } from "@langchain/ollama";
+import { createDraftGraph } from "../graph-factory.ts";
 import type {
   GraphEdge,
   GraphNode,
@@ -18,9 +19,9 @@ import {
   findConvergingConditionBranches,
   sanitizeGraphEdges,
 } from "./graph-sanitizer.ts";
-import { configureLlmNode } from "./llm-node-configurator.ts";
-import { configurePluginNode } from "./plugin-node-configurator.ts";
-import { configureConditionNode } from "./condition-node-configurator.ts";
+import { configureNodes } from "./node-configuration.ts";
+import { requestValidatedSkeleton } from "./skeleton-phase.ts";
+import { editExistingGraph, reconfigureTargetNode } from "./edit-graph.ts";
 import { configureEndNodeDeliverable } from "./end-node-configurator.ts";
 import { runInterpolationSelfCorrection } from "./interpolation-self-correction.ts";
 import { describeNeighbor } from "./prompt-helpers.ts";
@@ -30,12 +31,28 @@ export async function* generateIncrementalGraph(
   modelName: string,
   availablePlugins: PluginInfo[],
   currentGraph?: LangGraphAbstraction,
-  _targetNodeId?: string,
+  targetNodeId?: string,
 ): AsyncGenerator<IncrementalEvent, LangGraphAbstraction, unknown> {
   const pluginNames = new Set(availablePlugins.map((p) => p.name));
   const configLlm = new ChatOllama({ model: modelName, temperature: 0.05 });
 
-  const graph: LangGraphAbstraction = createDraftGraph(currentGraph);
+  const existingNodes = currentGraph?.nodes.filter(
+    (n) => n.type !== "start" && n.type !== "end",
+  ) ?? [];
+
+  if (currentGraph && targetNodeId) {
+    const target = currentGraph.nodes.find((n) => n.id === targetNodeId);
+    if (!target) throw new Error(`Node "${targetNodeId}" does not exist in the graph.`);
+    return yield* reconfigureTargetNode(prompt, modelName, availablePlugins, pluginNames, configLlm, currentGraph, target);
+  }
+
+  if (currentGraph && existingNodes.length > 0) {
+    return yield* editExistingGraph(prompt, modelName, availablePlugins, pluginNames, configLlm, currentGraph);
+  }
+
+  const graph: LangGraphAbstraction = createDraftGraph(
+    currentGraph ? { ...currentGraph, nodes: [], edges: [] } : undefined,
+  );
 
   console.log(
     `\n[Visual Builder - Generator] === Starting Two-Phase Graph Generation ===`,
@@ -112,60 +129,6 @@ export async function* generateIncrementalGraph(
   return graph;
 }
 
-const MAX_SKELETON_RETRIES = 1;
-
-async function* requestValidatedSkeleton(
-  prompt: string,
-  modelName: string,
-  availablePlugins: PluginInfo[],
-  graph: LangGraphAbstraction,
-): AsyncGenerator<IncrementalEvent, NormalizedSkeleton, unknown> {
-  const nodesBefore = graph.nodes.length;
-  let correctionContext:
-    | { previousSkeleton: Awaited<ReturnType<typeof runTopologyCompilerPhase>>; violations: string[] }
-    | undefined;
-
-  for (let attempt = 1; attempt <= MAX_SKELETON_RETRIES + 1; attempt++) {
-    const skeleton = await runTopologyCompilerPhase(
-      prompt,
-      modelName,
-      availablePlugins,
-      correctionContext,
-    );
-
-    yield { type: "planning", thoughts: skeleton.thought };
-
-    graph.nodes.length = nodesBefore;
-    const normalized = normalizeSkeletonToGraph(skeleton, graph, availablePlugins);
-
-    const violations = [
-      ...findSkeletonShapeViolations(skeleton),
-      ...findMissingConditionBranches(normalized.intermediateNodes, normalized.rawEdges),
-      ...findConvergingConditionBranches(normalized.intermediateNodes, normalized.rawEdges),
-    ];
-    if (violations.length === 0) return normalized;
-
-    console.warn(
-      `[Visual Builder - Generator] Skeleton attempt ${attempt} is invalid:`,
-      violations,
-    );
-
-    if (attempt > MAX_SKELETON_RETRIES) {
-      fillMissingConditionBranches(normalized.intermediateNodes, normalized.rawEdges);
-      return normalized;
-    }
-
-    yield { type: "validation_error", violations, attempt };
-
-    correctionContext = {
-      previousSkeleton: skeleton,
-      violations: violations.map((v) => v.reason),
-    };
-  }
-
-  throw new Error("requestValidatedSkeleton: retry loop exited without a result");
-}
-
 function* streamSkeleton(
   graph: LangGraphAbstraction,
   intermediateNodes: GraphNode[],
@@ -204,182 +167,3 @@ function* streamSkeleton(
   };
 }
 
-async function* configureNodes(
-  intermediateNodes: GraphNode[],
-  ctx: {
-    prompt: string;
-    modelName: string;
-    availablePlugins: PluginInfo[];
-    pluginNames: Set<string>;
-    configLlm: ChatOllama;
-    graph: LangGraphAbstraction;
-    nodeDescriptions: Map<string, string>;
-  },
-): AsyncGenerator<IncrementalEvent, void, unknown> {
-  const {
-    prompt,
-    modelName,
-    availablePlugins,
-    pluginNames,
-    configLlm,
-    graph,
-    nodeDescriptions,
-  } = ctx;
-
-  for (const node of intermediateNodes) {
-    console.log(
-      `[Visual Builder - Generator] Configuring node [${node.type}] "${node.name}" (${node.id})...`,
-    );
-
-    yield {
-      type: "node_configuring",
-      nodeId: node.id,
-      nodeName: node.name,
-    };
-
-    const graphStateText = `Current Memory Variables (State):
-    ${
-      Object.keys(graph.stateSchema).length > 0
-        ? Object.entries(graph.stateSchema)
-            .map(([k, v]) => `  - ${k} (${(v as any).type})`)
-            .join("\n")
-        : "  - input (string)"
-    }`;
-
-    const predecessors = graph.edges
-      .filter((e) => e.target === node.id)
-      .map((e) => graph.nodes.find((n) => n.id === e.source));
-    const successors = graph.edges
-      .filter((e) => e.source === node.id)
-      .map((e) => graph.nodes.find((n) => n.id === e.target));
-
-    const neighborHint = `\n
-    Graph Neighbors (use this to avoid duplicating work or tools already covered):
-    - Predecessor(s): ${predecessors.length ? predecessors.map((n) => describeNeighbor(n, nodeDescriptions)).join("; ") : "none (this is the first node)"}
-    - Successor(s): ${successors.length ? successors.map((n) => describeNeighbor(n, nodeDescriptions)).join("; ") : "none (this feeds into End)"}
-    IMPORTANT: If a predecessor already has a tool and produced an outputKey that already contains what you need, do NOT re-invoke that tool or duplicate its outputKey — read its output via a plain "\${outputKey}" reference instead. Only add a tool to THIS node if the predecessor's output does not already cover it.`;
-
-    yield* configureNode(node, {
-      prompt,
-      modelName,
-      availablePlugins,
-      pluginNames,
-      configLlm,
-      graph,
-      intermediateNodes,
-      nodeDescriptions,
-      neighborHint,
-      graphStateText,
-    });
-  }
-}
-
-async function* configureNode(
-  node: GraphNode,
-  ctx: {
-    prompt: string;
-    modelName: string;
-    availablePlugins: PluginInfo[];
-    pluginNames: Set<string>;
-    configLlm: ChatOllama;
-    graph: LangGraphAbstraction;
-    intermediateNodes: GraphNode[];
-    nodeDescriptions: Map<string, string>;
-    neighborHint: string;
-    graphStateText: string;
-  },
-): AsyncGenerator<IncrementalEvent, void, unknown> {
-  const {
-    prompt,
-    modelName,
-    availablePlugins,
-    pluginNames,
-    configLlm,
-    graph,
-    intermediateNodes,
-    nodeDescriptions,
-    neighborHint,
-    graphStateText,
-  } = ctx;
-
-  switch (node.type) {
-    case "llm": {
-      await configureLlmNode(node, {
-        prompt,
-        modelName,
-        availablePlugins,
-        pluginNames,
-        configLlm,
-        graph,
-        intermediateNodes,
-        nodeDescriptions,
-        neighborHint,
-        graphStateText,
-      });
-      yield {
-        type: "node_updated",
-        node,
-        stateProperties: graph.stateSchema,
-      };
-      break;
-    }
-    case "plugin": {
-      const { usedFallback } = await configurePluginNode(node, {
-        prompt,
-        availablePlugins,
-        pluginNames,
-        configLlm,
-        graph,
-        intermediateNodes,
-        nodeDescriptions,
-        neighborHint,
-        graphStateText,
-      });
-      yield usedFallback
-        ? { type: "node_updated", node }
-        : { type: "node_updated", node, stateProperties: graph.stateSchema };
-      break;
-    }
-    case "condition": {
-      const { usedFallback } = await configureConditionNode(node, {
-        prompt,
-        configLlm,
-        graph,
-        graphStateText,
-      });
-      yield usedFallback
-        ? { type: "node_updated", node }
-        : { type: "node_updated", node, stateProperties: graph.stateSchema };
-      break;
-    }
-  }
-}
-
-function createDraftGraph(
-  currentGraph?: LangGraphAbstraction,
-): LangGraphAbstraction {
-  if (currentGraph) return JSON.parse(JSON.stringify(currentGraph));
-
-  return {
-    nodes: [],
-    edges: [],
-    stateSchema: {
-      input: {
-        type: "string",
-        description: "User initial query or prompt for this execution",
-        required: false,
-      },
-      cwd: {
-        type: "string",
-        description: "Current working directory / workspace path",
-        required: false,
-      },
-      os: {
-        type: "string",
-        description:
-          "Host operating system platform (e.g. linux, darwin, windows)",
-        required: false,
-      },
-    },
-  };
-}
