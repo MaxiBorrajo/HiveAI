@@ -27,7 +27,7 @@ try {
 } catch {
 }
 
-console.log(`\nBackend is running on http://localhost:${port}`);
+console.log(`\nBackend is running on http://localhost:${port} `);
 openDesktopWindow(port);
 
 hive.configure({
