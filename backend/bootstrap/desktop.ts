@@ -8,10 +8,10 @@ export function openDesktopWindow(port: number): void {
 
   const win = new Deno.BrowserWindow({
     title: "HiveAI",
+    width: 1200,
+    height: 800,
     resizable: true,
   });
-  const surface = win.getNativeWindow();
-  win.setSize(surface.width, surface.height);
   win.navigate?.(`http://localhost:${port}`);
 
   console.log("Desktop window opened.");
