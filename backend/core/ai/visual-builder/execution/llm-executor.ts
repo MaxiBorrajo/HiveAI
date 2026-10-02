@@ -227,6 +227,14 @@ export function buildPromptMessages(
   return messagesToSend;
 }
 
+/**
+ * Executes an LLM node. If plugins are assigned, it executes an autonomous ReAct
+ * tool loop (up to maxTurns turns), invoking the tools and feeding back the results
+ * so the agent can read multiple URLs, compute, or search iteratively.
+ *
+ * `llmFactory` is test-only: pass it to substitute a fake chat model instead of
+ * a real ChatOllama instance (e.g. to unit-test the ReAct loop deterministically).
+ */
 type ToolLike = {
   name: string;
   invoke(args: unknown): Promise<unknown>;
@@ -351,15 +359,37 @@ async function runReactLoop(
 
   return conversation[conversation.length - 1];
 }
+
+function resolveModelOptions(config: LlmConfig, temperature: number) {
+  const {
+    model,
+    plugins: _plugins,
+    systemPrompt: _systemPrompt,
+    pluginId: _pluginId,
+    structuredOutput: _structuredOutput,
+    outputKey: _outputKey,
+    inputMapping: _inputMapping,
+    ...modelOptions
+  } = config;
+
+  return {
+    model: resolveModelName(model),
+    temperature,
+    ...modelOptions,
+  };
+}
+
 export async function executeLlmNode(
   nodeId: string,
   config: LlmConfig,
   state: Record<string, unknown>,
   toolProvider?: ToolProvider,
+  llmFactory: (opts: { model: string; temperature: number; [key: string]: unknown }) => any = (opts) =>
+    new ChatOllama(opts as any),
 ): Promise<Record<string, unknown>> {
   try {
     const tools = resolveTools(nodeId, config, toolProvider);
-    const baseLlm = createChatModel(config, 0.2);
+    const baseLlm = llmFactory(resolveModelOptions(config, 0.2));
     const messages = buildPromptMessages(state, config);
 
     if (tools.length > 0) {
@@ -383,9 +413,7 @@ export async function executeLlmNode(
     const response = await runnable.invoke(messages);
     return mapResponseToState(response, config, state);
   } catch (err: unknown) {
-    throw new Error(`LLM node '${nodeId}' failed: ${errorMessage(err)}`, {
-      cause: err,
-    });
+    return handleLlmError(err, nodeId, config);
   }
 }
 
@@ -403,7 +431,12 @@ export function mapResponseToState(
   }
 
   const outKey = config.outputKey;
-  const isBooleanField = config.structuredOutput?.type === "boolean";
+  const isBooleanField =
+    config.structuredOutput?.type === "boolean" ||
+    (outKey &&
+      (outKey.startsWith("is_") ||
+        outKey.endsWith("_valid") ||
+        outKey.endsWith("_approved")));
 
   if (isBooleanField) {
     if (typeof resultValue === "boolean") {
@@ -440,6 +473,35 @@ export function mapResponseToState(
 
   if (state.attempts !== undefined) {
     stateUpdate.attempts = 1;
+  }
+
+  return stateUpdate;
+}
+
+export function handleLlmError(
+  error: unknown,
+  nodeId: string,
+  config: LlmConfig,
+): Record<string, unknown> {
+  const errorMsg = errorMessage(error);
+  console.error(
+    `[Compiler Native LLM] Network error with Ollama (Node ${nodeId}):`,
+    errorMsg,
+  );
+
+  const resultValue = config.structuredOutput
+    ? { error: `Mock Fallback due to error: ${errorMsg}` }
+    : `(Mock Fallback due to connection error: ${errorMsg})`;
+
+  const stateUpdate: Record<string, unknown> = {};
+  if (config.outputKey) {
+    stateUpdate[config.outputKey] = resultValue;
+  } else {
+    if (typeof resultValue === "string") {
+      stateUpdate.messages = [{ role: "assistant", content: resultValue }];
+    } else {
+      stateUpdate.result = resultValue;
+    }
   }
 
   return stateUpdate;

@@ -21,7 +21,8 @@
     "check": "deno check main.ts plugins/*/index.ts",
     "test": "deno test -A",
     "test:coverage": "deno test -A --coverage=coverage_profile && deno coverage coverage_profile --html",
-    "eval:llm": "deno run -A tests/llm-eval/run.ts"
+    "eval:llm": "deno run -A tests/llm-eval/run.ts",
+    "eval:generator": "deno run -A tests/llm-eval/runGenerator.ts"
   },
   "imports": {
     "@langchain/core": "npm:@langchain/core@^1.2.9",
