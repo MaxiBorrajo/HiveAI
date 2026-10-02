@@ -1,4 +1,5 @@
 name: Release
+run-name: Release (${{ github.ref_name }})
 
 # Pushing a branch named release-test/* runs the builds only (nothing is published),
 # so changes to this workflow can be tried before they reach main.
