@@ -24,6 +24,17 @@ Deno.test("buildStateSchema - custom reducerStrategy is wired to the right funct
   assertEquals(reducer([1], [2]), [1, 2]);
 });
 
+Deno.test("buildStateSchema - a declared default is wired as a `default()` thunk returning that value", () => {
+  const schema = buildStateSchema({ count: { type: "number", required: false, default: 42 } });
+  assertEquals(typeof schema.count.default, "function");
+  assertEquals(schema.count.default(), 42);
+});
+
+Deno.test("buildStateSchema - no declared default means no `default` key is added", () => {
+  const schema = buildStateSchema({ count: { type: "number", required: false } });
+  assertEquals("default" in schema.count, false);
+});
+
 Deno.test("compileGraph - throws when there is no start node", () => {
   const abstraction: LangGraphAbstraction = {
     nodes: [{ id: "end", name: "End", type: "end", config: {} }],
@@ -236,6 +247,95 @@ Deno.test("compileGraph - plain edges with their own per-edge condition route by
 
   const result = await graph.invoke({ kind: "b" });
   assertEquals(result.path, "B");
+});
+
+Deno.test("compileGraph - a condition node whose field is already present in state is a no-op runtime step (does not need an LLM fallback)", async () => {
+  const registry: NodeRegistry = {
+    onTrue: async () => ({ visited: "true-branch" }),
+    onFalse: async () => ({ visited: "false-branch" }),
+  };
+  const abstraction: LangGraphAbstraction = {
+    nodes: [
+      ...baseNodes(),
+      {
+        id: "cond",
+        name: "Check",
+        type: "condition",
+        config: { condition: { field: "is_valid", operator: "equals", value: true } },
+      },
+      { id: "t", name: "OnTrue", type: "plugin", config: { pluginId: "onTrue" } },
+      { id: "f", name: "OnFalse", type: "plugin", config: { pluginId: "onFalse" } },
+    ],
+    edges: [
+      { id: "e1", source: "start", target: "cond", isConditional: false },
+      { id: "e2", source: "cond", target: "t", isConditional: true, path: "true" },
+      { id: "e3", source: "cond", target: "f", isConditional: true, path: "false" },
+      { id: "e4", source: "t", target: "end", isConditional: false },
+      { id: "e5", source: "f", target: "end", isConditional: false },
+    ],
+    stateSchema: {},
+  };
+  const stateSchema = buildStateSchema({
+    is_valid: { type: "boolean", required: true },
+    visited: { type: "string", required: false },
+  });
+  const graph = compileGraph(abstraction, stateSchema, registry);
+
+  // is_valid is already set on the incoming state, so the condition node's
+  // own runnable short-circuits to {} instead of invoking an LLM fallback —
+  // only the conditional-edge routing (evaluateCondition) decides the branch.
+  const result = await graph.invoke({ is_valid: true });
+  assertEquals(result.visited, "true-branch");
+});
+
+Deno.test("compileGraph - a condition node with no condition.field configured is a no-op runtime step", async () => {
+  const registry: NodeRegistry = {
+    onTrue: async () => ({ visited: "true-branch" }),
+  };
+  const abstraction: LangGraphAbstraction = {
+    nodes: [
+      ...baseNodes(),
+      { id: "cond", name: "Check", type: "condition", config: {} },
+      { id: "t", name: "OnTrue", type: "plugin", config: { pluginId: "onTrue" } },
+    ],
+    edges: [
+      { id: "e1", source: "start", target: "cond", isConditional: false },
+      { id: "e2", source: "cond", target: "t", isConditional: true, path: "true" },
+      { id: "e3", source: "t", target: "end", isConditional: false },
+    ],
+    stateSchema: {},
+  };
+  const stateSchema = buildStateSchema({ visited: { type: "string", required: false } });
+  const graph = compileGraph(abstraction, stateSchema, registry);
+
+  // No condition.field: the condition node's runnable returns {} immediately,
+  // and the conditional-edge router (isMatch stays false) falls back to the
+  // only available edge since there's no explicit "false" edge here.
+  const result = await graph.invoke({});
+  assertEquals(result.visited, "true-branch");
+});
+
+Deno.test("compileGraph - a plugin node executor is resolved by node.type when no pluginId-keyed entry exists in the registry", async () => {
+  const registry: NodeRegistry = {
+    // Keyed by node type ("plugin"), not by a specific pluginId.
+    plugin: async () => ({ visited: true }),
+  };
+  const abstraction: LangGraphAbstraction = {
+    nodes: [
+      ...baseNodes(),
+      { id: "n1", name: "Step", type: "plugin", config: { pluginId: "whatever-unregistered" } },
+    ],
+    edges: [
+      { id: "e1", source: "start", target: "n1", isConditional: false },
+      { id: "e2", source: "n1", target: "end", isConditional: false },
+    ],
+    stateSchema: {},
+  };
+  const stateSchema = buildStateSchema({ visited: { type: "boolean", required: false } });
+  const graph = compileGraph(abstraction, stateSchema, registry);
+
+  const result = await graph.invoke({});
+  assertEquals(result.visited, true);
 });
 
 Deno.test("compileGraph - plain conditional edges with no matching condition throws", async () => {
