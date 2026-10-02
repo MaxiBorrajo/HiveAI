@@ -72,9 +72,13 @@ jobs:
         working-directory: backend
         run: |
           deno install
-          mkdir -p ../out
+          mkdir -p ../build ../out
+          # Deno leaves a staging folder named after the output minus its last dot
+          # (HiveAI-0.1.4-x.deb -> HiveAI-0.1/), so build to a dot-free name inside
+          # build/ and only move the installer into out/, which is what gets published.
           deno desktop -A --include plugins --include ../frontend/dist --include infrastructure/db/migrations \
-            -o "../out/HiveAI-$VERSION-${{ matrix.arch }}.${{ matrix.ext }}" main.ts
+            -o "../build/HiveAI.${{ matrix.ext }}" main.ts
+          mv "../build/HiveAI.${{ matrix.ext }}" "../out/HiveAI-$VERSION-${{ matrix.arch }}.${{ matrix.ext }}"
 
       - uses: actions/upload-artifact@v4
         with:
