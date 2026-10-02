@@ -1,6 +1,8 @@
 import { setReadyVersion } from "../modules/app-updates/lib/update-state.ts";
 
-const RELEASES_URL = "https://github.com/MaxiBorrajo/HiveAI/releases/download";
+// The updater refuses HTTP redirects, and GitHub release downloads always redirect,
+// so the update files are served from a branch through raw.githubusercontent.com.
+const UPDATES_URL = "https://raw.githubusercontent.com/MaxiBorrajo/HiveAI/updates";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 export function startAutoUpdate(): void {
@@ -9,7 +11,7 @@ export function startAutoUpdate(): void {
   if (!Deno.desktopVersion || Deno.build.os !== "linux") return;
 
   Deno.autoUpdate({
-    url: `${RELEASES_URL}/updates-${Deno.build.os}-${Deno.build.arch}`,
+    url: `${UPDATES_URL}/${Deno.build.os}-${Deno.build.arch}`,
     interval: CHECK_INTERVAL_MS,
     onUpdateReady: (version: string) => {
       console.log(`Update ${version} downloaded; it applies on next launch.`);
