@@ -1,0 +1,161 @@
+name: Release
+
+# Pushing a branch named release-test/* runs the builds only (nothing is published),
+# so changes to this workflow can be tried before they reach main.
+on:
+  push:
+    branches: [main, "release-test/**"]
+    paths-ignore:
+      - "**.md"
+      - ".claude/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build everything but do not publish a release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DENO_VERSION: "2.9.5"
+  PATCH_HISTORY: 3
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: next
+        run: |
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          last=${last:-v0.0.0}
+          IFS=. read -r major minor patch <<< "${last#v}"
+          echo "version=$major.$minor.$((patch + 1))" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { arch: linux-x86_64, os: ubuntu-latest }
+          - { arch: darwin-aarch64, os: macos-latest }
+          - { arch: darwin-x86_64, os: macos-15-intel }
+          - { arch: windows-x86_64, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+
+      - name: Bake the version into the app
+        run: |
+          deno eval 'const p = "backend/deno.json"; const j = JSON.parse(Deno.readTextFileSync(p)); j.version = Deno.env.get("VERSION"); Deno.writeTextFileSync(p, JSON.stringify(j, null, 2) + "\n")'
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          deno install
+          deno task build
+
+      - name: Build the desktop app
+        working-directory: backend
+        run: |
+          deno install
+          deno desktop -A --include plugins --include ../frontend/dist --include infrastructure/db/migrations main.ts
+
+      - name: Package the app
+        run: |
+          mkdir -p out
+          case "$RUNNER_OS" in
+            Linux)   tar -czf "out/HiveAI-$VERSION-${{ matrix.arch }}.tar.gz" -C dist hive-ai ;;
+            macOS)   tar -czf "out/HiveAI-$VERSION-${{ matrix.arch }}.tar.gz" -C dist HiveAI.app ;;
+            Windows) 7z a -tzip "out/HiveAI-$VERSION-${{ matrix.arch }}.zip" ./dist/HiveAI ;;
+          esac
+
+      - name: Keep the runtime library
+        if: runner.os != 'Windows'
+        run: |
+          lib=$(find dist -type f \( -iname '*hive-ai*.so' -o -iname '*hive-ai*.dylib' \) -exec ls -S {} + | head -n1)
+          if [ -z "$lib" ]; then
+            echo "No runtime library found in dist:"
+            find dist -maxdepth 5
+            exit 1
+          fi
+          cp "$lib" "out/hive-ai-$VERSION-${{ matrix.arch }}.${lib##*.}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || !inputs.dry_run)
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - run: sudo apt-get install -y bsdiff
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: build-*
+          merge-multiple: true
+
+      - name: Publish the release
+        run: |
+          gh release create "v$VERSION" artifacts/* \
+            --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+
+      - name: Publish the update channels
+        run: |
+          previous=$(gh release list --limit 30 --json tagName --jq '.[].tagName' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$VERSION" | head -n "$PATCH_HISTORY" || true)
+
+          for arch in linux-x86_64 darwin-aarch64 darwin-x86_64; do
+            channel="updates-$arch"
+            rm -rf olds out
+            mkdir olds out
+
+            for tag in $previous; do
+              gh release download "$tag" --pattern "hive-ai-*-$arch.*" --dir olds || true
+            done
+
+            deno run -A backend/scripts/release/make-manifest.ts \
+              --version "$VERSION" \
+              --new "$(ls artifacts/hive-ai-$VERSION-$arch.*)" \
+              --olds olds --out out
+
+            gh release view "$channel" > /dev/null 2>&1 || gh release create "$channel" \
+              --target "$GITHUB_SHA" --prerelease --title "Updates $arch" \
+              --notes "Files the in-app updater reads. Generated by the release workflow; do not edit."
+            gh release upload "$channel" out/* --clobber
+
+            # Drop patches that the new manifest no longer references.
+            for asset in $(gh release view "$channel" --json assets --jq '.assets[].name' | grep '^patch-' || true); do
+              ls out | grep -qx "$asset" || gh release delete-asset "$channel" "$asset" --yes
+            done
+          done

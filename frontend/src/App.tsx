@@ -10,6 +10,7 @@ import { Chat } from "@/features/chats";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
 import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain";
+import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/features/models/ModelsContext";
 import { ChatsProvider, useChats } from "@/features/chats/ChatsContext";
@@ -119,6 +120,7 @@ function AppContent() {
 
   return (
     <div className="flex h-screen relative">
+      <UpdateBanner />
       <AppSidebar
         {...sidebarProps}
         actions={

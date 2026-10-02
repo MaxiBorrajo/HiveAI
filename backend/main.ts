@@ -7,6 +7,7 @@ import { homeDir } from "./core/env.ts";
 import { createApp } from "./bootstrap/create-app.ts";
 import { openDesktopWindow } from "./bootstrap/desktop.ts";
 import { loadPlugins } from "./bootstrap/load-plugins.ts";
+import { startAutoUpdate } from "./bootstrap/auto-update.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const hive = HiveMicrokernel.getInstance();
@@ -25,11 +26,11 @@ try {
     `VITE_API_URL=http://localhost:${port}`,
   );
 } catch {
-  // Compiled (desktop) builds cannot write the dev .env file.
 }
 
 console.log(`\nBackend is running on http://localhost:${port}`);
 openDesktopWindow(port);
+startAutoUpdate();
 
 hive.configure({
   model: hive.getConfig().get("model"),
