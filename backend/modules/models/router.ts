@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import { getModelInfo } from "./useCases/getModelInfo/index.ts";
-import { getModels } from "./useCases/getModels/index.ts";
-import { getCurrentModels } from "./useCases/getCurrentModels/index.ts";
-import { setModels } from "./useCases/setModels/index.ts";
-import { getEmbeddingModelStatus } from "./useCases/getEmbeddingModelStatus/index.ts";
-import { handlePullEmbeddingModel } from "./useCases/pullEmbeddingModel/index.ts";
+import { getModelInfo } from "./use-cases/get-model-info.ts";
+import { getModels } from "./use-cases/get-models.ts";
+import { getCurrentModels } from "./use-cases/get-current-models.ts";
+import { setModels } from "./use-cases/set-models.ts";
+import { getEmbeddingModelStatus } from "./use-cases/get-embedding-model-status.ts";
+import { handlePullEmbeddingModel } from "./use-cases/pull-embedding-model.ts";
 import { ModelFilters } from "./types.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 

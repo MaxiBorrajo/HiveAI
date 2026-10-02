@@ -1,14 +1,14 @@
 import { Hono } from "hono";
-import { handleGetPlugins } from "./useCases/getPlugins/index.ts";
-import { handleActivatePlugin } from "./useCases/activatePlugin/index.ts";
-import { handleDeactivatePlugin } from "./useCases/deactivatePlugin/index.ts";
-import { handleSetPluginsActive } from "./useCases/setPluginsActive/index.ts";
-import { handleTest } from "./useCases/testPlugin/index.ts";
-import { handleImportPlugin } from "./useCases/importPlugin/index.ts";
-import { handleRemovePlugin } from "./useCases/removePlugin/index.ts";
-import { handleExportPlugin } from "./useCases/exportPlugin/index.ts";
-import { handleEditPlugin } from "./useCases/editPlugin/index.ts";
-import { handleSaveTestResults } from "./useCases/saveTestResults/index.ts";
+import { handleGetPlugins } from "./use-cases/get-plugins/get-plugins.ts";
+import { handleActivatePlugin } from "./use-cases/activate-plugin.ts";
+import { handleDeactivatePlugin } from "./use-cases/deactivate-plugin.ts";
+import { handleSetPluginsActive } from "./use-cases/set-plugins-active.ts";
+import { handleTest } from "./use-cases/test-plugin/test-plugin.ts";
+import { handleImportPlugin } from "./use-cases/import-plugin.ts";
+import { handleRemovePlugin } from "./use-cases/remove-plugin.ts";
+import { handleExportPlugin } from "./use-cases/export-plugin.ts";
+import { handleEditPlugin } from "./use-cases/edit-plugin.ts";
+import { handleSaveTestResults } from "./use-cases/save-test-results.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { requireModelsConfigured } from "../../core/api/guards.ts";
 

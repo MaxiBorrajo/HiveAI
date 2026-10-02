@@ -29,10 +29,8 @@ Deno.test("coerceLlmBooleanReply - recognizes JSON-ish is_valid patterns", () =>
   assertEquals(coerceLlmBooleanReply('{"is_valid": true}'), true);
 });
 
-Deno.test("coerceLlmBooleanReply - any mention of 'true' anywhere counts (documented loose behavior)", () => {
-  // This is a real quirk: "not true" or "true-ish" would also be coerced to true,
-  // since the last fallback is `clean.includes("true")`.
-  assertEquals(coerceLlmBooleanReply("that is not true"), true);
+Deno.test("coerceLlmBooleanReply - explicit negations like 'not true' are recognized as false", () => {
+  assertEquals(coerceLlmBooleanReply("that is not true"), false);
 });
 
 Deno.test("coerceLlmBooleanReply - plain 'false' with no 'true' substring is false", () => {

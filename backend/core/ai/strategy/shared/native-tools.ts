@@ -1,7 +1,7 @@
 import { tool, type DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { getORM } from "../../../../infrastructure/db/orm.ts";
-import { MessageRepository } from "../../../../infrastructure/db/repositories/MessageRepository.ts";
+import { MessageRepository } from "../../../../infrastructure/db/repositories/message-repository.ts";
 import { humanInteractionQueue } from "../../../microkernel/human-interaction.ts";
 
 const RECALL_TOOL_NAME = "recall_past_conversations";
@@ -89,13 +89,13 @@ function buildAskUserTool(): NativeTool {
   );
 }
 
-export function buildNativeTools(chatId: number): NativeTool[] {
-  return [buildRecallTool(chatId), buildAskUserTool()];
+export function buildNativeTools(chatId: number | string): NativeTool[] {
+  return [buildRecallTool(Number(chatId)), buildAskUserTool()];
 }
 
 export function getNativeTool(
   name: string,
-  chatId: number,
+  chatId: number | string,
 ): NativeTool | undefined {
   return buildNativeTools(chatId).find((t) => t.name === name);
 }

@@ -1,9 +1,9 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { ChatOllama } from "@langchain/ollama";
-import { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
-import z from "zod";
-import { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
-import { buildWorkflowSkeletonSchema } from "./generation/topology-compiler.ts";
+import type { ChatOllama } from "@langchain/ollama";
+import type { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
+import type z from "zod";
+import type { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
+import type { buildWorkflowSkeletonSchema } from "./generation/topology-compiler.ts";
 
 export type ReducerStrategy =
   | "overwrite"
@@ -58,22 +58,8 @@ export interface ToolProvider {
   getTool(name: string): StructuredToolInterface | undefined;
 }
 
-export type ConditionOperator =
-  | "equals"
-  | "not_equals"
-  | "greater_than"
-  | "greater_than_or_equals"
-  | "less_than"
-  | "less_than_or_equals"
-  | "contains"
-  | "not_contains"
-  | "starts_with"
-  | "ends_with"
-  | "is_empty"
-  | "is_not_empty"
-  | "in"
-  | "not_in"
-  | "regex_match";
+export type { ConditionOperator } from "./constants.ts";
+import type { ConditionOperator } from "./constants.ts";
 
 export interface ConditionConfig {
   field: string; 
@@ -155,6 +141,7 @@ export type IncrementalEvent =
       stateProperties?: Record<string, any>;
     }
   | { type: "edge_added"; edge: GraphEdge }
+  | { type: "node_deleted"; nodeId: string }
   | {
       type: "validation_error";
       violations: InputMappingViolation[];
@@ -175,11 +162,21 @@ export type ViolationKind =
   | "missing_condition_branch"
   | "condition_branches_converge"
   | "invalid_node_shape"
-  | "condition_edge_missing_path";
+  | "condition_edge_missing_path"
+  | "duplicate_node_id"
+  | "duplicate_edge_id"
+  | "invalid_start_end_count"
+  | "dangling_edge"
+  | "invalid_edge"
+  | "unreachable_node"
+  | "cannot_reach_end"
+  | "invalid_output_key"
+  | "invalid_node_config";
 
 export interface InputMappingViolation {
   kind: ViolationKind;
   nodeId: string;
+  edgeId?: string;
   nodeName: string;
   field: string;
   invalidValue: string;
@@ -251,6 +248,7 @@ export interface NormalizedSkeleton {
   intermediateNodes: GraphNode[];
   nodeDescriptions: Map<string, string>;
   rawEdges: GraphEdge[];
+  modifiedIds: Set<string>;
 }
 
 export type SkeletonNode = WorkflowSkeleton["nodes"][number];

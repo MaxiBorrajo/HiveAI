@@ -40,11 +40,68 @@ function launchBash(command: string): { bin: string; args: string[] } {
   return { bin: "bash", args: ["-c", command] };
 }
 
+function isWithinAllowedRoot(path: string, root: string): boolean {
+  const normalizedRoot = resolve(root);
+  const normalizedPath = resolve(path);
+  return (
+    normalizedPath === normalizedRoot ||
+    normalizedPath.startsWith(normalizedRoot + sep)
+  );
+}
+
+async function readStreamCapped(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  onOverflow: () => void,
+): Promise<{ text: string; truncated: boolean }> {
+  const decoder = new TextDecoder();
+  const reader = stream.getReader();
+  let text = "";
+  let totalBytes = 0;
+  let truncated = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        const keep = maxBytes - (totalBytes - value.byteLength);
+        if (keep > 0) text += decoder.decode(value.slice(0, keep));
+        truncated = true;
+        onOverflow();
+        break;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // stream may already be closed
+    }
+  }
+
+  return { text, truncated };
+}
+
+async function killProcessTree(pid: number): Promise<void> {
+  try {
+    if (Deno.build.os === "windows") {
+      await new Deno.Command("taskkill", {
+        args: ["/PID", String(pid), "/T", "/F"],
+      }).output();
+    } else {
+      await new Deno.Command("kill", { args: ["-9", String(pid)] }).output();
+    }
+  } catch {
+    // best-effort: process may have already exited
+  }
+}
+
 function isSafeInspectionCommand(command: string): boolean {
   const trimmed = command.trim();
-  // Strip safe stderr redirects (e.g. 2>/dev/null, 2>&1) before checking redirection operators
   const withoutSafeRedirection = trimmed.replace(/2>\s*\/dev\/null|2>&1/g, "");
-  // Disallow file output redirections (except safe /tmp/ logging) or dangerous write commands
   if (
     />\s*(?!\/tmp\/)|\brm\s|\bmv\s|\bsudo\b|\bchmod\b|\bchown\b|\bkill\b|\bpkill\b|\bmkfs\b|\bdd\b|\btruncate\b/i.test(
       withoutSafeRedirection,
@@ -52,7 +109,7 @@ function isSafeInspectionCommand(command: string): boolean {
   ) {
     return false;
   }
-  // Allow common inspection, formatting and test commands
+  
   const safePatterns = [
     /^(ps|top|df|free|head|tail|ls|grep|cat|uptime|wc|pwd|date|uname|whoami|echo|which|du|awk|sed|cut|tee|sort|uniq|tr)\b/i,
     /^git\s+(status|log|diff|branch|show)\b/i,
@@ -61,7 +118,6 @@ function isSafeInspectionCommand(command: string): boolean {
     /^node\s+(-e|--check)\b/i,
   ];
 
-  // If piped or chained (e.g. ps aux | head -n 5 && df -h), check each sub-command
   const subcommands = trimmed
     .split(/&&|\|\||\||;/)
     .map((s) => s.trim())
@@ -270,6 +326,13 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       } catch {
         return `Error: The provided 'cwd' (${cwd}) does not exist or is inaccessible.`;
       }
+      const stat = await Deno.stat(realCwd);
+      if (!stat.isDirectory) {
+        return `Error: The provided 'cwd' (${cwd}) is a file, not a directory.`;
+      }
+      if (!isWithinAllowedRoot(realCwd, homedir())) {
+        return `Error: The provided 'cwd' (${cwd}) is outside the allowed directory (${homedir()}).`;
+      }
     }
 
     let approved = false;
@@ -300,7 +363,7 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     console.log(`[run-shell] ✅ Command approved. Executing...`);
 
     let killedReason: "timeout" | "aborted" | undefined;
-    let timeoutId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
 
     try {

@@ -1,7 +1,7 @@
 import { assert, assertFalse } from "@std/assert";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
-import { PluginStateRepository } from "../../infrastructure/db/repositories/PluginStateRepository.ts";
+import { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
 
 async function makeHive(pluginName: string) {

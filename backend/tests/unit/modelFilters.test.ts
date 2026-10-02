@@ -1,5 +1,5 @@
 import { assert, assertFalse } from "@std/assert";
-import { matchesFilters } from "../../modules/models/useCases/getModels/index.ts";
+import { matchesFilters } from "../../modules/models/use-cases/get-models.ts";
 import type { ModelInfo } from "../../modules/models/types.ts";
 
 function makeModel(overrides: Partial<ModelInfo> = {}): ModelInfo {

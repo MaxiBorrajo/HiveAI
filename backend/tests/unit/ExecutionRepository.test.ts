@@ -1,6 +1,6 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { initORM } from "../../infrastructure/db/orm.ts";
-import { ExecutionRepository } from "../../infrastructure/db/repositories/ExecutionRepository.ts";
+import { ExecutionRepository } from "../../infrastructure/db/repositories/execution-repository.ts";
 
 // initORM caches a single db instance per process, so every call here shares
 // the same underlying sqlite file. Tests must use unique names/ids and only
@@ -45,8 +45,8 @@ Deno.test("ExecutionRepository.findAll includes a freshly created row and orders
   });
 
   const all = await repo.findAll();
-  const olderIdx = all.findIndex((e) => e.id === older.id);
-  const newerIdx = all.findIndex((e) => e.id === newer.id);
+  const olderIdx = all.findIndex((e: { id: number }) => e.id === older.id);
+  const newerIdx = all.findIndex((e: { id: number }) => e.id === newer.id);
   assertExists(olderIdx >= 0 && newerIdx >= 0 ? true : undefined);
   // newer (higher updatedAt) must appear before older in descending order
   assertEquals(newerIdx < olderIdx, true);

@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertFalse } from "@std/assert";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
-import { setPluginsActive } from "../../modules/plugins/useCases/setPluginsActive/index.ts";
+import { setPluginsActive } from "../../modules/plugins/use-cases/set-plugins-active.ts";
 
 async function makeHiveWithTwoPlugins() {
   const tempDir = await Deno.makeTempDir();

@@ -8,20 +8,58 @@ import {
   BaseMessage,
 } from "@langchain/core/messages";
 import { ToolProvider, LlmConfig } from "../types.ts";
-import { mapTypeToZod } from "../utils.ts";
+import { mapTypeToZod } from "./state.ts";
 
-// Interprets a raw LLM text reply as a boolean. Shared by the LLM node's
-// boolean-output mapping and the visual-builder condition semantic fallback,
-// so both agree on what counts as "true".
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
-  return (
-    clean === "true" ||
-    clean.startsWith("true") ||
-    clean.includes("is_valid: true") ||
-    clean.includes('is_valid": true') ||
-    clean.includes("true")
-  );
+  if (clean.startsWith("true")) return true;
+  if (/\bfalse\b|\bnot\s+true\b|\buntrue\b/.test(clean)) return false;
+  return /\btrue\b/.test(clean);
+}
+
+const MAX_CONTEXT_VALUE_CHARS = 4000;
+const MAX_REACT_ITERATIONS = 8;
+const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
+  "input",
+  "messages",
+  "feedback",
+  "model",
+]);
+
+function resolveModelName(model: unknown): string {
+  if (typeof model === "string") return model;
+  const obj = model as { name?: string; value?: string };
+  const name = obj.name || obj.value || String(model);
+  return name;
+}
+
+function createChatModel(config: LlmConfig, temperature: number): ChatOllama {
+  const {
+    model,
+    plugins: _plugins,
+    systemPrompt: _systemPrompt,
+    pluginId: _pluginId,
+    structuredOutput: _structuredOutput,
+    outputKey: _outputKey,
+    inputMapping: _inputMapping,
+    ...modelOptions
+  } = config;
+
+  return new ChatOllama({
+    model: resolveModelName(model),
+    temperature,
+    ...modelOptions,
+  });
+}
+
+function toolResultToString(toolResult: unknown): string {
+  if (typeof toolResult === "string") return toolResult;
+  const content = (toolResult as { content?: unknown } | null)?.content;
+  return typeof content === "string" ? content : JSON.stringify(toolResult);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function buildLlmInstance(
@@ -49,39 +87,19 @@ export function buildLlmInstance(
     }
   }
 
-  const {
-    model,
-    plugins,
-    systemPrompt,
-    pluginId,
-    structuredOutput,
-    outputKey,
-    ...customLlmConfig
-  } = config;
-
-  if (!model) {
+  if (!config.model) {
     throw new Error(
       `[Compiler Native LLM] No model was specified for node '${nodeId}'.`,
     );
   }
-  let modelName = typeof model === "string" ? model : (model as any).name || (model as any).value || String(model);
-  if (modelName === "[object Object]") {
-    // Ultimate fallback if it generated a weird object
-    modelName = "qwen3:1.7b";
-  }
 
+  const llm = createChatModel(config, 0.8);
   console.log(
-    `\n[Compiler Native LLM] Executing model: ${modelName} for node ${nodeId}`,
+    `\n[Compiler Native LLM] Executing model: ${llm.model} for node ${nodeId}`,
   );
   if (toolsToBind.length > 0) {
     console.log(`[Compiler Native LLM] Tools bound: ${toolsToBind.length}`);
   }
-
-  const llm = new ChatOllama({
-    model: modelName,
-    temperature: 0.8,
-    ...customLlmConfig,
-  });
 
   let runnableLlm: Runnable = llm as unknown as Runnable;
 
@@ -90,14 +108,25 @@ export function buildLlmInstance(
     runnableLlm = llm.bindTools(toolsToBind);
   }
 
-  if (structuredOutput) {
+  if (config.structuredOutput) {
     console.log(`[Compiler Native LLM] Applying Structured Output Schema`);
-    const zodSchema = mapTypeToZod(structuredOutput);
+    const zodSchema = mapTypeToZod(config.structuredOutput);
     // @ts-expect-error ChatOllama supports withStructuredOutput but types may mismatch Runnable
     runnableLlm = runnableLlm.withStructuredOutput(zodSchema);
   }
 
   return runnableLlm;
+}
+
+export function interpolateState(
+  template: string,
+  state: Record<string, unknown>,
+): string {
+  return template.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => {
+    const value = state[name];
+    if (value === undefined || value === null) return match;
+    return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  });
 }
 
 export function buildPromptMessages(
@@ -107,7 +136,9 @@ export function buildPromptMessages(
   const messagesToSend: BaseMessage[] = [];
 
   if (config.systemPrompt) {
-    messagesToSend.push(new SystemMessage(config.systemPrompt as string));
+    messagesToSend.push(
+      new SystemMessage(interpolateState(config.systemPrompt as string, state)),
+    );
   }
 
   if (state.feedback) {
@@ -139,39 +170,37 @@ export function buildPromptMessages(
     }
   }
 
-  // Format contextual state data (input, variables created by previous steps)
   const contextParts: string[] = [];
   if (state.input && typeof state.input === "string") {
     contextParts.push(`USER GOAL / INPUT:\n${state.input}`);
   }
-
-  // If this node declares an inputMapping (label -> bare state key), it
-  // REPLACES the full-state dump below with only the declared subset —
-  // this is what makes a node's data dependencies explicit and auditable
-  // instead of every node seeing the entire accumulated state.
-  const inputMapping = config.inputMapping as Record<string, string> | undefined;
+  const inputMapping = config.inputMapping as
+    | Record<string, string>
+    | undefined;
   if (inputMapping && Object.keys(inputMapping).length > 0) {
     for (const [label, stateKey] of Object.entries(inputMapping)) {
       const resolved = state[stateKey];
       if (resolved === undefined || resolved === null) continue;
       const valStr =
-        typeof resolved === "string" ? resolved : JSON.stringify(resolved, null, 2);
-      contextParts.push(`CONTEXT [${label}]:\n${valStr.slice(0, 4000)}`);
+        typeof resolved === "string"
+          ? resolved
+          : JSON.stringify(resolved, null, 2);
+      contextParts.push(
+        `CONTEXT [${label}]:\n${valStr.slice(0, MAX_CONTEXT_VALUE_CHARS)}`,
+      );
     }
   } else {
     for (const [key, value] of Object.entries(state)) {
       if (
-        key !== "input" &&
-        key !== "messages" &&
-        key !== "feedback" &&
-        key !== "model" &&
+        !STATE_KEYS_EXCLUDED_FROM_CONTEXT.has(key) &&
         value !== undefined &&
         value !== null
       ) {
         const valStr =
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
-        // Include reasonable slice to prevent prompt explosion
-        contextParts.push(`CONTEXT [${key}]:\n${valStr.slice(0, 4000)}`);
+        contextParts.push(
+          `CONTEXT [${key}]:\n${valStr.slice(0, MAX_CONTEXT_VALUE_CHARS)}`,
+        );
       }
     }
   }
@@ -188,7 +217,6 @@ export function buildPromptMessages(
       );
     }
   } else if (contextParts.length > 0) {
-    // If state context exists, inject it as supplementary context
     messagesToSend.push(
       new HumanMessage(
         `CURRENT MEMORY STATE CONTEXT:\n${contextParts.join("\n\n")}`,
@@ -207,6 +235,150 @@ export function buildPromptMessages(
  * `llmFactory` is test-only: pass it to substitute a fake chat model instead of
  * a real ChatOllama instance (e.g. to unit-test the ReAct loop deterministically).
  */
+type ToolLike = {
+  name: string;
+  invoke(args: unknown): Promise<unknown>;
+};
+
+function resolveTools(
+  nodeId: string,
+  config: LlmConfig,
+  toolProvider?: ToolProvider,
+): ToolLike[] {
+  const requested = Array.isArray(config.plugins)
+    ? config.plugins.filter((p): p is string => typeof p === "string")
+    : [];
+  if (requested.length === 0) return [];
+
+  if (!toolProvider) {
+    throw new Error(
+      `Node '${nodeId}' requests plugins [${requested.join(", ")}], but no ToolProvider was provided.`,
+    );
+  }
+
+  const tools: ToolLike[] = [];
+  for (const name of requested) {
+    const tool = toolProvider.getTool(name);
+    if (tool) {
+      tools.push(tool as unknown as ToolLike);
+    } else {
+      console.warn(
+        `[LLM Agent Node ${nodeId}] Tool '${name}' requested but not found in ToolProvider.`,
+      );
+    }
+  }
+  return tools;
+}
+
+async function runToolCall(
+  nodeId: string,
+  toolCall: { name: string; args: Record<string, unknown>; id?: string },
+  toolProvider?: ToolProvider,
+): Promise<ToolMessage> {
+  const callId = toolCall.id || `call_${crypto.randomUUID().slice(0, 8)}`;
+  const tool = toolProvider?.getTool(toolCall.name);
+
+  if (!tool) {
+    return new ToolMessage({
+      tool_call_id: callId,
+      name: toolCall.name,
+      content: `Error: Tool '${toolCall.name}' is not registered.`,
+    });
+  }
+
+  try {
+    console.log(
+      `[LLM Agent Node ${nodeId}] Executing tool '${toolCall.name}' with args:`,
+      toolCall.args,
+    );
+    const content = toolResultToString(await tool.invoke(toolCall.args));
+    console.log(
+      `[LLM Agent Node ${nodeId}] Tool '${toolCall.name}' output received (${content.length} chars).`,
+    );
+    return new ToolMessage({
+      tool_call_id: callId,
+      name: toolCall.name,
+      content,
+    });
+  } catch (toolErr) {
+    const detail = errorMessage(toolErr);
+    console.error(
+      `[LLM Agent Node ${nodeId}] Tool '${toolCall.name}' execution error:`,
+      detail,
+    );
+    return new ToolMessage({
+      tool_call_id: callId,
+      name: toolCall.name,
+      content: `Error executing tool '${toolCall.name}': ${detail}`,
+    });
+  }
+}
+
+async function runReactLoop(
+  nodeId: string,
+  baseLlm: ChatOllama,
+  tools: ToolLike[],
+  messages: BaseMessage[],
+  toolProvider?: ToolProvider,
+): Promise<unknown> {
+  console.log(
+    `\n[LLM Agent Node ${nodeId}] Starting autonomous ReAct loop with tools: [${tools.map((t) => t.name).join(", ")}]`,
+  );
+
+  // deno-lint-ignore no-explicit-any
+  const boundLlm = (baseLlm as any).bindTools(tools);
+  const conversation: BaseMessage[] = [...messages];
+
+  for (let iteration = 1; iteration <= MAX_REACT_ITERATIONS; iteration++) {
+    console.log(
+      `[LLM Agent Node ${nodeId}] Iteration #${iteration} invoking model...`,
+    );
+
+    const response = (await boundLlm.invoke(conversation)) as AIMessage;
+    conversation.push(response);
+
+    const toolCalls = response.tool_calls ?? [];
+    if (toolCalls.length === 0) {
+      console.log(
+        `[LLM Agent Node ${nodeId}] Agent reached conclusion after ${iteration} iterations.`,
+      );
+      return response;
+    }
+
+    console.log(
+      `[LLM Agent Node ${nodeId}] Agent requested ${toolCalls.length} tool call(s):`,
+      toolCalls
+        .map((tc) => `${tc.name}(${JSON.stringify(tc.args)})`)
+        .join(", "),
+    );
+
+    for (const toolCall of toolCalls) {
+      conversation.push(await runToolCall(nodeId, toolCall, toolProvider));
+    }
+  }
+
+  return conversation[conversation.length - 1];
+}
+
+function resolveModelOptions(config: LlmConfig, temperature: number) {
+  const {
+    model,
+    plugins: _plugins,
+    systemPrompt: _systemPrompt,
+    pluginId: _pluginId,
+    structuredOutput: _structuredOutput,
+    outputKey: _outputKey,
+    inputMapping: _inputMapping,
+    ...modelOptions
+  } = config;
+
+  return {
+    model: resolveModelName(model),
+    temperature,
+    ...modelOptions,
+  };
+}
+
 export async function executeLlmNode(
   nodeId: string,
   config: LlmConfig,
@@ -216,166 +388,30 @@ export async function executeLlmNode(
     new ChatOllama(opts as any),
 ): Promise<Record<string, unknown>> {
   try {
-    const rawPlugins = config.plugins;
-    const requestedPlugins: string[] = Array.isArray(rawPlugins)
-      ? rawPlugins.filter((p): p is string => typeof p === "string")
-      : [];
-
-    const toolsToBind: any[] = [];
-    if (requestedPlugins.length > 0) {
-      if (!toolProvider) {
-        throw new Error(
-          `Node '${nodeId}' requests plugins [${requestedPlugins.join(", ")}], but no ToolProvider was provided.`,
-        );
-      }
-      for (const pName of requestedPlugins) {
-        const tool = toolProvider.getTool(pName);
-        if (tool) {
-          toolsToBind.push(tool);
-        } else {
-          console.warn(
-            `[LLM Agent Node ${nodeId}] Tool '${pName}' requested but not found in ToolProvider.`,
-          );
-        }
-      }
-    }
-
-    const {
-      model,
-      plugins,
-      systemPrompt,
-      pluginId,
-      structuredOutput,
-      outputKey,
-      ...customLlmConfig
-    } = config;
-
-    let modelName =
-      typeof model === "string"
-        ? model
-        : (model as any)?.name || (model as any)?.value || String(model || "qwen3:8b");
-    if (modelName === "[object Object]") {
-      modelName = "qwen3:8b";
-    }
-
-    const baseLlm = llmFactory({
-      model: modelName,
-      temperature: 0.2,
-      ...customLlmConfig,
-    });
-
+    const tools = resolveTools(nodeId, config, toolProvider);
+    const baseLlm = llmFactory(resolveModelOptions(config, 0.2));
     const messages = buildPromptMessages(state, config);
 
-    // Case 1: Simple LLM (No tools assigned)
-    if (toolsToBind.length === 0) {
-      let runnable: Runnable = baseLlm as unknown as Runnable;
-      if (structuredOutput) {
-        const zodSchema = mapTypeToZod(structuredOutput);
-        runnable = (baseLlm as any).withStructuredOutput(zodSchema);
-      }
-      const response = await runnable.invoke(messages);
-      return mapResponseToState(response, config, state);
-    }
-
-    // Case 2: Autonomous AI Agent Node (ReAct Tool Loop)
-    console.log(
-      `\n[LLM Agent Node ${nodeId}] Starting autonomous ReAct loop with tools: [${toolsToBind.map((t) => t.name).join(", ")}]`,
-    );
-
-    const boundLlm = (baseLlm as any).bindTools(toolsToBind);
-    const conversation: BaseMessage[] = [...messages];
-    const maxIterations = 8;
-    let iteration = 0;
-    let finalResponse: unknown = null;
-
-    while (iteration < maxIterations) {
-      iteration++;
-      console.log(
-        `[LLM Agent Node ${nodeId}] Iteration #${iteration} invoking model...`,
+    if (tools.length > 0) {
+      const finalResponse = await runReactLoop(
+        nodeId,
+        baseLlm,
+        tools,
+        messages,
+        toolProvider,
       );
+      return mapResponseToState(finalResponse, config, state);
+    }
 
-      const response = (await boundLlm.invoke(conversation)) as AIMessage;
-      conversation.push(response);
-
-      const toolCalls = (response as any).tool_calls as
-        | Array<{ name: string; args: Record<string, unknown>; id?: string }>
-        | undefined;
-
-      if (!toolCalls || toolCalls.length === 0) {
-        console.log(
-          `[LLM Agent Node ${nodeId}] Agent reached conclusion after ${iteration} iterations.`,
-        );
-        finalResponse = response;
-        break;
-      }
-
-      console.log(
-        `[LLM Agent Node ${nodeId}] Agent requested ${toolCalls.length} tool call(s):`,
-        toolCalls.map((tc) => `${tc.name}(${JSON.stringify(tc.args)})`).join(", "),
+    let runnable: Runnable = baseLlm as unknown as Runnable;
+    if (config.structuredOutput) {
+      // deno-lint-ignore no-explicit-any
+      runnable = (baseLlm as any).withStructuredOutput(
+        mapTypeToZod(config.structuredOutput),
       );
-
-      for (const tc of toolCalls) {
-        const tool = toolProvider?.getTool(tc.name);
-        const callId = tc.id || `call_${crypto.randomUUID().slice(0, 8)}`;
-
-        if (!tool) {
-          conversation.push(
-            new ToolMessage({
-              tool_call_id: callId,
-              name: tc.name,
-              content: `Error: Tool '${tc.name}' is not registered.`,
-            }),
-          );
-          continue;
-        }
-
-        try {
-          console.log(
-            `[LLM Agent Node ${nodeId}] Executing tool '${tc.name}' with args:`,
-            tc.args,
-          );
-          const toolResult = await tool.invoke(tc.args);
-          const contentStr =
-            typeof toolResult === "string"
-              ? toolResult
-              : typeof (toolResult as any)?.content === "string"
-                ? (toolResult as any).content
-                : JSON.stringify(toolResult);
-
-          console.log(
-            `[LLM Agent Node ${nodeId}] Tool '${tc.name}' output received (${contentStr.length} chars).`,
-          );
-
-          conversation.push(
-            new ToolMessage({
-              tool_call_id: callId,
-              name: tc.name,
-              content: contentStr,
-            }),
-          );
-        } catch (toolErr) {
-          const errMsg =
-            toolErr instanceof Error ? toolErr.message : String(toolErr);
-          console.error(
-            `[LLM Agent Node ${nodeId}] Tool '${tc.name}' execution error:`,
-            errMsg,
-          );
-          conversation.push(
-            new ToolMessage({
-              tool_call_id: callId,
-              name: tc.name,
-              content: `Error executing tool '${tc.name}': ${errMsg}`,
-            }),
-          );
-        }
-      }
     }
-
-    if (!finalResponse) {
-      finalResponse = conversation[conversation.length - 1];
-    }
-
-    return mapResponseToState(finalResponse, config, state);
+    const response = await runnable.invoke(messages);
+    return mapResponseToState(response, config, state);
   } catch (err: unknown) {
     return handleLlmError(err, nodeId, config);
   }
@@ -404,7 +440,6 @@ export function mapResponseToState(
 
   if (isBooleanField) {
     if (typeof resultValue === "boolean") {
-      // already a boolean primitive
     } else if (typeof resultValue === "string") {
       resultValue = coerceLlmBooleanReply(resultValue);
     } else if (typeof resultValue === "object" && resultValue !== null) {
@@ -424,7 +459,6 @@ export function mapResponseToState(
 
   if (outKey) {
     stateUpdate[outKey] = resultValue;
-    // Guarantee state.result is always populated for any primary content node
     if (outKey !== "result" && !isBooleanField) {
       stateUpdate.result = resultValue;
     }
@@ -449,7 +483,7 @@ export function handleLlmError(
   nodeId: string,
   config: LlmConfig,
 ): Record<string, unknown> {
-  const errorMsg = error instanceof Error ? error.message : String(error);
+  const errorMsg = errorMessage(error);
   console.error(
     `[Compiler Native LLM] Network error with Ollama (Node ${nodeId}):`,
     errorMsg,

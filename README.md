@@ -68,6 +68,15 @@ deno task build:desktop
 
 Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta `dist/` en la raíz del proyecto.
 
+### Releases y avisos de actualización
+
+Cada merge a `main` publica solo la próxima versión de patch (`v0.1.0` → `v0.1.1`) con `.github/workflows/release.yml`; el último tag `v*` es la fuente de verdad y no se commitea nada de vuelta. Los cambios que solo tocan `*.md` no generan release. Para probar los builds sin publicar, pusheá una rama `release-test/<nombre>` (solo compila) o, ya en `main`, corré el workflow a mano (*Actions → Release → Run workflow*) con `dry_run` activado.
+
+- **Qué se publica:** un instalador por plataforma, con la versión en el nombre: `HiveAI-X.Y.Z-linux-x86_64.deb` (se abre con doble clic en la tienda de software) y `HiveAI-X.Y.Z-windows-x86_64.msi`. macOS no se publica por ahora.
+- **Cómo se entera la app:** `GET /api/app/update` (`backend/modules/app-updates/`) compara la versión compilada en el binario (`Deno.desktopVersion`) con la última release de GitHub, cacheado una hora. El frontend muestra un aviso con el link al instalador de ese sistema; el usuario lo descarga e instala encima.
+- **Por qué no se actualiza solo:** `Deno.autoUpdate` parchea un archivo junto al ejecutable, y el `.deb` instala en `/usr/lib` (de root) y en Windows Deno no puede reemplazar la DLL cargada. Si en algún momento se vuelve a una carpeta portable en Linux, se podría retomar (ver el historial de git).
+- **En desarrollo** no hay versión compilada y no avisa nada. Para ver el aviso, levantá el backend con `HIVEAI_VERSION_OVERRIDE=0.0.1`.
+
 ---
 
 ## Tests
@@ -91,7 +100,7 @@ deno test -A tests/unit/setPluginsActive.test.ts
 **Ubicación — dos convenciones conviven:**
 - `backend/tests/unit/` — carpeta central para tests de use cases, repositorios y flujos que cruzan varios módulos (ej. `PluginStateRepository.test.ts`, `HiveMicrokernel.pluginState.test.ts`, `setPluginsActive.test.ts`, `pluginsRouter.batchActive.test.ts`).
 - Archivos `nombre.test.ts` junto al módulo, para lo que es puramente local a ese archivo:
-  - `core/ai/strategy/SCOUT/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
+  - `core/ai/strategy/scout/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
   - `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
   - `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`.
 
@@ -126,7 +135,38 @@ Requiere Ollama corriendo con un modelo de tool-calling ya descargado (`ollama p
 
 Los casos viven en `backend/tests/llm-eval/cases.ts` (routing, abstención, extracción de parámetros — fácil de extender agregando entradas al array). El runner (`run.ts`) imprime resultado por caso y un resumen de **pass rate por categoría** al final — un 8/10 puntual no es necesariamente una regresión (varianza propia del modelo), pero una caída sostenida sí es señal de que algo se rompió (un prompt, una descripción de plugin ambigua, etc.). Correrlo manualmente antes de tocar prompts del Agent/Executor o descripciones de plugins, no en cada commit.
 
-**Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/context/` y `src/lib/`, no snapshots de UI.
+**Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/features/*/lib/`, `src/features/*/api/`, `src/hooks/` y `src/lib/`, no snapshots de UI.
+
+---
+
+## Estructura del proyecto y convenciones
+
+### Backend (`backend/`)
+```
+main.ts                 entrada (la usan build-desktop.sh y deno.json)
+bootstrap/              arranque: create-app.ts, desktop.ts, load-plugins.ts
+core/                   plataforma transversal, sin lógica de features
+  api/ ollama/ files/ memory/ microkernel/ ai/ env.ts
+modules/<feature>/      un slice por feature: router.ts, types.ts, use-cases/, lib/
+infrastructure/db/      orm, schema/, repositories/, migrations/
+plugins/                plugins incluidos (cada uno con su bee-plugin.ts)
+config/  experiments/
+```
+- Archivos y carpetas en `kebab-case` (`send-message.ts`, `use-cases/`); las clases dentro siguen en PascalCase.
+- Un caso de uso es un archivo con su nombre (`use-cases/send-message.ts`); solo tiene carpeta si necesita archivos auxiliares (`run-execution/run-execution.ts` + `plugin-node-executor.ts`).
+- Tests: junto al archivo si prueban algo local (`send-message.test.ts`), o en `tests/unit/` si cruzan módulos. Sin `index.ts` en el backend.
+
+### Frontend (`frontend/src/`)
+```
+features/<feature>/     chats, drafts, executions, interactions, models, modes, plugins
+  api/ components/ hooks/ lib/ types.ts   (+ Contexto.tsx si hay)
+components/             ui/ (shadcn) y componentes compartidos de la app
+hooks/                  hooks compartidos (useCopyFeedback, useKeyedState...)
+lib/                    infraestructura (apiClient, sse, toastManager...) y utils.ts de shadcn
+```
+- Componentes `PascalCase.tsx`; hooks `useAlgo.ts`; el resto `camelCase.ts`. `components/ui/` y `lib/utils.ts` mantienen su nombre por shadcn.
+- Las features usan los mismos nombres que los módulos del backend.
+- Una feature no importa los componentes internos de otra salvo a través de su `types.ts`, su `api/` o su `index.ts` raíz.
 
 ---
 

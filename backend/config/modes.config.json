@@ -11,7 +11,6 @@
         "defaultValue": "q4_0",
         "currentValue": "q4_0",
         "options": ["q8_0", "q4_0"],
-        "options": ["q8_0", "q4_0"],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
@@ -137,7 +136,6 @@
         "type": "string",
         "defaultValue": "f16",
         "currentValue": "f16",
-        "options": ["f16", "q8_0"],
         "options": ["f16", "q8_0"],
         "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true

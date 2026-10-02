@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
-import { fetchCurrentModels } from "../../modules/models/useCases/getCurrentModels/index.ts";
+import { fetchCurrentModels } from "../../modules/models/use-cases/get-current-models.ts";
 
 Deno.test("fetchCurrentModels reflects whatever model is configured on the hive", async () => {
   const tempDir = await Deno.makeTempDir();

@@ -1,9 +1,10 @@
+import { parseId } from "../../core/api/errors.ts";
 import { Hono } from "hono";
-import { listChats } from "./useCases/listChats/index.ts";
-import { getChatMessages } from "./useCases/getChatMessages/index.ts";
-import { deleteChat } from "./useCases/deleteChat/index.ts";
-import { updateChat } from "./useCases/updateChat/index.ts";
-import { sendMessage } from "./useCases/sendMessage/index.ts";
+import { listChats } from "./use-cases/list-chats.ts";
+import { getChatMessages } from "./use-cases/get-chat-messages.ts";
+import { deleteChat } from "./use-cases/delete-chat.ts";
+import { updateChat } from "./use-cases/update-chat.ts";
+import { sendMessage } from "./use-cases/send-message.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
 import {
@@ -53,19 +54,19 @@ chatsRouter.get("/:id", async (c) => {
 chatsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return deleteChat(db, parseInt(c.req.param("id")), headers);
+  return deleteChat(db, parseId(c.req.param("id")), headers);
 });
 
 chatsRouter.patch("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
-  return updateChat(db, parseInt(c.req.param("id")), body, headers);
+  return updateChat(db, parseId(c.req.param("id")), body, headers);
 });
 
 chatsRouter.put("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
-  return updateChat(db, parseInt(c.req.param("id")), body, headers);
+  return updateChat(db, parseId(c.req.param("id")), body, headers);
 });

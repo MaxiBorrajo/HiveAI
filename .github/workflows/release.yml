@@ -1,0 +1,120 @@
+name: Release
+run-name: Release (${{ github.ref_name }})
+
+on:
+  push:
+    branches: [main, "release-test/**"]
+    paths-ignore:
+      - "**.md"
+      - ".claude/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build everything but do not publish a release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DENO_VERSION: "2.9.5"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: next
+        run: |
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          last=${last:-v0.0.0}
+          IFS=. read -r major minor patch <<< "${last#v}"
+          echo "version=$major.$minor.$((patch + 1))" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: linux-x86_64, os: ubuntu-24.04, ext: deb }
+          - { arch: windows-x86_64, os: windows-latest, ext: msi }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - name: Bake the version into the app
+        run: |
+          deno eval 'const p = "backend/deno.json"; const j = JSON.parse(Deno.readTextFileSync(p)); j.version = Deno.env.get("VERSION"); Deno.writeTextFileSync(p, JSON.stringify(j, null, 2) + "\n")'
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          deno install
+          deno task build
+      - name: Build the installer
+        working-directory: backend
+        run: |
+          deno install
+          mkdir -p ../build ../out
+          # Deno leaves a staging folder named after the output minus its last dot
+          # (HiveAI-0.1.4-x.deb -> HiveAI-0.1/), so build to a dot-free name inside
+          # build/ and only put the final installer into out/, which is what gets published.
+          deno desktop -A --include plugins --include ../frontend/dist --include infrastructure/db/migrations \
+            -o "../build/HiveAI.${{ matrix.ext }}" main.ts
+
+      # Deno ignores the version in deno.json and writes "Version: 1.0.0" into the .deb, so
+      # apt would see every release as the same version and refuse to upgrade. Rewrite it.
+      - name: Set the .deb version
+        if: runner.os == 'Linux'
+        working-directory: build
+        run: |
+          dpkg-deb -R HiveAI.deb pkg
+          sed -i "s/^Version: .*/Version: $VERSION/" pkg/DEBIAN/control
+          dpkg-deb --root-owner-group -Zgzip -b pkg "../out/HiveAI-$VERSION-${{ matrix.arch }}.deb"
+          dpkg-deb --field "../out/HiveAI-$VERSION-${{ matrix.arch }}.deb" Package Version
+
+      - name: Name the .msi
+        if: runner.os == 'Windows'
+        run: mv build/HiveAI.msi "out/HiveAI-$VERSION-${{ matrix.arch }}.msi"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || !inputs.dry_run)
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: build-*
+          merge-multiple: true
+      - name: Publish the release
+        run: |
+          gh release create "v$VERSION" artifacts/* \
+            --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes

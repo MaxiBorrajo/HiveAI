@@ -33,24 +33,61 @@ const readSchema = z.object({
 
 type WebReadSchema = typeof readSchema;
 
-function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (h === "localhost" || h === "0.0.0.0" || h.endsWith(".local")) return true;
-
-  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4) return false;
-
-  const [a, b] = ipv4.slice(1).map(Number);
-  if ([a, b].some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
-
+function isPrivateIPv4(a: number, b: number): boolean {
   return (
     a === 127 ||
     a === 10 ||
     a === 0 ||
+    (a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
     (a === 169 && b === 254)
   );
+}
+
+function isBlockedIp(ip: string): boolean {
+  const ipv4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = ipv4.slice(1).map(Number);
+    if ([a, b].some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+    return isPrivateIPv4(a, b);
+  }
+
+  if (ip.includes(":")) {
+    const v6 = ip.toLowerCase().replace(/^\[|\]$/g, "");
+    const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isBlockedIp(mapped[1]);
+    return (
+      v6 === "::" ||
+      v6 === "::1" ||
+      /^f[cd][0-9a-f]{2}:/.test(v6) || // unique local fc00::/7
+      /^fe[89ab][0-9a-f]:/.test(v6) || // link-local fe80::/10
+      /^::ffff:[0-9a-f]+:[0-9a-f]+$/.test(v6) // hex-form mapped IPv4
+    );
+  }
+
+  return false;
+}
+
+function isBlockedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "0.0.0.0" || h.endsWith(".local")) return true;
+  return isBlockedIp(h);
+}
+
+/** Resolves the hostname and rejects it if any address is private/local. */
+async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
+  if (isBlockedHost(hostname)) return true;
+  if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) return false;
+  for (const recordType of ["A", "AAAA"] as const) {
+    try {
+      const addresses = await Deno.resolveDns(hostname, recordType);
+      if (addresses.some(isBlockedIp)) return true;
+    } catch {
+      // no record of this type (or resolution failed) — fetch will surface it
+    }
+  }
+  return false;
 }
 
 function validateUrl(
@@ -80,19 +117,41 @@ function validateUrl(
   return { ok: true, url };
 }
 
+const MAX_REDIRECTS = 5;
+
 async function fetchWithTimeout(
   url: string,
   ms: number,
   headers: Record<string, string> = {},
+  trusted = false,
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(url, {
-      signal: controller.signal,
-      headers,
-      redirect: "follow",
-    });
+    let current = url;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      if (!trusted) {
+        const check = validateUrl(current);
+        if (!check.ok) throw new Error(check.reason);
+        if (await resolvesToPrivateAddress(check.url.hostname)) {
+          throw new Error(
+            `Host '${check.url.hostname}' resolves to a private or local address and cannot be fetched.`,
+          );
+        }
+      }
+      const response = await fetch(current, {
+        signal: controller.signal,
+        headers,
+        redirect: "manual",
+      });
+      const location = response.headers.get("location");
+      if (response.status < 300 || response.status >= 400 || !location) {
+        return response;
+      }
+      await response.body?.cancel();
+      current = new URL(location, current).toString();
+    }
+    throw new Error("Too many redirects.");
   } finally {
     clearTimeout(timer);
   }

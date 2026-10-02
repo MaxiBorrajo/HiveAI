@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { initORM } from "../../infrastructure/db/orm.ts";
-import { PluginStateRepository } from "../../infrastructure/db/repositories/PluginStateRepository.ts";
+import { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
 
 async function makeRepository() {
   const tempDir = await Deno.makeTempDir();
