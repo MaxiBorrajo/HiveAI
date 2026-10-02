@@ -17,7 +17,8 @@ El problema que ataca no es el costo ni la privacidad: es que hoy todo lo que co
 - **Grafos de agente:** LangGraph
 - **Modelo local:** Ollama
 - **Linting:** Oxlint en `frontend/`, `deno lint` nativo en `backend/`
-- **Tests:** Vitest + Testing Library
+- **Tests backend:** `deno test` nativo + `@std/assert`
+- **Tests frontend:** Vitest + Testing Library (pendiente de instalar)
 
 Deno se eligió sobre Node deliberadamente: su sistema de módulos por URL y caché global evita el `node_modules` por proyecto, lo que mantiene livianos los plugins exportados y simplifica la funcionalidad de export/import que viene más adelante.
 
@@ -52,6 +53,120 @@ deno desktop --hmr .
 
 **3. Visualizar**
 Abre tu navegador web en `http://localhost:5173`. Todos los cambios que hagas en React se reflejarán instantáneamente, y si cambias la lógica del backend, la API se reiniciará sola de fondo.
+
+## Modo Producción (App de Escritorio)
+
+Para generar el ejecutable nativo de la aplicación de escritorio, existe un script automatizado que unifica la construcción del frontend y empaqueta el backend en un binario independiente usando Deno.
+
+Desde la raíz del proyecto (o desde la carpeta `backend/`), ejecuta:
+
+```bash
+deno task build:desktop
+```
+
+*(O puedes correr `./build-desktop.sh` directamente si estás en la raíz).*
+
+Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta `dist/` en la raíz del proyecto.
+
+### Releases y actualizaciones automáticas
+
+Cada merge a `main` publica solo la próxima versión de patch (`v0.1.0` → `v0.1.1`) con `.github/workflows/release.yml`; el último tag `v*` es la fuente de verdad y no se commitea nada de vuelta. Los cambios que solo tocan `*.md` no generan release. Para probar los builds sin publicar, pusheá una rama `release-test/<nombre>` (solo compila) o, ya en `main`, corré el workflow a mano (*Actions → Release → Run workflow*) con `dry_run` activado.
+
+- **Qué se publica:** el release `vX.Y.Z` con un `.tar.gz` (Linux) o `.zip` (Windows), y la librería del runtime de Linux (`hive-ai-X.Y.Z-linux-x86_64.so`), que el CI usa para armar parches de versiones futuras. Además, un release "canal" fijo (`updates-linux-x86_64`) con el `latest.json` y los parches que lee la app. macOS no se publica por ahora.
+- **Cómo se entera la app:** `backend/bootstrap/auto-update.ts` llama a `Deno.autoUpdate` cada hora contra el canal de su plataforma. El parche se baja solo y se aplica **la próxima vez que se abre la app**; mientras tanto el frontend muestra un aviso (`GET /api/app/update`). Si el arranque nuevo falla, Deno vuelve a la versión anterior.
+- **Alcance:** solo Linux se actualiza solo; se puede actualizar en el lugar desde las últimas 3 versiones (`PATCH_HISTORY` en el workflow); quien esté más atrás tiene que bajar el release a mano. En Windows Deno no aplica parches, así que ahí se reinstala desde el release.
+- **En desarrollo** (`deno run`/`deno desktop --hmr`) no hay versión compilada (`Deno.desktopVersion` es `null`) y el actualizador no hace nada.
+
+---
+
+## Tests
+
+El foco está en el backend: ahí vive la lógica de negocio (grafos de agentes, microkernel de plugins, use cases), mientras que el frontend es mayormente UI de gestión donde los bugs se notan a simple vista.
+
+### Tests unitarios/integración (backend)
+
+Corren con el test runner nativo de Deno, sin dependencias externas ni LLM real:
+```bash
+cd backend
+deno task test
+```
+
+Para correr un solo archivo o carpeta:
+```bash
+deno test -A tests/unit/
+deno test -A tests/unit/setPluginsActive.test.ts
+```
+
+**Ubicación — dos convenciones conviven:**
+- `backend/tests/unit/` — carpeta central para tests de use cases, repositorios y flujos que cruzan varios módulos (ej. `PluginStateRepository.test.ts`, `HiveMicrokernel.pluginState.test.ts`, `setPluginsActive.test.ts`, `pluginsRouter.batchActive.test.ts`).
+- Archivos `nombre.test.ts` junto al módulo, para lo que es puramente local a ese archivo:
+  - `core/ai/strategy/scout/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
+  - `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
+  - `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`.
+
+Al agregar un test nuevo: si prueba un solo archivo aislado, va al lado del archivo; si cruza módulos (microkernel + repo + router, por ejemplo), va a `tests/unit/`.
+
+**Mockear el LLM:** cualquier test que pase por un nodo del grafo (`ChatOllama`, `Scout.stream`, etc.) debe mockear la respuesta del modelo — no depender de que Ollama esté corriendo. El LLM es no determinístico y lento; lo que se testea acá es que el grafo/routing reaccione bien a una respuesta dada, no la calidad de esa respuesta. Para eso está el eval de LLM (ver abajo).
+
+**Cuidado con los singletons:** `HiveMicrokernel` y el cliente de la base de datos (`infrastructure/db/orm.ts`) son singletons de proceso. Para tests, instanciá tu propio `new HiveMicrokernel()` en vez de `HiveMicrokernel.getInstance()`, y apuntá `dataDir`/`configDir` a un `Deno.makeTempDir()` — así los tests no interfieren entre sí ni tocan datos reales del usuario. Excepción: `initORM()` también es singleton de proceso, así que varios tests en el mismo archivo terminan compartiendo la misma DB temporal — usá nombres únicos por test para no pisarte con otros tests del mismo archivo.
+
+### Cobertura (coverage)
+
+```bash
+cd backend
+deno task test:coverage
+```
+
+Corre toda la suite instrumentada y genera un reporte HTML navegable en `backend/coverage_profile/html/index.html` (abrilo directo en el navegador). También deja un `lcov.info` por si se quiere integrar con una herramienta externa (Codecov, extensión de VS Code, etc.). La carpeta `coverage_profile/` no se commitea (está en `.gitignore`) porque es output regenerable.
+
+Dos números por archivo: **líneas** (qué porcentaje del código se ejecutó al menos una vez) y **ramas** (qué porcentaje de los `if`/`switch`/ternarios se ejecutó en todos sus caminos). Es normal que ramas quede más bajo que líneas — significa que se prueba el camino feliz pero no todos los `catch`/edge cases.
+
+### Eval de LLM (routing/abstención de plugins)
+
+Distinto a los tests de arriba: **no es determinístico y no es un gate de CI**. Corre el grafo `Scout` completo contra un modelo real de Ollama para medir si el LLM elige el plugin correcto, se abstiene cuando corresponde, y extrae bien los parámetros — cosas que no se pueden probar mockeando el modelo.
+
+```bash
+cd backend
+deno task eval:llm            # usa qwen3:8b por default
+deno task eval:llm lfm2.5     # o cualquier modelo instalado en Ollama
+```
+
+Requiere Ollama corriendo con un modelo de tool-calling ya descargado (`ollama pull qwen3:8b`); si el modelo pedido no está instalado, el script lo reporta como `SKIPPED` en vez de fallar. Tarda varios minutos (cada caso es una invocación real al modelo).
+
+Los casos viven en `backend/tests/llm-eval/cases.ts` (routing, abstención, extracción de parámetros — fácil de extender agregando entradas al array). El runner (`run.ts`) imprime resultado por caso y un resumen de **pass rate por categoría** al final — un 8/10 puntual no es necesariamente una regresión (varianza propia del modelo), pero una caída sostenida sí es señal de que algo se rompió (un prompt, una descripción de plugin ambigua, etc.). Correrlo manualmente antes de tocar prompts del Agent/Executor o descripciones de plugins, no en cada commit.
+
+**Frontend:** todavía no está instalado (ver stack arriba). Cuando se agregue, el criterio es testear lógica en `src/features/*/lib/`, `src/features/*/api/`, `src/hooks/` y `src/lib/`, no snapshots de UI.
+
+---
+
+## Estructura del proyecto y convenciones
+
+### Backend (`backend/`)
+```
+main.ts                 entrada (la usan build-desktop.sh y deno.json)
+bootstrap/              arranque: create-app.ts, desktop.ts, load-plugins.ts
+core/                   plataforma transversal, sin lógica de features
+  api/ ollama/ files/ memory/ microkernel/ ai/ env.ts
+modules/<feature>/      un slice por feature: router.ts, types.ts, use-cases/, lib/
+infrastructure/db/      orm, schema/, repositories/, migrations/
+plugins/                plugins incluidos (cada uno con su bee-plugin.ts)
+config/  experiments/
+```
+- Archivos y carpetas en `kebab-case` (`send-message.ts`, `use-cases/`); las clases dentro siguen en PascalCase.
+- Un caso de uso es un archivo con su nombre (`use-cases/send-message.ts`); solo tiene carpeta si necesita archivos auxiliares (`run-execution/run-execution.ts` + `plugin-node-executor.ts`).
+- Tests: junto al archivo si prueban algo local (`send-message.test.ts`), o en `tests/unit/` si cruzan módulos. Sin `index.ts` en el backend.
+
+### Frontend (`frontend/src/`)
+```
+features/<feature>/     chats, drafts, executions, interactions, models, modes, plugins
+  api/ components/ hooks/ lib/ types.ts   (+ Contexto.tsx si hay)
+components/             ui/ (shadcn) y componentes compartidos de la app
+hooks/                  hooks compartidos (useCopyFeedback, useKeyedState...)
+lib/                    infraestructura (apiClient, sse, toastManager...) y utils.ts de shadcn
+```
+- Componentes `PascalCase.tsx`; hooks `useAlgo.ts`; el resto `camelCase.ts`. `components/ui/` y `lib/utils.ts` mantienen su nombre por shadcn.
+- Las features usan los mismos nombres que los módulos del backend.
+- Una feature no importa los componentes internos de otra salvo a través de su `types.ts`, su `api/` o su `index.ts` raíz.
 
 ---
 

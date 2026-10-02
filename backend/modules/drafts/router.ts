@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
-import { handleCreateDraft } from "./useCases/createDraft/index.ts";
-import { handleListDrafts } from "./useCases/listDrafts/index.ts";
-import { handleGetDraftFiles } from "./useCases/getDraftFiles/index.ts";
-import { handleSaveDraftFile } from "./useCases/saveDraftFile/index.ts";
-import { handleValidateDraft } from "./useCases/validateDraft/index.ts";
-import { handleImportDraft } from "./useCases/importDraft/index.ts";
-import { handleRemoveDraft } from "./useCases/removeDraft/index.ts";
-import { handleExportDraft } from "./useCases/exportDraft/index.ts";
+import { handleCreateDraft } from "./use-cases/create-draft.ts";
+import { handleListDrafts } from "./use-cases/list-drafts.ts";
+import { handleGetDraftFiles } from "./use-cases/get-draft-files.ts";
+import { handleSaveDraftFile } from "./use-cases/save-draft-file.ts";
+import { handleValidateDraft } from "./use-cases/validate-draft.ts";
+import { handleImportDraft } from "./use-cases/import-draft.ts";
+import { handleRemoveDraft } from "./use-cases/remove-draft.ts";
+import { handleExportDraft } from "./use-cases/export-draft.ts";
 
 export const draftsRouter = new Hono<{
   Variables: { hive: HiveMicrokernel };

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface ApprovalPayload {
   kind: "approval";
   title: string;
@@ -5,7 +7,13 @@ export interface ApprovalPayload {
   details?: Record<string, string>;
 }
 
-export type InteractionPayload = ApprovalPayload;
+export interface ClarifyPayload {
+  kind: "clarify";
+  question: string;
+  options?: string[];
+}
+
+export type InteractionPayload = ApprovalPayload | ClarifyPayload;
 
 export interface PendingInteraction {
   id: string;
@@ -14,13 +22,17 @@ export interface PendingInteraction {
   payload: InteractionPayload;
 }
 
-export type InteractionResult = { kind: "approval"; approved: boolean };
+export type InteractionResult =
+  | { kind: "approval"; approved: boolean }
+  | { kind: "clarify"; answer: string };
 
 interface PendingEntry extends PendingInteraction {
   resolve: (result: InteractionResult) => void;
 }
 
 const INTERACTION_TIMEOUT_MS = 2 * 60 * 1000;
+
+export const executionContextStorage = new AsyncLocalStorage<{ autoApprove: boolean }>();
 
 class HumanInteractionQueue {
   private pending = new Map<string, PendingEntry>();
@@ -35,6 +47,14 @@ class HumanInteractionQueue {
     pluginName: string,
     payload: ApprovalPayload,
   ): { id: string; wait: Promise<boolean> } {
+    const execContext = executionContextStorage.getStore();
+    if (execContext?.autoApprove) {
+      console.log(
+        `[human-interaction] ⚡ Execution workflow context active. Auto-approving request for '${pluginName}'.`,
+      );
+      return { id: "auto-approved", wait: Promise.resolve(true) };
+    }
+
     const id = crypto.randomUUID();
 
     const wait = new Promise<boolean>((resolve) => {
@@ -51,6 +71,33 @@ class HumanInteractionQueue {
         resolve: (result) => {
           clearTimeout(timer);
           resolve(result.kind === "approval" ? result.approved : false);
+        },
+      });
+    });
+
+    return { id, wait };
+  }
+
+  requestClarification(
+    pluginName: string,
+    payload: ClarifyPayload,
+  ): { id: string; wait: Promise<string> } {
+    const id = crypto.randomUUID();
+
+    const wait = new Promise<string>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        resolve("");
+      }, INTERACTION_TIMEOUT_MS);
+
+      this.pending.set(id, {
+        id,
+        pluginName,
+        payload,
+        requestedAt: Date.now(),
+        resolve: (result) => {
+          clearTimeout(timer);
+          resolve(result.kind === "clarify" ? result.answer : "");
         },
       });
     });

@@ -149,17 +149,20 @@ El favicon en `public/` es el mismo trazo con los colores hardcodeados (`#F5EDE0
 
 **`components/ui/`** — generado por el CLI de shadcn. No lo edites a mano salvo que estés seguro de que nunca vas a volver a correr `shadcn add` sobre ese archivo, porque lo pisa sin avisar. Si necesitás una variante nueva de un componente, envolvelo en uno propio.
 
-**`components/NombreDelComponente/`** — nuestros componentes. Carpeta por componente:
+**`features/<feature>/`** — nuestros componentes, agrupados por feature (`chats`, `executions`, `plugins`...):
 
 ```
-components/ChatWindow/
-├── ChatWindow.tsx
-└── index.ts
+features/chats/
+├── api/            llamadas al backend
+├── components/     Chat.tsx, ChatInput.tsx ...
+├── hooks/          useChatSession.ts
+├── ChatsContext.tsx
+└── types.ts
 ```
 
-PascalCase, uno por archivo, props tipadas explícitamente con una interfaz `ChatWindowProps`. Nada de `any`.
+PascalCase, uno por archivo, props tipadas explícitamente con una interfaz `ChatWindowProps`. Nada de `any`. Los componentes compartidos por varias features van en `components/`.
 
-Los tipos compartidos van en `frontend/types/`, no duplicados en cada componente. El tipo `Message` vive en `types/chat.ts`.
+Los tipos de una feature van en su `types.ts`, no duplicados en cada componente. El tipo `Message` vive en `features/chats/types.ts`.
 
 ### Antes de instalar un componente nuevo
 

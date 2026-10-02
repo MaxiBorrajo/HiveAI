@@ -29,6 +29,7 @@ export default class CurrentDatetimePlugin implements BeePlugin<CurrentDatetimeS
     "Retrieves the system's current date, time, and timezone. USE CASES: Use this to ground yourself in the present moment when the user asks time-sensitive questions (e.g., 'What time is it?', 'What day is it today?', 'How long until X event?'). It is strictly for reading the current clock; do NOT use this for scheduling alarms, modifying the system time, or making web searches.";
 
   schema = schema;
+  returnDescription = "Returns a plain-text string with the current date, time, and timezone (e.g. 'Current date and time: Friday, September 27, 2026, 13:02:08 ART (UTC-3)').";
 
   selectionTests: SelectionTestCase<CurrentDatetimeSchema>[] = [
     {

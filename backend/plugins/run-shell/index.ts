@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { homedir } from "node:os";
+import { resolve, sep } from "node:path";
 import type {
   BeeContext,
   BeePlugin,
@@ -7,9 +9,125 @@ import type {
 } from "./bee-plugin.ts";
 
 const MAX_OUTPUT_CHARS = 4000;
+const DEFAULT_TIMEOUT_MS = 60_000;
+// Cap in bytes, applied while the process is still running (not just on the
+// final string) — Deno.Command.output() buffers the whole stream in memory
+// before returning, so an unbounded producer (`yes`, `cat /dev/zero`) can
+// exhaust memory long before MAX_OUTPUT_CHARS ever gets a chance to trim it.
+const MAX_STREAM_BYTES = 1_000_000;
+
+// Known-destructive / irreversible patterns. Not a sandbox: the goal is to
+// catch the commands a human is most likely to rubber-stamp without reading
+// closely (especially when chained after something innocuous).
+const DANGEROUS_PATTERNS: RegExp[] = [
+  /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+(\/|~|\*|\$HOME|\.\.?\/?\s*$)/i, // rm -rf / or ~ or *
+  /\bmkfs(\.\w+)?\b/i,
+  />\s*\/dev\/(sd|nvme|hd)\w*/i, // overwrite a raw block device
+  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, // fork bomb
+  /\bdd\s+.*\bof=\/dev\//i,
+  /curl\s+[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/i, // curl | sh
+  /wget\s+[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/i,
+  /\bchmod\s+-R\s+777\s+\//i,
+  /\bchown\s+-R\s+.*\s+\//i,
+  />\s*~\/\.(bash_profile|bashrc|zshrc|ssh\/authorized_keys)\b/i,
+];
+
+function findDangerousMatch(command: string): RegExp | undefined {
+  return DANGEROUS_PATTERNS.find((pattern) => pattern.test(command));
+}
 
 function launchBash(command: string): { bin: string; args: string[] } {
   return { bin: "bash", args: ["-c", command] };
+}
+
+function isWithinAllowedRoot(path: string, root: string): boolean {
+  const normalizedRoot = resolve(root);
+  const normalizedPath = resolve(path);
+  return (
+    normalizedPath === normalizedRoot ||
+    normalizedPath.startsWith(normalizedRoot + sep)
+  );
+}
+
+async function readStreamCapped(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  onOverflow: () => void,
+): Promise<{ text: string; truncated: boolean }> {
+  const decoder = new TextDecoder();
+  const reader = stream.getReader();
+  let text = "";
+  let totalBytes = 0;
+  let truncated = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        const keep = maxBytes - (totalBytes - value.byteLength);
+        if (keep > 0) text += decoder.decode(value.slice(0, keep));
+        truncated = true;
+        onOverflow();
+        break;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // stream may already be closed
+    }
+  }
+
+  return { text, truncated };
+}
+
+async function killProcessTree(pid: number): Promise<void> {
+  try {
+    if (Deno.build.os === "windows") {
+      await new Deno.Command("taskkill", {
+        args: ["/PID", String(pid), "/T", "/F"],
+      }).output();
+    } else {
+      await new Deno.Command("kill", { args: ["-9", String(pid)] }).output();
+    }
+  } catch {
+    // best-effort: process may have already exited
+  }
+}
+
+function isSafeInspectionCommand(command: string): boolean {
+  const trimmed = command.trim();
+  const withoutSafeRedirection = trimmed.replace(/2>\s*\/dev\/null|2>&1/g, "");
+  if (
+    />\s*(?!\/tmp\/)|\brm\s|\bmv\s|\bsudo\b|\bchmod\b|\bchown\b|\bkill\b|\bpkill\b|\bmkfs\b|\bdd\b|\btruncate\b/i.test(
+      withoutSafeRedirection,
+    )
+  ) {
+    return false;
+  }
+  
+  const safePatterns = [
+    /^(ps|top|df|free|head|tail|ls|grep|cat|uptime|wc|pwd|date|uname|whoami|echo|which|du|awk|sed|cut|tee|sort|uniq|tr)\b/i,
+    /^git\s+(status|log|diff|branch|show)\b/i,
+    /^(npm|yarn|pnpm|bun)\s+(test|run\s+test)\b/i,
+    /^deno\s+(test|check|eval)\b/i,
+    /^node\s+(-e|--check)\b/i,
+  ];
+
+  const subcommands = trimmed
+    .split(/&&|\|\||\||;/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return (
+    subcommands.length > 0 &&
+    subcommands.every((sub) =>
+      safePatterns.some((pattern) => pattern.test(sub)),
+    )
+  );
 }
 
 const schema = z.object({
@@ -34,6 +152,8 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     "Executes raw shell commands via bash, with full pipeline and redirection support. This is the most capable tool in the hive: anything the file/search plugins can do individually (finding a file, reading its contents, checking if something exists, editing or writing to it), bash can do too via standard commands (find, grep, cat, sed, awk, ls, etc.) — and it can chain several of those steps into a single command with pipes, so a multi-step investigation (find a file, then grep inside it, then show matching lines) can be one call instead of several separate tool calls. It's also the only way to reach anything a native plugin doesn't cover at all: any external CLI tool (git, npm, python, docker, etc.), system administration tasks, checking processes, installing packages, version control status/diffs. A human must approve the command before it runs. Prefer a native plugin when it directly and simply covers exactly what's asked (it's more predictable and needs no approval); reach for bash instead when the task needs multiple chained steps, an external CLI, or something no native plugin produces.";
 
   schema = schema;
+  returnDescription =
+    "Returns the combined stdout output of the command as a plain-text string. If the command fails (non-zero exit code), returns an error message containing the exit code and stderr output.";
 
   selectionTests: SelectionTestCase<RunShellSchema>[] = [
     {
@@ -141,6 +261,33 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       params: { command: undefined as unknown as string },
       expect: (output: string) => output.toLowerCase().includes("invalid"),
     },
+    {
+      description: "Known-destructive command is blocked before execution",
+      kind: "error",
+      params: { command: "rm -rf /" },
+      expect: (output: string) => output.includes("blocked"),
+    },
+    {
+      description: "Long-running command is killed after the timeout",
+      kind: "edge",
+      params: { command: "sleep 999" },
+      expect: (output: string) => output.includes("timeout"),
+    },
+    {
+      description: "cwd outside the user's home directory is rejected",
+      kind: "error",
+      params: { command: "pwd", cwd: "/etc" },
+      expect: (output: string) =>
+        output.includes("outside the allowed directory"),
+    },
+    {
+      description:
+        "Command producing unbounded output is stopped at the byte cap",
+      kind: "edge",
+      params: { command: "yes" },
+      expect: (output: string) =>
+        output.includes("more than") && output.includes("bytes of output"),
+    },
   ];
 
   private context!: BeeContext;
@@ -153,7 +300,10 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
     this.context = context;
   }
 
-  async process(input: z.infer<RunShellSchema>): Promise<string> {
+  async process(
+    input: z.infer<RunShellSchema>,
+    options?: { signal?: AbortSignal },
+  ): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
@@ -161,26 +311,47 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
 
     const { command, cwd } = parsed.data;
 
+    const dangerousMatch = findDangerousMatch(command);
+    if (dangerousMatch) {
+      console.warn(
+        `[run-shell] 🚫 Blocked command matching dangerous pattern ${dangerousMatch}: ${command}`,
+      );
+      return `The command was blocked before execution: it matches a known-destructive pattern (${dangerousMatch}). If this was intentional, rephrase it or run it manually outside the agent.`;
+    }
+
     if (cwd) {
+      let realCwd: string;
       try {
-        const stat = await Deno.stat(cwd);
-        if (!stat.isDirectory) {
-          return `Error: The provided 'cwd' (${cwd}) is a file, not a directory.`;
-        }
+        realCwd = await Deno.realPath(cwd);
       } catch {
         return `Error: The provided 'cwd' (${cwd}) does not exist or is inaccessible.`;
       }
+      const stat = await Deno.stat(realCwd);
+      if (!stat.isDirectory) {
+        return `Error: The provided 'cwd' (${cwd}) is a file, not a directory.`;
+      }
+      if (!isWithinAllowedRoot(realCwd, homedir())) {
+        return `Error: The provided 'cwd' (${cwd}) is outside the allowed directory (${homedir()}).`;
+      }
     }
 
-    console.log(
-      `[run-shell] 🐝 Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
-    );
+    let approved = false;
+    if (isSafeInspectionCommand(command)) {
+      console.log(
+        `[run-shell] ⚡ Safe read-only inspection command detected. Auto-approving: "${command}"`,
+      );
+      approved = true;
+    } else {
+      console.log(
+        `[run-shell]  Requesting human approval for [bash]: ${command} (cwd: ${cwd || "default"})`,
+      );
 
-    const approved = await this.context.requestApproval(
-      "El agente quiere ejecutar un comando",
-      `Esta acción usa una shell real (bash), sin restricciones de comandos. Revisá el comando antes de aprobarlo.`,
-      { command, ...(cwd ? { cwd } : {}) },
-    );
+      approved = await this.context.requestApproval(
+        "The agent wants to execute a command",
+        "This action uses a real shell (bash) without command restrictions. Review the command before approving.",
+        { command, ...(cwd ? { cwd } : {}) },
+      );
+    }
 
     if (!approved) {
       console.warn(`[run-shell] 🚫 Command was rejected or timed out.`);
@@ -191,24 +362,71 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
 
     console.log(`[run-shell] ✅ Command approved. Executing...`);
 
+    let killedReason: "timeout" | "aborted" | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+
     try {
       const resolved = launchBash(command);
-      const proc = new Deno.Command(resolved.bin, {
+      const child = new Deno.Command(resolved.bin, {
         args: resolved.args,
         cwd: cwd || undefined,
         stdout: "piped",
         stderr: "piped",
-      });
+      }).spawn();
 
-      const { code, stdout, stderr } = await proc.output();
+      timeoutId = setTimeout(() => {
+        killedReason = "timeout";
+        killProcessTree(child.pid);
+      }, DEFAULT_TIMEOUT_MS);
+
+      if (options?.signal) {
+        if (options.signal.aborted) {
+          killedReason = "aborted";
+          killProcessTree(child.pid);
+        } else {
+          onAbort = () => {
+            killedReason = "aborted";
+            killProcessTree(child.pid);
+          };
+          options.signal.addEventListener("abort", onAbort, { once: true });
+        }
+      }
+
+      let stdoutOverflowed = false;
+      let stderrOverflowed = false;
+
+      const [stdoutResult, stderrResult, { code }] = await Promise.all([
+        readStreamCapped(child.stdout, MAX_STREAM_BYTES, () => {
+          stdoutOverflowed = true;
+          killProcessTree(child.pid);
+        }),
+        readStreamCapped(child.stderr, MAX_STREAM_BYTES, () => {
+          stderrOverflowed = true;
+          killProcessTree(child.pid);
+        }),
+        child.status,
+      ]);
+
       console.log(`[run-shell] 🏁 Command finished with exit code ${code}`);
 
-      const decoder = new TextDecoder();
-      let output = decoder.decode(stdout).trim();
-      const errorOutput = decoder.decode(stderr).trim();
+      let output = stdoutResult.text.trim();
+      const errorOutput = stderrResult.text.trim();
 
       if (output.length > MAX_OUTPUT_CHARS) {
         output = `${output.slice(0, MAX_OUTPUT_CHARS)}\n...(output truncated)`;
+      }
+
+      if (killedReason === "timeout") {
+        return `The command was killed for exceeding the ${
+          DEFAULT_TIMEOUT_MS / 1000
+        }s timeout.`;
+      }
+      if (killedReason === "aborted") {
+        return `The command was aborted before it finished.`;
+      }
+      if (stdoutOverflowed || stderrOverflowed) {
+        return `The command was killed for producing more than ${MAX_STREAM_BYTES} bytes of output.\n\n${output}`;
       }
 
       if (code !== 0) {
@@ -225,6 +443,11 @@ export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
       }
       const detail = error instanceof Error ? error.message : String(error);
       return `An error occurred while executing the command: ${detail}`;
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      if (onAbort && options?.signal) {
+        options.signal.removeEventListener("abort", onAbort);
+      }
     }
   }
 }

@@ -29,6 +29,7 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
     "Safely inspects the local filesystem in a read-only manner (list directories or read file contents). USE CASES: Use this whenever you need to understand the project structure, view code or configuration files, check if a file exists, or when the user asks you to 'read', 'show', or 'list' local files or folders. Do NOT use this for writing or modifying files.";
 
   schema = schema;
+  returnDescription = "Returns the full text content of the requested file, or a directory listing (file/folder names with types). For files, returns the raw text as-is. For directories, returns an indented tree or flat list of entries.";
 
   selectionTests: SelectionTestCase<FileReadSchema>[] = [
     {
@@ -154,7 +155,7 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       path: string;
     };
 
-    console.log(`[file-read] 🐝 Requested '${operation}' on '${path}'`);
+    console.log(`[file-read]  Requested '${operation}' on '${path}'`);
 
     try {
       if (operation === "list") {

@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { copy } from "@std/fs/copy";
+import { JsonManifestStore } from "../json-manifest-store.ts";
 import type { SelectionTestCase, ExecutionTestCase } from "../bee-plugin.ts";
 
 export interface ExternalPluginMetadata {
@@ -15,41 +16,19 @@ export interface ExternalPluginRecord {
   metadata: ExternalPluginMetadata;
 }
 
-interface ManifestFile {
-  plugins: ExternalPluginRecord[];
-}
-
 export class ExternalPluginRegistry {
-  constructor(private readonly externalPluginsDir: string) {}
+  private readonly store: JsonManifestStore<ExternalPluginRecord>;
 
-  private get manifestPath(): string {
-    return join(this.externalPluginsDir, "manifest.json");
+  constructor(private readonly externalPluginsDir: string) {
+    this.store = new JsonManifestStore(externalPluginsDir, "plugins");
   }
 
-  private async readManifest(): Promise<ManifestFile> {
-    try {
-      const text = await Deno.readTextFile(this.manifestPath);
-      return JSON.parse(text);
-    } catch {
-      return { plugins: [] };
-    }
-  }
-
-  private async writeManifest(manifest: ManifestFile): Promise<void> {
-    await Deno.mkdir(this.externalPluginsDir, { recursive: true });
-    await Deno.writeTextFile(
-      this.manifestPath,
-      JSON.stringify(manifest, null, 2),
-    );
-  }
-
-  async list(): Promise<ExternalPluginRecord[]> {
-    return (await this.readManifest()).plugins;
+  list(): Promise<ExternalPluginRecord[]> {
+    return this.store.read();
   }
 
   async get(pluginName: string): Promise<ExternalPluginRecord | undefined> {
-    const manifest = await this.readManifest();
-    return manifest.plugins.find((p) => p.name === pluginName);
+    return (await this.store.read()).find((p) => p.name === pluginName);
   }
 
   async importFrom(
@@ -70,35 +49,21 @@ export class ExternalPluginRegistry {
       metadata,
     };
 
-    const manifest = await this.readManifest();
-    const withoutExisting = manifest.plugins.filter(
-      (p) => p.name !== pluginName,
-    );
-    await this.writeManifest({ plugins: [...withoutExisting, record] });
+    await this.store.upsert(record);
 
     return record;
   }
 
   async remove(pluginName: string): Promise<boolean> {
-    const manifest = await this.readManifest();
-    const record = manifest.plugins.find((p) => p.name === pluginName);
+    const record = await this.store.delete(pluginName);
     if (!record) return false;
 
     await Deno.remove(record.dir, { recursive: true }).catch(() => {});
-    await this.writeManifest({
-      plugins: manifest.plugins.filter((p) => p.name !== pluginName),
-    });
     return true;
   }
 
   async forget(pluginName: string): Promise<boolean> {
-    const manifest = await this.readManifest();
-    if (!manifest.plugins.some((p) => p.name === pluginName)) return false;
-
-    await this.writeManifest({
-      plugins: manifest.plugins.filter((p) => p.name !== pluginName),
-    });
-    return true;
+    return (await this.store.delete(pluginName)) !== undefined;
   }
 }
 

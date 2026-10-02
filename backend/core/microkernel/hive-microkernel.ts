@@ -2,12 +2,7 @@ import { join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
-import type {
-  BeeContext,
-  BeePlugin,
-  ExecutionTestCase,
-  SelectionTestCase,
-} from "./bee-plugin.ts";
+import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
@@ -19,10 +14,9 @@ import {
 } from "./external-plugins/external-plugin-manager.ts";
 import {
   validatePlugin as validatePluginQuality,
-  validateSelectionTests as validateSelectionTestsQuality,
-  validateExecutionTests as validateExecutionTestsQuality,
   type TestSuiteQualityReport,
 } from "./plugin-quality-validator.ts";
+import type { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
 
 export type { TestSuiteQualityReport };
 
@@ -39,6 +33,7 @@ export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
   private activePlugins: Set<string> = new Set();
+  private pluginStateRepository: PluginStateRepository | undefined;
   private config = new HiveConfig({
     dataDir: "",
     configDir: "",
@@ -58,6 +53,46 @@ export class HiveMicrokernel {
 
   configure(patch: Partial<HiveSettings>): void {
     this.config.set(patch);
+  }
+
+  setPluginStateRepository(repository: PluginStateRepository): void {
+    this.pluginStateRepository = repository;
+  }
+
+  /**
+   * Applies persisted active/inactive state to plugins already registered
+   * in-memory. Plugins with no persisted record keep their current
+   * (default) state, so freshly-added internal plugins still start active.
+   *
+   * Must run AFTER registration but BEFORE any default-activation step that
+   * unconditionally calls activate() on every registered plugin — otherwise
+   * that default activation persists `active: true` and overwrites a
+   * previously persisted `false`, defeating the point of restoring state.
+   */
+  async restorePersistedActiveStates(): Promise<void> {
+    if (!this.pluginStateRepository) return;
+
+    const persistedStates = await this.pluginStateRepository.findAll();
+
+    for (const [name, active] of persistedStates) {
+      if (!this.plugins.has(name)) continue;
+      if (active) {
+        await this.activate(name);
+      } else {
+        await this.deactivate(name);
+      }
+    }
+  }
+
+  /**
+   * Returns the persisted active state for a plugin, or `undefined` if it
+   * has no persisted record (i.e. it should fall back to its default
+   * behavior, such as internal plugins defaulting to active).
+   */
+  async getPersistedActiveState(name: string): Promise<boolean | undefined> {
+    if (!this.pluginStateRepository) return undefined;
+    const persistedStates = await this.pluginStateRepository.findAll();
+    return persistedStates.get(name);
   }
 
   getConfig() {
@@ -132,27 +167,23 @@ export class HiveMicrokernel {
       );
     }
 
-    const coreBeeContent = await Deno.readTextFile(
-      new URL("./bee-plugin.ts", import.meta.url),
-    );
+
+    let coreBeeContent: string;
+    try {
+      coreBeeContent = await Deno.readTextFile(
+        new URL("./bee-plugin.ts", import.meta.url),
+      );
+    } catch (e) {
+      // If we are running in a compiled executable, the core bee-plugin.ts
+      // might not be available as a file asset. In production, we trust the bundled plugins.
+      return;
+    }
+    
     if (pluginBeeContent.trim() !== coreBeeContent.trim()) {
       throw new Error(
         `Plugin at '${beePluginPath}' is outdated: its bee-plugin.ts does not match the microkernel's version.`,
       );
     }
-  }
-
-  validateExecutionTests<S extends z.ZodType = z.ZodType>(
-    schema: S,
-    tests: ExecutionTestCase<S>[] = [],
-  ): TestSuiteQualityReport {
-    return validateExecutionTestsQuality(schema, tests);
-  }
-
-  validateSelectionTests(
-    tests: SelectionTestCase[] = [],
-  ): TestSuiteQualityReport {
-    return validateSelectionTestsQuality(tests);
   }
 
   async unregister(name: string): Promise<void> {
@@ -169,6 +200,10 @@ export class HiveMicrokernel {
     await plugin.dispose?.();
     this.plugins.delete(name);
     this.activePlugins.delete(name);
+  }
+
+  async forgetPersistedState(name: string): Promise<void> {
+    await this.pluginStateRepository?.delete(name);
   }
 
   async activate(name: string): Promise<boolean> {
@@ -188,6 +223,7 @@ export class HiveMicrokernel {
     }
 
     this.activePlugins.add(name);
+    await this.pluginStateRepository?.setActive(name, true);
     console.log(
       `Bee '${name}' activated. Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
     );
@@ -196,6 +232,7 @@ export class HiveMicrokernel {
 
   async deactivate(name: string): Promise<boolean> {
     const removed = this.activePlugins.delete(name);
+    await this.pluginStateRepository?.setActive(name, false);
     console.log(
       `Bee '${name}' deactivated (was active: ${removed}). Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
     );
@@ -215,7 +252,7 @@ export class HiveMicrokernel {
   }
 
   getRegisteredPlugins(): BeePlugin[] {
-    return Array.from(this.plugins.values()).map((bp) => bp);
+    return Array.from(this.plugins.values());
   }
 
   getPlugin(name: string) {
@@ -228,10 +265,6 @@ export class HiveMicrokernel {
     const plugins = Array.from(this.activePlugins)
       .map((name) => this.plugins.get(name))
       .filter((plugin): plugin is BeePlugin => plugin != null);
-
-    console.log(
-      `Bees offered to the Selector: [${plugins.map((p) => p.name).join(", ")}]`,
-    );
 
     return plugins.map((plugin) => this.transformToTool(plugin));
   }
@@ -315,6 +348,9 @@ export class HiveMicrokernel {
   async removeExternalPlugin(name: string): Promise<boolean> {
     if (!this.externalPlugins.isExternal(name)) return false;
     const removed = await this.externalPlugins.remove(name);
+    if (removed) {
+      await this.forgetPersistedState(name);
+    }
     stopSharedHostIfIdle(
       this.externalPlugins.hasAnyRunningHandle(this.activePlugins),
     );
