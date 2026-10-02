@@ -46,12 +46,10 @@ jobs:
   build:
     needs: version
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - { arch: linux-x86_64, os: ubuntu-latest }
-          - { arch: darwin-aarch64, os: macos-latest }
-          - { arch: darwin-x86_64, os: macos-15-intel }
           - { arch: windows-x86_64, os: windows-latest }
     runs-on: ${{ matrix.os }}
     defaults:
@@ -86,14 +84,13 @@ jobs:
           mkdir -p out
           case "$RUNNER_OS" in
             Linux)   tar -czf "out/HiveAI-$VERSION-${{ matrix.arch }}.tar.gz" -C dist hive-ai ;;
-            macOS)   tar -czf "out/HiveAI-$VERSION-${{ matrix.arch }}.tar.gz" -C dist HiveAI.app ;;
             Windows) 7z a -tzip "out/HiveAI-$VERSION-${{ matrix.arch }}.zip" ./dist/HiveAI ;;
           esac
 
       - name: Keep the runtime library
         if: runner.os != 'Windows'
         run: |
-          lib=$(find dist -type f \( -iname '*hive-ai*.so' -o -iname '*hive-ai*.dylib' \) -exec ls -S {} + | head -n1)
+          lib=$(find dist -type f -iname '*hive-ai*.so' -exec ls -S {} + | head -n1)
           if [ -z "$lib" ]; then
             echo "No runtime library found in dist:"
             find dist -maxdepth 5
@@ -136,7 +133,7 @@ jobs:
           previous=$(gh release list --limit 30 --json tagName --jq '.[].tagName' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$VERSION" | head -n "$PATCH_HISTORY" || true)
 
-          for arch in linux-x86_64 darwin-aarch64 darwin-x86_64; do
+          for arch in linux-x86_64; do
             channel="updates-$arch"
             rm -rf olds out
             mkdir olds out

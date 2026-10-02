@@ -72,9 +72,9 @@ Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta 
 
 Cada merge a `main` publica solo la próxima versión de patch (`v0.1.0` → `v0.1.1`) con `.github/workflows/release.yml`; el último tag `v*` es la fuente de verdad y no se commitea nada de vuelta. Los cambios que solo tocan `*.md` no generan release. Para probar los builds sin publicar, pusheá una rama `release-test/<nombre>` (solo compila) o, ya en `main`, corré el workflow a mano (*Actions → Release → Run workflow*) con `dry_run` activado.
 
-- **Qué se publica:** el release `vX.Y.Z` con un `.tar.gz` (Linux, macOS) o `.zip` (Windows) por plataforma, y la librería del runtime de cada una (`hive-ai-X.Y.Z-<os>-<arch>.so|dylib`), que el CI usa para armar parches de versiones futuras. Además, un release "canal" fijo por plataforma (`updates-linux-x86_64`, `updates-darwin-aarch64`, `updates-darwin-x86_64`) con el `latest.json` y los parches que lee la app.
+- **Qué se publica:** el release `vX.Y.Z` con un `.tar.gz` (Linux) o `.zip` (Windows), y la librería del runtime de Linux (`hive-ai-X.Y.Z-linux-x86_64.so`), que el CI usa para armar parches de versiones futuras. Además, un release "canal" fijo (`updates-linux-x86_64`) con el `latest.json` y los parches que lee la app. macOS no se publica por ahora.
 - **Cómo se entera la app:** `backend/bootstrap/auto-update.ts` llama a `Deno.autoUpdate` cada hora contra el canal de su plataforma. El parche se baja solo y se aplica **la próxima vez que se abre la app**; mientras tanto el frontend muestra un aviso (`GET /api/app/update`). Si el arranque nuevo falla, Deno vuelve a la versión anterior.
-- **Alcance:** solo se puede actualizar en el lugar desde las últimas 3 versiones (`PATCH_HISTORY` en el workflow); quien esté más atrás tiene que bajar el release a mano. En Windows Deno no aplica parches, así que ahí se reinstala desde el release.
+- **Alcance:** solo Linux se actualiza solo; se puede actualizar en el lugar desde las últimas 3 versiones (`PATCH_HISTORY` en el workflow); quien esté más atrás tiene que bajar el release a mano. En Windows Deno no aplica parches, así que ahí se reinstala desde el release.
 - **En desarrollo** (`deno run`/`deno desktop --hmr`) no hay versión compilada (`Deno.desktopVersion` es `null`) y el actualizador no hace nada.
 
 ---
