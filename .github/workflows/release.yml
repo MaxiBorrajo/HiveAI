@@ -49,7 +49,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: linux-x86_64, os: ubuntu-latest }
+          # Pinned: a newer Ubuntu raises the glibc version the binary needs, locking out older distros.
+          - { arch: linux-x86_64, os: ubuntu-24.04 }
           - { arch: windows-x86_64, os: windows-latest }
     runs-on: ${{ matrix.os }}
     defaults:
