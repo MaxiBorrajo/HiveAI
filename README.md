@@ -68,14 +68,14 @@ deno task build:desktop
 
 Al finalizar, el ejecutable listo para usar se encontrará dentro de la carpeta `dist/` en la raíz del proyecto.
 
-### Releases y actualizaciones automáticas
+### Releases y avisos de actualización
 
 Cada merge a `main` publica solo la próxima versión de patch (`v0.1.0` → `v0.1.1`) con `.github/workflows/release.yml`; el último tag `v*` es la fuente de verdad y no se commitea nada de vuelta. Los cambios que solo tocan `*.md` no generan release. Para probar los builds sin publicar, pusheá una rama `release-test/<nombre>` (solo compila) o, ya en `main`, corré el workflow a mano (*Actions → Release → Run workflow*) con `dry_run` activado.
 
-- **Qué se publica:** el release `vX.Y.Z` con un `.tar.gz` (Linux) o `.zip` (Windows), y la librería del runtime de Linux (`hive-ai-X.Y.Z-linux-x86_64.so`), que el CI usa para armar parches de versiones futuras. Además, la rama `updates` (se reescribe entera en cada release, sin historial) con `linux-x86_64/latest.json` y los parches que lee la app. Va en una rama y no en un release porque `Deno.autoUpdate` no sigue redirects y las descargas de releases de GitHub siempre redirigen; `raw.githubusercontent.com` sirve los archivos directo. macOS no se publica por ahora.
-- **Cómo se entera la app:** `backend/bootstrap/auto-update.ts` llama a `Deno.autoUpdate` cada hora contra el canal de su plataforma. El parche se baja solo y se aplica **la próxima vez que se abre la app**; mientras tanto el frontend muestra un aviso (`GET /api/app/update`). Si el arranque nuevo falla, Deno vuelve a la versión anterior.
-- **Alcance:** solo Linux se actualiza solo; se puede actualizar en el lugar desde las últimas 3 versiones (`PATCH_HISTORY` en el workflow); quien esté más atrás tiene que bajar el release a mano. En Windows Deno no aplica parches, así que ahí se reinstala desde el release.
-- **En desarrollo** (`deno run`/`deno desktop --hmr`) no hay versión compilada (`Deno.desktopVersion` es `null`) y el actualizador no hace nada.
+- **Qué se publica:** un instalador por plataforma, con la versión en el nombre: `HiveAI-X.Y.Z-linux-x86_64.deb` (se abre con doble clic en la tienda de software) y `HiveAI-X.Y.Z-windows-x86_64.msi`. macOS no se publica por ahora.
+- **Cómo se entera la app:** `GET /api/app/update` (`backend/modules/app-updates/`) compara la versión compilada en el binario (`Deno.desktopVersion`) con la última release de GitHub, cacheado una hora. El frontend muestra un aviso con el link al instalador de ese sistema; el usuario lo descarga e instala encima.
+- **Por qué no se actualiza solo:** `Deno.autoUpdate` parchea un archivo junto al ejecutable, y el `.deb` instala en `/usr/lib` (de root) y en Windows Deno no puede reemplazar la DLL cargada. Si en algún momento se vuelve a una carpeta portable en Linux, se podría retomar (ver el historial de git).
+- **En desarrollo** no hay versión compilada y no avisa nada. Para ver el aviso, levantá el backend con `HIVEAI_VERSION_OVERRIDE=0.0.1`.
 
 ---
 
