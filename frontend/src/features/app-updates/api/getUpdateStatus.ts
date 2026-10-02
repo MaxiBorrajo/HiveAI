@@ -2,9 +2,10 @@ import { apiClient } from "../../../lib/apiClient";
 import type { ResponseEntity } from "../../../lib/config";
 
 export interface UpdateStatus {
-  /** Version of the running build; null when running from source. */
   currentVersion: string | null;
-  readyVersion: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  downloadUrl: string | null;
 }
 
 export async function getUpdateStatus(): Promise<ResponseEntity<UpdateStatus>> {

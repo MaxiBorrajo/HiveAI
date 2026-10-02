@@ -1,8 +1,6 @@
 name: Release
 run-name: Release (${{ github.ref_name }})
 
-# Pushing a branch named release-test/* runs the builds only (nothing is published),
-# so changes to this workflow can be tried before they reach main.
 on:
   push:
     branches: [main, "release-test/**"]
@@ -25,7 +23,6 @@ concurrency:
 
 env:
   DENO_VERSION: "2.9.5"
-  PATCH_HISTORY: 3
 
 jobs:
   version:
@@ -49,9 +46,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Pinned: a newer Ubuntu raises the glibc version the binary needs, locking out older distros.
-          - { arch: linux-x86_64, os: ubuntu-24.04 }
-          - { arch: windows-x86_64, os: windows-latest }
+          - { arch: linux-x86_64, os: ubuntu-24.04, ext: deb }
+          - { arch: windows-x86_64, os: windows-latest, ext: msi }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -63,7 +59,6 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: ${{ env.DENO_VERSION }}
-
       - name: Bake the version into the app
         run: |
           deno eval 'const p = "backend/deno.json"; const j = JSON.parse(Deno.readTextFileSync(p)); j.version = Deno.env.get("VERSION"); Deno.writeTextFileSync(p, JSON.stringify(j, null, 2) + "\n")'
@@ -73,31 +68,13 @@ jobs:
         run: |
           deno install
           deno task build
-
-      - name: Build the desktop app
+      - name: Build the installer
         working-directory: backend
         run: |
           deno install
-          deno desktop -A --include plugins --include ../frontend/dist --include infrastructure/db/migrations main.ts
-
-      - name: Package the app
-        run: |
-          mkdir -p out
-          case "$RUNNER_OS" in
-            Linux)   tar -czf "out/HiveAI-$VERSION-${{ matrix.arch }}.tar.gz" -C dist hive-ai ;;
-            Windows) 7z a -tzip "out/HiveAI-$VERSION-${{ matrix.arch }}.zip" ./dist/HiveAI ;;
-          esac
-
-      - name: Keep the runtime library
-        if: runner.os != 'Windows'
-        run: |
-          lib=$(find dist -type f -iname '*hive-ai*.so' -exec ls -S {} + | head -n1)
-          if [ -z "$lib" ]; then
-            echo "No runtime library found in dist:"
-            find dist -maxdepth 5
-            exit 1
-          fi
-          cp "$lib" "out/hive-ai-$VERSION-${{ matrix.arch }}.${lib##*.}"
+          mkdir -p ../out
+          deno desktop -A --include plugins --include ../frontend/dist --include infrastructure/db/migrations \
+            -o "../out/HiveAI-$VERSION-${{ matrix.arch }}.${{ matrix.ext }}" main.ts
 
       - uses: actions/upload-artifact@v4
         with:
@@ -114,51 +91,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: ${{ env.DENO_VERSION }}
-      - run: sudo apt-get install -y bsdiff
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: build-*
           merge-multiple: true
-
       - name: Publish the release
         run: |
           gh release create "v$VERSION" artifacts/* \
             --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
-
-      # Deno.autoUpdate refuses HTTP redirects and GitHub release downloads always
-      # redirect, so the updater's files live on a branch served directly by
-      # raw.githubusercontent.com (see backend/bootstrap/auto-update.ts).
-      - name: Publish the update channels
-        run: |
-          previous=$(gh release list --limit 30 --json tagName --jq '.[].tagName' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$VERSION" | head -n "$PATCH_HISTORY" || true)
-
-          rm -rf site
-          mkdir site
-
-          for arch in linux-x86_64; do
-            rm -rf olds
-            mkdir olds
-
-            for tag in $previous; do
-              gh release download "$tag" --pattern "hive-ai-*-$arch.*" --dir olds || true
-            done
-
-            deno run -A backend/scripts/release/make-manifest.ts \
-              --version "$VERSION" \
-              --new "$(ls artifacts/hive-ai-$VERSION-$arch.*)" \
-              --olds olds --out "site/$arch"
-          done
-
-          # A single commit with no history: old patches just disappear, nothing piles up.
-          cd site
-          git init -q -b updates
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Update channels for v$VERSION"
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" updates
