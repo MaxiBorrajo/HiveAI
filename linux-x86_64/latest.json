@@ -1,0 +1,13 @@
+{
+  "version": "0.1.3",
+  "patches": {
+    "0.1.2": {
+      "name": "patch-0.1.2-to-0.1.3.bin",
+      "sha256": "0fa12ea1bc02a07f92dc0bc3194fb351b22c7f2d7a45c2c3f375de96e588384d"
+    },
+    "0.1.1": {
+      "name": "patch-0.1.1-to-0.1.3.bin",
+      "sha256": "eeeef7adf0eb6d37b748cc485e31c28cecbb512cd0f9f7cd96d341938a33f994"
+    }
+  }
+}
