@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPlugins } from "@/features/plugins/api/getPlugins";
 import { setPluginActive } from "@/features/plugins/api/setPluginActive";
+import { setPluginsActiveBatch } from "@/features/plugins/api/setPluginsActiveBatch";
 import { importPlugin } from "@/features/plugins/api/importPlugin";
 import { removePlugin } from "@/features/plugins/api/removePlugin";
 import { editPlugin } from "@/features/plugins/api/editPlugin";
@@ -91,12 +92,12 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
 
     setPlugins((prev) => prev.map((p) => ({ ...p, active: nextActive })));
 
-    try {
-      await Promise.all(
-        pluginsToChange.map((p) => setPluginActive(p.name, nextActive)),
-      );
-    } catch {
-      getPlugins().then(({ data }) => setPlugins(data ?? []));
+    const { success, data } = await setPluginsActiveBatch(
+      pluginsToChange.map((p) => ({ name: p.name, active: nextActive })),
+    );
+
+    if (!success || data) {
+      setPlugins(data ?? []);
     }
   }
 

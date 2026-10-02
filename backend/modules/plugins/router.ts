@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { handleGetPlugins } from "./use-cases/get-plugins/get-plugins.ts";
 import { handleActivatePlugin } from "./use-cases/activate-plugin.ts";
 import { handleDeactivatePlugin } from "./use-cases/deactivate-plugin.ts";
+import { handleSetPluginsActive } from "./use-cases/set-plugins-active.ts";
 import { handleTest } from "./use-cases/test-plugin/test-plugin.ts";
 import { handleImportPlugin } from "./use-cases/import-plugin.ts";
 import { handleRemovePlugin } from "./use-cases/remove-plugin.ts";
@@ -31,6 +32,12 @@ pluginsRouter.post("/:name/activate", (c) => {
 pluginsRouter.post("/:name/deactivate", (c) => {
   const name = c.req.param("name");
   return handleDeactivatePlugin(c.get("hive"), name, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.post("/batch-active", (c) => {
+  return handleSetPluginsActive(c.get("hive"), c.req.raw, {
     "content-type": "application/json",
   });
 });

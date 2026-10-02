@@ -2,6 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HiveMicrokernel } from "./core/microkernel/hive-microkernel.ts";
 import { initORM } from "./infrastructure/db/orm.ts";
+import { PluginStateRepository } from "./infrastructure/db/repositories/plugin-state-repository.ts";
 import { homeDir } from "./core/env.ts";
 import { createApp } from "./bootstrap/create-app.ts";
 import { openDesktopWindow } from "./bootstrap/desktop.ts";
@@ -13,7 +14,8 @@ const hive = HiveMicrokernel.getInstance();
 hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
 hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
 await hive.getConfig().load();
-await initORM(hive.getConfig().get("dataDir"));
+const db = await initORM(hive.getConfig().get("dataDir"));
+hive.setPluginStateRepository(new PluginStateRepository(db));
 
 const server = Deno.serve({ port: 0 }, createApp(hive).fetch);
 const port = (server.addr as Deno.NetAddr).port;

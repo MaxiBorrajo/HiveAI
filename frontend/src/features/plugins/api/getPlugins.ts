@@ -7,7 +7,7 @@ import type {
   PluginParameter,
 } from "@/features/plugins/types";
 
-interface BackendPlugin {
+export interface BackendPlugin {
   name: string;
   description: string;
   active: boolean;
@@ -17,20 +17,24 @@ interface BackendPlugin {
   parameters?: PluginParameter[];
 }
 
+export function toPlugin(plugin: BackendPlugin): Plugin {
+  return {
+    id: plugin.name,
+    name: plugin.name,
+    description: plugin.description,
+    active: plugin.active,
+    selectionTests: plugin.selectionTests || [],
+    executionTests: plugin.executionTests || [],
+    isExternal: plugin.isExternal ?? false,
+    parameters: plugin.parameters ?? [],
+  };
+}
+
 export async function getPlugins(): Promise<ResponseEntity<Plugin[]>> {
   const response =
     await apiClient.get<ResponseEntity<BackendPlugin[]>>("/api/plugins");
   return {
     ...response.data,
-    data: (response.data.data ?? []).map((plugin) => ({
-      id: plugin.name,
-      name: plugin.name,
-      description: plugin.description,
-      active: plugin.active,
-      selectionTests: plugin.selectionTests || [],
-      executionTests: plugin.executionTests || [],
-      isExternal: plugin.isExternal ?? false,
-      parameters: plugin.parameters ?? [],
-    })),
+    data: (response.data.data ?? []).map(toPlugin),
   };
 }

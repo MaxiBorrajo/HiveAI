@@ -16,6 +16,7 @@ import {
   validatePlugin as validatePluginQuality,
   type TestSuiteQualityReport,
 } from "./plugin-quality-validator.ts";
+import type { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
 
 export type { TestSuiteQualityReport };
 
@@ -32,6 +33,7 @@ export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
   private activePlugins: Set<string> = new Set();
+  private pluginStateRepository: PluginStateRepository | undefined;
   private config = new HiveConfig({
     dataDir: "",
     configDir: "",
@@ -51,6 +53,46 @@ export class HiveMicrokernel {
 
   configure(patch: Partial<HiveSettings>): void {
     this.config.set(patch);
+  }
+
+  setPluginStateRepository(repository: PluginStateRepository): void {
+    this.pluginStateRepository = repository;
+  }
+
+  /**
+   * Applies persisted active/inactive state to plugins already registered
+   * in-memory. Plugins with no persisted record keep their current
+   * (default) state, so freshly-added internal plugins still start active.
+   *
+   * Must run AFTER registration but BEFORE any default-activation step that
+   * unconditionally calls activate() on every registered plugin — otherwise
+   * that default activation persists `active: true` and overwrites a
+   * previously persisted `false`, defeating the point of restoring state.
+   */
+  async restorePersistedActiveStates(): Promise<void> {
+    if (!this.pluginStateRepository) return;
+
+    const persistedStates = await this.pluginStateRepository.findAll();
+
+    for (const [name, active] of persistedStates) {
+      if (!this.plugins.has(name)) continue;
+      if (active) {
+        await this.activate(name);
+      } else {
+        await this.deactivate(name);
+      }
+    }
+  }
+
+  /**
+   * Returns the persisted active state for a plugin, or `undefined` if it
+   * has no persisted record (i.e. it should fall back to its default
+   * behavior, such as internal plugins defaulting to active).
+   */
+  async getPersistedActiveState(name: string): Promise<boolean | undefined> {
+    if (!this.pluginStateRepository) return undefined;
+    const persistedStates = await this.pluginStateRepository.findAll();
+    return persistedStates.get(name);
   }
 
   getConfig() {
@@ -160,6 +202,10 @@ export class HiveMicrokernel {
     this.activePlugins.delete(name);
   }
 
+  async forgetPersistedState(name: string): Promise<void> {
+    await this.pluginStateRepository?.delete(name);
+  }
+
   async activate(name: string): Promise<boolean> {
     if (!this.plugins.has(name)) {
       console.warn(
@@ -177,6 +223,7 @@ export class HiveMicrokernel {
     }
 
     this.activePlugins.add(name);
+    await this.pluginStateRepository?.setActive(name, true);
     console.log(
       `Bee '${name}' activated. Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
     );
@@ -185,6 +232,7 @@ export class HiveMicrokernel {
 
   async deactivate(name: string): Promise<boolean> {
     const removed = this.activePlugins.delete(name);
+    await this.pluginStateRepository?.setActive(name, false);
     console.log(
       `Bee '${name}' deactivated (was active: ${removed}). Active bees: [${Array.from(this.activePlugins).join(", ")}]`,
     );
@@ -300,6 +348,9 @@ export class HiveMicrokernel {
   async removeExternalPlugin(name: string): Promise<boolean> {
     if (!this.externalPlugins.isExternal(name)) return false;
     const removed = await this.externalPlugins.remove(name);
+    if (removed) {
+      await this.forgetPersistedState(name);
+    }
     stopSharedHostIfIdle(
       this.externalPlugins.hasAnyRunningHandle(this.activePlugins),
     );
