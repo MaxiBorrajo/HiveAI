@@ -1,22 +1,12 @@
-/**
- * LLM routing/abstention eval harness. NOT a correctness test: LLM output is
- * non-deterministic, so this reports a pass rate per category instead of
- * asserting hard pass/fail. Treat a drop in pass rate as a regression signal
- * to investigate, not a build-breaking failure.
- *
- * Requires a running Ollama instance with a tool-calling-capable model
- * pulled (e.g. `ollama pull qwen3:8b`).
- *
- * Usage: deno task eval:llm [modelName]
- */
+
 import { HumanMessage, type AIMessage } from "@langchain/core/messages";
 import ollama from "ollama";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
-import { Scout } from "../../core/ai/strategy/SCOUT/graph.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
 import CurrentDatetimePlugin from "../../plugins/current-datetime/index.ts";
 import { evalCases, type EvalCase } from "./cases.ts";
+import { Scout } from "../../core/ai/strategy/scout/graph.ts";
 
 const AVAILABLE_PLUGINS = [CounterPlugin, CurrentDatetimePlugin];
 const MAX_TOOL_CALLS = 5;

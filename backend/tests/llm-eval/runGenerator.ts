@@ -1,25 +1,6 @@
-/**
- * Visual Builder generator eval harness. NOT a correctness test: graph
- * generation is LLM-driven and non-deterministic, so this reports a pass
- * rate instead of asserting hard pass/fail. Treat a drop in pass rate as a
- * regression signal to investigate (prompt change, model change), not a
- * build-breaking failure.
- *
- * Requires a running Ollama instance with a tool-calling-capable model
- * pulled (e.g. `ollama pull qwen3:8b`).
- *
- * Usage: deno run -A tests/llm-eval/runGenerator.ts [modelName]
- */
 import ollama from "ollama";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
-import { generateIncrementalGraph } from "../../core/ai/visual-builder/generator.ts";
-import {
-  validateGraphInterpolationGrammar,
-  validateGraphVariableReferences,
-  validateGraphPluginParameters,
-  validateGraphAgentToolMentions,
-} from "../../core/ai/visual-builder/validation.ts";
 import type { LangGraphAbstraction, PluginInfo } from "../../core/ai/visual-builder/types.ts";
 import WebSearchPlugin from "../../plugins/web-search/index.ts";
 import WebReadPlugin from "../../plugins/web-read/index.ts";
@@ -27,6 +8,8 @@ import FileOpsPlugin from "../../plugins/file-ops/index.ts";
 import CurrentDatetimePlugin from "../../plugins/current-datetime/index.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
 import { generatorEvalCases, type GeneratorEvalCase } from "./generatorCases.ts";
+import { generateIncrementalGraph } from "../../core/ai/visual-builder/generation/generate-graph.ts";
+import { validateGraphAgentToolMentions, validateGraphInterpolationGrammar, validateGraphPluginParameters, validateGraphVariableReferences } from "../../core/ai/visual-builder/generation/validation.ts";
 
 const ALL_PLUGINS = [WebSearchPlugin, WebReadPlugin, FileOpsPlugin, CurrentDatetimePlugin, CounterPlugin];
 const GENERATION_TIMEOUT_MS = 300_000;
