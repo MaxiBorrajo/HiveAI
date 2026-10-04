@@ -20,7 +20,7 @@ export function SegmentedTabs<T extends string>({
   onChange,
 }: SegmentedTabsProps<T>) {
   return (
-    <div className="inline-flex p-0.5 rounded-lg bg-zinc-900 border border-zinc-800/80 text-xs">
+    <div className="inline-flex p-0.5 rounded-lg bg-muted border border-border/80 text-xs">
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -29,14 +29,14 @@ export function SegmentedTabs<T extends string>({
           className={cn(
             "flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-all cursor-pointer",
             active === tab.id
-              ? "bg-zinc-800 text-zinc-100 shadow-sm"
-              : "text-zinc-400 hover:text-zinc-200",
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           {tab.icon}
           <span>{tab.label}</span>
           {tab.badge !== undefined && (
-            <span className="text-[10px] font-mono px-1 rounded bg-zinc-800 text-zinc-400">
+            <span className="text-[10px] font-mono px-1 rounded bg-card text-muted-foreground">
               {tab.badge}
             </span>
           )}

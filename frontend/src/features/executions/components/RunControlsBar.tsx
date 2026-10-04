@@ -19,7 +19,7 @@ interface RunControlsBarProps {
 }
 
 const SEGMENT =
-  "flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-900/90 hover:text-zinc-200 active:bg-zinc-800 transition-all select-none cursor-pointer";
+  "flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/90 hover:text-foreground active:bg-muted transition-all select-none cursor-pointer";
 
 export function RunControlsBar({
   graph,
@@ -38,7 +38,7 @@ export function RunControlsBar({
 
   return (
     <div className="absolute top-6 right-6 z-20 pointer-events-auto flex flex-col items-end gap-2">
-      <div className="inline-flex items-stretch rounded-xl bg-zinc-950/90 border border-zinc-800 shadow-2xl backdrop-blur-md overflow-hidden divide-x divide-zinc-800/80">
+      <div className="inline-flex items-stretch rounded-xl bg-card/90 border border-border shadow-2xl backdrop-blur-md overflow-hidden divide-x divide-border/80">
         <button
           type="button"
           onClick={onRun}
@@ -47,7 +47,7 @@ export function RunControlsBar({
             "group flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium transition-all select-none",
             isRunning
               ? "bg-amber-500/10 text-amber-300 cursor-wait"
-              : "text-zinc-200 hover:bg-zinc-900/90 hover:text-white active:bg-zinc-800",
+              : "text-foreground hover:bg-muted/90 hover:text-foreground active:bg-muted",
             (isThinking || isRunning) && !isRunning && "opacity-50 cursor-not-allowed"
           )}
           title={hasRequiredInputs ? "Configure & Run Execution" : "Run Execution"}
@@ -59,7 +59,7 @@ export function RunControlsBar({
             </>
           ) : (
             <>
-              <Play className="size-3.5 fill-emerald-400 text-emerald-400 transition-transform group-hover:scale-110" />
+              <Play className="size-3.5 fill-emerald-600 dark:fill-emerald-400 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
               <span className="font-medium">Run Execution</span>
             </>
           )}
@@ -70,7 +70,7 @@ export function RunControlsBar({
             type="button"
             onClick={onOpenRunModal}
             disabled={isThinking}
-            className="flex items-center justify-center px-2 py-2 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-all border-l border-zinc-800/80 cursor-pointer"
+            className="flex items-center justify-center px-2 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all border-l border-border/80 cursor-pointer"
             title="Run with Custom Parameters..."
           >
             <SlidersHorizontal className="size-3.5" />
@@ -81,10 +81,10 @@ export function RunControlsBar({
           <button
             type="button"
             onClick={onShowResult}
-            className="group flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 active:bg-emerald-500/20 transition-all"
+            className="group flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 active:bg-emerald-500/20 transition-all"
             title="View Execution Result & State"
           >
-            <CircleCheckBig className="size-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+            <CircleCheckBig className="size-3.5 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
             <span>Result</span>
           </button>
         )}
@@ -108,15 +108,15 @@ export function RunControlsBar({
           className={cn(
             "flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-all select-none cursor-pointer",
             isLogsOpen
-              ? "bg-zinc-800/90 text-zinc-100"
-              : "text-zinc-400 hover:bg-zinc-900/90 hover:text-zinc-200"
+              ? "bg-muted/90 text-foreground"
+              : "text-muted-foreground hover:bg-muted/90 hover:text-foreground"
           )}
           title="Toggle Execution Logs"
         >
           <Terminal className="size-3.5" />
           <span>Logs</span>
           {logs.length > 0 && (
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
               {logs.length}
             </span>
           )}
@@ -131,8 +131,8 @@ export function RunControlsBar({
           >
             {isCopied ? (
               <>
-                <Check className="size-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-medium">Copied!</span>
+                <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
               </>
             ) : (
               <>

@@ -24,7 +24,7 @@ interface NodeDetailsPanelProps {
 
 const LABEL = "text-[10px] text-muted-foreground uppercase font-semibold";
 const CODE =
-  "text-xs bg-black/50 p-2 rounded border border-white/5 overflow-x-auto text-zinc-300 mt-1 break-all whitespace-pre-wrap";
+  "text-xs bg-muted/50 p-2 rounded border border-border/50 overflow-x-auto text-muted-foreground mt-1 break-all whitespace-pre-wrap";
 
 const FORMS: Partial<Record<GraphNode["type"], (props: NodeFormProps) => React.ReactNode>> = {
   llm: LlmNodeForm,

@@ -66,7 +66,7 @@ export function ConditionNode({
   const isUpdating = data.isUpdating;
   const isExecuting = data.isExecuting;
 
-  let borderColor = "#27272a";
+  let borderColor = "var(--border)";
   let filter = "drop-shadow(0 8px 24px rgba(0,0,0,0.5))";
 
   if (isUpdating) {
@@ -112,7 +112,7 @@ export function ConditionNode({
         type="target"
         position={Position.Left}
         id="target"
-        className="!w-3 !h-3 !bg-zinc-500 hover:!bg-primary !border-2 !border-zinc-950 transition-colors shadow-sm z-20"
+        className="!w-3 !h-3 !bg-muted-foreground hover:!bg-primary !border-2 !border-card transition-colors shadow-sm z-20"
       />
 
       <svg
@@ -123,7 +123,7 @@ export function ConditionNode({
       >
         <path
           d={`M 14 1 L 246 1 L 259 14 L 259 ${nodeHeight - 14} L 246 ${nodeHeight - 1} L 14 ${nodeHeight - 1} L 1 ${nodeHeight - 14} L 1 14 Z`}
-          fill="rgba(9, 9, 11, 0.95)"
+          fill="var(--card)"
           stroke={borderColor}
           strokeWidth="1"
           className="transition-colors duration-200"
@@ -150,7 +150,7 @@ export function ConditionNode({
         </div>
 
         {isExecuting ? (
-          <div className="flex items-center gap-1 text-emerald-400">
+          <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-[8px] font-bold">RUNNING</span>
           </div>
@@ -167,24 +167,24 @@ export function ConditionNode({
         {/* Title and ID block */}
         <div className="text-left">
           <h4
-            className="font-semibold text-xs text-zinc-100 tracking-tight leading-snug wrap-break-word"
+            className="font-semibold text-xs text-foreground tracking-tight leading-snug wrap-break-word"
             title={data.name}
           >
             {data.name || "Condition"}
           </h4>
-          <span className="text-[10px] text-zinc-400 font-mono">
+          <span className="text-[10px] text-muted-foreground font-mono">
             ID: {id || "condition"}
           </span>
         </div>
         {rule ? (
           <div
-            className="px-2.5 py-1 rounded-md bg-zinc-900/90 border border-orange-500/30 text-[10.5px] text-orange-300 font-mono leading-tight shadow-sm text-left mt-2 break-all"
+            className="px-2.5 py-1 rounded-md bg-muted/90 border border-orange-500/30 text-[10.5px] text-orange-300 font-mono leading-tight shadow-sm text-left mt-2 break-all"
             title={rule}
           >
             {rule}
           </div>
         ) : (
-          <div className="text-[10px] text-zinc-500 font-mono text-left mt-2">
+          <div className="text-[10px] text-muted-foreground font-mono text-left mt-2">
             evaluating condition...
           </div>
         )}
@@ -193,13 +193,13 @@ export function ConditionNode({
         type="source"
         position={Position.Right}
         id="true"
-        className="w-3! h-3! bg-emerald-500! hover:bg-emerald-400! border-2! border-zinc-950! transition-colors shadow-sm z-20"
+        className="w-3! h-3! bg-emerald-500! hover:bg-emerald-400! border-2! border-card! transition-colors shadow-sm z-20"
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="false"
-        className="w-3! h-3! bg-red-500! hover:bg-red-400! border-2! border-zinc-950! transition-colors shadow-sm z-20"
+        className="w-3! h-3! bg-red-500! hover:bg-red-400! border-2! border-card! transition-colors shadow-sm z-20"
       />
     </div>
   );

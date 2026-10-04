@@ -28,7 +28,7 @@ export function StateCard({ graph, onClose }: StateCardProps) {
           const writer = writerOf(key);
           const builtin = BUILTIN_STATE_KEYS.includes(key);
           return (
-            <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2.5">
+            <div key={key} className="rounded-lg border border-border bg-muted/50 p-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-xs text-foreground">{key}</span>
                 <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
@@ -39,7 +39,7 @@ export function StateCard({ graph, onClose }: StateCardProps) {
                 {builtin ? "Provided when the execution starts" : writer ? `Written by ${writer}` : "No node writes this variable"}
               </p>
               {def.description && (
-                <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">{def.description}</p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{def.description}</p>
               )}
             </div>
           );

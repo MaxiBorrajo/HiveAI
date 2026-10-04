@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/toast";
 import { Chat } from "@/features/chats";
 import { AppSidebar } from "@/components/AppSidebar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
 import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain";
 import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
@@ -124,10 +125,13 @@ function AppContent() {
       <AppSidebar
         {...sidebarProps}
         actions={
-          <ViewSwitcher
-            currentView={currentView}
-            onViewChange={setCurrentView}
-          />
+          <>
+            <ViewSwitcher
+              currentView={currentView}
+              onViewChange={setCurrentView}
+            />
+            <ThemeToggle />
+          </>
         }
       />
 
