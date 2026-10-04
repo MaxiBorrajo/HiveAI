@@ -110,7 +110,7 @@ export function ExecutionResultSidebar({
     <div
       style={{ width: `${sidebarWidth}px`, maxWidth: "calc(100vw - 280px)" }}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 bg-zinc-950/95 border-l border-zinc-800 shadow-2xl backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-200",
+        "fixed inset-y-0 right-0 z-50 bg-card/95 border-l border-border shadow-2xl backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-200",
         isResizing && "select-none duration-0",
       )}
     >
@@ -119,18 +119,18 @@ export function ExecutionResultSidebar({
         onMouseDown={startResizing}
         className="absolute left-0 inset-y-0 w-1.5 -translate-x-1/2 cursor-ew-resize hover:bg-emerald-500/50 transition-colors z-50 group"
       >
-        <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-1 h-8 rounded-full bg-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-1 h-8 rounded-full bg-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
 
       {/* Top Header */}
-      <div className="p-4 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between gap-3">
+      <div className="p-4 border-b border-border/80 bg-card/80 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="size-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="size-4 text-emerald-400" />
+            <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-semibold text-sm text-zinc-100 truncate">
+              <h3 className="font-semibold text-sm text-foreground truncate">
                 {executionName || "Execution Result"}
               </h3>
               <span
@@ -139,7 +139,7 @@ export function ExecutionResultSidebar({
                 {typeTheme.icon}
                 {typeTheme.label}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 shrink-0">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
                 #{data.iteration || 1}
               </span>
             </div>
@@ -153,10 +153,10 @@ export function ExecutionResultSidebar({
             size="icon"
             onClick={() => copy(stringifyContent(resObj.content))}
             title="Copy content"
-            className="size-7 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+            className="size-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80"
           >
             {copied ? (
-              <Check className="size-3.5 text-emerald-400" />
+              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
             ) : (
               <Copy className="size-3.5" />
             )}
@@ -167,7 +167,7 @@ export function ExecutionResultSidebar({
             size="icon"
             onClick={handleDownload}
             title="Download result"
-            className="size-7 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+            className="size-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80"
           >
             <Download className="size-3.5" />
           </Button>
@@ -177,7 +177,7 @@ export function ExecutionResultSidebar({
             size="icon"
             onClick={toggleMaximize}
             title={isMaximized ? "Restore size" : "Expand width"}
-            className="size-7 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+            className="size-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80"
           >
             {isMaximized ? (
               <Minimize2 className="size-3.5" />
@@ -186,24 +186,24 @@ export function ExecutionResultSidebar({
             )}
           </Button>
 
-          <div className="w-[1px] h-4 bg-zinc-800 mx-0.5" />
+          <div className="w-[1px] h-4 bg-border mx-0.5" />
 
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
             title="Close sidebar"
-            className="size-7 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+            className="size-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80"
           >
             <X className="size-4" />
           </Button>
         </div>
       </div>
 
-      <div className="px-4 py-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center justify-between">
+      <div className="px-4 py-2 border-b border-border/60 bg-card/40 flex items-center justify-between">
         <SegmentedTabs<Tab> tabs={tabs} active={activeTab} onChange={setActiveTab} />
         {resObj.summary && (
-          <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[220px]">
+          <span className="text-[11px] text-muted-foreground font-sans truncate max-w-[220px]">
             {resObj.summary}
           </span>
         )}
@@ -229,7 +229,7 @@ export function ExecutionResultSidebar({
 
         {activeTab === "raw" && (
           <div className="p-4">
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-4 font-mono text-xs text-zinc-300 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed select-text">
+            <div className="rounded-xl border border-border/80 bg-muted/30 p-4 font-mono text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all leading-relaxed select-text">
               {stringifyContent(data.result)}
             </div>
           </div>
@@ -241,9 +241,9 @@ export function ExecutionResultSidebar({
       </div>
 
       {/* Footer */}
-      <div className="p-3.5 border-t border-zinc-800/80 bg-zinc-900/50 flex items-center justify-between gap-2">
-        <div className="text-[11px] text-zinc-500 font-mono">
-          Type: <span className="text-zinc-400">{resObj.type}</span>
+      <div className="p-3.5 border-t border-border/80 bg-muted/50 flex items-center justify-between gap-2">
+        <div className="text-[11px] text-muted-foreground font-mono">
+          Type: <span className="text-muted-foreground">{resObj.type}</span>
         </div>
         <div className="flex items-center gap-2">
           {onRunAgain && (
@@ -251,7 +251,7 @@ export function ExecutionResultSidebar({
               variant="outline"
               size="sm"
               onClick={onRunAgain}
-              className="text-xs gap-1.5 border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200"
+              className="text-xs gap-1.5 border-border bg-muted/60 hover:bg-muted text-foreground"
             >
               <Play className="size-3" />
               Run Again

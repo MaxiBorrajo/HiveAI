@@ -43,7 +43,7 @@ export function ExecutionChatPanel({
               Editing {selectedNode ? "node" : "edge"}: <strong>{selectedNode ? selectedNode.name : selectedEdge?.id}</strong>
               {selectedNode ? ` (${selectedNode.type})` : ""}
             </span>
-            <button onClick={onClearSelection} className="hover:text-white ml-1 font-bold">
+            <button onClick={onClearSelection} className="hover:text-foreground ml-1 font-bold">
               ✕
             </button>
           </div>

@@ -37,7 +37,7 @@ function getToolIcon(toolName: string) {
     return <Globe className="size-3.5 text-cyan-400 shrink-0" />;
   }
   if (lower.includes("read") && lower.includes("web")) {
-    return <FileText className="size-3.5 text-emerald-400 shrink-0" />;
+    return <FileText className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
   }
   if (lower.includes("file") || lower.includes("folder")) {
     return <FileCode className="size-3.5 text-amber-400 shrink-0" />;
@@ -48,7 +48,7 @@ function getToolIcon(toolName: string) {
   if (lower.includes("time") || lower.includes("date") || lower.includes("clock")) {
     return <Clock className="size-3.5 text-orange-400 shrink-0" />;
   }
-  return <Wrench className="size-3.5 text-zinc-400 shrink-0" />;
+  return <Wrench className="size-3.5 text-muted-foreground shrink-0" />;
 }
 
 export function StandardNode({
@@ -70,7 +70,7 @@ export function StandardNode({
   const hasTools = data.type === "llm" && plugins.length > 0;
   const showTools = isExpanded || isExecuting || isSelected;
 
-  let borderColor = "border-zinc-800";
+  let borderColor = "border-border";
   let boxShadow = "0 8px 24px -4px rgba(0,0,0,0.5)";
 
   if (isUpdating) {
@@ -91,7 +91,7 @@ export function StandardNode({
     switch (data.type) {
       case "start":
         return {
-          bg: "bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-400",
+          bg: "bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
           icon: <PlayCircle className="size-3.5" />,
           label: "START NODE",
         };
@@ -121,7 +121,7 @@ export function StandardNode({
             };
       default:
         return {
-          bg: "bg-zinc-800/40 border-b border-zinc-700/50 text-zinc-300",
+          bg: "bg-muted/40 border-b border-border/50 text-muted-foreground",
           icon: <Sparkles className="size-3.5" />,
           label: "PROCESS",
         };
@@ -132,7 +132,7 @@ export function StandardNode({
 
   return (
     <div
-      className={`relative min-w-60 max-w-70 rounded-xl overflow-hidden border ${borderColor} bg-zinc-950/95 transition-all duration-200 text-left select-none`}
+      className={`relative min-w-60 max-w-70 rounded-xl overflow-hidden border ${borderColor} bg-card/95 transition-all duration-200 text-left select-none`}
       style={{ boxShadow }}
     >
       {/* Target handle (Left socket) */}
@@ -140,7 +140,7 @@ export function StandardNode({
         <Handle
           type="target"
           position={Position.Left}
-          className="w-3! h-3! bg-zinc-500! hover:bg-primary! border-2! border-zinc-950! transition-colors shadow-sm"
+          className="w-3! h-3! bg-muted-foreground! hover:bg-primary! border-2! border-card! transition-colors shadow-sm"
         />
       )}
       <div
@@ -151,7 +151,7 @@ export function StandardNode({
           <span>{headerTheme.label}</span>
         </div>
         {isExecuting ? (
-          <div className="flex items-center gap-1 text-emerald-400">
+          <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-[9px] font-bold">RUNNING</span>
           </div>
@@ -161,7 +161,7 @@ export function StandardNode({
             <span className="text-[9px] font-bold">EDITING</span>
           </div>
         ) : data.config?.model ? (
-          <span className="text-[9px] text-zinc-300 opacity-90 truncate max-w-22.5">
+          <span className="text-[9px] text-foreground opacity-90 truncate max-w-22.5">
             {String(data.config.model)}
           </span>
         ) : null}
@@ -169,16 +169,16 @@ export function StandardNode({
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h4 className="font-semibold text-xs text-zinc-100 tracking-tight leading-snug">
+            <h4 className="font-semibold text-xs text-foreground tracking-tight leading-snug">
               {data.name}
             </h4>
-            <span className="text-[10px] text-zinc-400 font-mono">
+            <span className="text-[10px] text-muted-foreground font-mono">
               ID: {id}
             </span>
           </div>
           {data.config?.model && hasTools && (
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-white/5 text-[9px] font-mono text-zinc-400">
-              <Cpu className="size-2.5 text-zinc-500" />
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted border border-border/50 text-[9px] font-mono text-muted-foreground">
+              <Cpu className="size-2.5 text-muted-foreground" />
               <span>{String(data.config.model)}</span>
             </div>
           )}
@@ -191,26 +191,26 @@ export function StandardNode({
                 e.stopPropagation();
                 setIsExpanded((prev) => !prev);
               }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-800/90 hover:border-zinc-700 hover:bg-zinc-900 transition-all text-xs font-mono group cursor-pointer"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-muted/80 border border-border/90 hover:border-muted-foreground/40 hover:bg-muted transition-all text-xs font-mono group cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <span className="flex items-center -space-x-1.5">
                   {plugins.slice(0, 3).map((p) => (
                     <span
                       key={p}
-                      className="size-5 rounded-full bg-zinc-950 border border-zinc-700/80 flex items-center justify-center shadow-xs"
+                      className="size-5 rounded-full bg-card border border-border/80 flex items-center justify-center shadow-xs"
                       title={p}
                     >
                       {getToolIcon(p)}
                     </span>
                   ))}
                 </span>
-                <span className="text-[10.5px] font-medium text-zinc-300">
+                <span className="text-[10.5px] font-medium text-muted-foreground">
                   {plugins.length} Attached Tools
                 </span>
               </div>
 
-              <div className="text-zinc-400 group-hover:text-zinc-200 transition-colors">
+              <div className="text-muted-foreground group-hover:text-foreground transition-colors">
                 {showTools ? (
                   <ChevronDown className="size-3.5" />
                 ) : (
@@ -219,8 +219,8 @@ export function StandardNode({
               </div>
             </button>
             {showTools && (
-              <div className="mt-2 space-y-1.5 pt-2 border-t border-zinc-900/80">
-                <div className="text-[10px] font-mono font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 px-0.5">
+              <div className="mt-2 space-y-1.5 pt-2 border-t border-border/80">
+                <div className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-0.5">
                   Tools
                 </div>
 
@@ -232,19 +232,19 @@ export function StandardNode({
                       key={plugin}
                       className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-mono transition-all duration-200 ${
                         isToolActive
-                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.4)] ring-1 ring-emerald-500/40"
-                          : "bg-zinc-900/60 border-zinc-800/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900/90"
+                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.4)] ring-1 ring-emerald-500/40"
+                          : "bg-muted/60 border-border/80 text-muted-foreground hover:border-muted-foreground/40 hover:bg-muted/90"
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {getToolIcon(plugin)}
-                        <span className="truncate text-[11px] font-medium text-zinc-200">
+                        <span className="truncate text-[11px] font-medium text-foreground">
                           {plugin}
                         </span>
                       </div>
 
                       {isToolActive && (
-                        <div className="flex items-center gap-1 shrink-0 bg-emerald-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold text-emerald-300">
+                        <div className="flex items-center gap-1 shrink-0 bg-emerald-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
                           <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
                           RUNNING
                         </div>
@@ -261,7 +261,7 @@ export function StandardNode({
         <Handle
           type="source"
           position={Position.Right}
-          className="w-3! h-3! bg-zinc-500! hover:bg-primary! border-2! border-zinc-950! transition-colors shadow-sm"
+          className="w-3! h-3! bg-muted-foreground! hover:bg-primary! border-2! border-card! transition-colors shadow-sm"
         />
       )}
     </div>

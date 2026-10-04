@@ -50,7 +50,7 @@ export function ValidateGraphModal({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <AlertCircle className="size-4 text-red-400" />
+                <AlertCircle className="size-4 text-destructive" />
                 The graph has {violations.length || errors.length} error
                 {(violations.length || errors.length) === 1 ? "" : "s"}
               </DialogTitle>
@@ -58,10 +58,10 @@ export function ValidateGraphModal({
             <div className="max-h-[50vh] space-y-3 overflow-auto py-2">
               {violations.length === 0
                 ? errors.map((error, i) => (
-                    <p key={i} className="text-sm text-red-300">{error}</p>
+                    <p key={i} className="text-sm text-destructive">{error}</p>
                   ))
                 : [...groups.entries()].map(([nodeId, group]) => (
-                    <div key={nodeId || "graph"} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+                    <div key={nodeId || "graph"} className="rounded-lg border border-border bg-muted/50 p-3">
                       <button
                         type="button"
                         disabled={!nodeId}
@@ -69,13 +69,13 @@ export function ValidateGraphModal({
                           onSelectNode(nodeId);
                           onClose();
                         }}
-                        className="mb-1.5 text-xs font-medium text-zinc-100 enabled:hover:underline"
+                        className="mb-1.5 text-xs font-medium text-foreground enabled:hover:underline"
                       >
                         {nodeId ? group.name : "Graph"}
                       </button>
                       <ul className="space-y-1">
                         {group.items.map((item, i) => (
-                          <li key={i} className="text-xs leading-relaxed text-red-300">
+                          <li key={i} className="text-xs leading-relaxed text-destructive">
                             {item.reason}
                           </li>
                         ))}

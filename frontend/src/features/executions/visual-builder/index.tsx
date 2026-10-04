@@ -8,6 +8,7 @@ import {
   Background,
 } from "@xyflow/react";
 import type { Node, Edge, Connection, ReactFlowInstance } from "@xyflow/react";
+import { useTheme } from "next-themes";
 import "@xyflow/react/dist/style.css";
 import type { LangGraphAbstraction, PaletteNodeType } from "../types";
 import { isConnectionAllowed } from "../lib/graphOps";
@@ -62,6 +63,8 @@ export function VisualBuilder({
   const rfRef = useRef<ReactFlowInstance | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
 
   const nodeTypes = useMemo(
     () => ({
@@ -173,7 +176,7 @@ export function VisualBuilder({
         }}
         fitView
         fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
-        colorMode="dark"
+        colorMode={isDark ? "dark" : "light"}
         style={{ backgroundColor: "transparent" }}
       >
         <AutoFitOnUpdate
@@ -182,7 +185,7 @@ export function VisualBuilder({
           disabled={!!editable}
         />
         <Controls position="bottom-left" />
-        <Background gap={40} size={1} bgColor="#050403" />
+        <Background gap={40} size={1} bgColor="var(--background)" />
       </ReactFlow>
     </div>
   );

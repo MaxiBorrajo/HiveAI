@@ -10,15 +10,15 @@ export function StateVariablesPanel({
       {variables.map(([key, value]) => (
         <div
           key={key}
-          className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3.5 space-y-1.5"
+          className="rounded-xl border border-border/80 bg-muted/40 p-3.5 space-y-1.5"
         >
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xs font-semibold text-emerald-400">{key}</span>
-            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/50">
+            <span className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">{key}</span>
+            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/50">
               {typeof value}
             </span>
           </div>
-          <pre className="text-xs font-mono text-zinc-300 bg-black/40 p-2.5 rounded-lg border border-zinc-800/60 overflow-x-auto max-h-56 break-all whitespace-pre-wrap">
+          <pre className="text-xs font-mono text-muted-foreground bg-background/40 p-2.5 rounded-lg border border-border/60 overflow-x-auto max-h-56 break-all whitespace-pre-wrap">
             {stringifyContent(value)}
           </pre>
         </div>
