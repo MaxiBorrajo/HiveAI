@@ -40,4 +40,28 @@ export interface ModelFilters {
 
 export interface CurrentModels {
   model: string;
+  provider: ModelProvider;
+  keyId: string;
+}
+
+export type ModelProvider =
+  | "ollama"
+  | "ollama-cloud"
+  | "anthropic"
+  | "openai"
+  | "google";
+
+export interface CloudModel {
+  name: string;
+  label?: string;
+  capabilities: string[];
+}
+
+export interface CloudModelGroup {
+  keyId: string;
+  alias: string;
+  provider: Exclude<ModelProvider, "ollama">;
+  models: CloudModel[];
+  /** Set when the live model list failed and a fallback list is shown. */
+  error?: string;
 }

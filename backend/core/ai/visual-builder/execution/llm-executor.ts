@@ -1,4 +1,7 @@
-import { ChatOllama } from "@langchain/ollama";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { createChatModel } from "../../providers/create-chat-model.ts";
+import { normalizeModelRef, isCloudProvider } from "../../providers/types.ts";
+import { normalizeProviderError } from "../../providers/errors.ts";
 import { Runnable } from "@langchain/core/runnables";
 import {
   SystemMessage,
@@ -33,9 +36,12 @@ function resolveModelName(model: unknown): string {
   return name;
 }
 
-function createChatModel(config: LlmConfig, temperature: number): ChatOllama {
+/** Splits node config into the model reference and provider-specific options. */
+function splitModelConfig(config: LlmConfig, temperature: number) {
   const {
     model,
+    provider,
+    keyId,
     plugins: _plugins,
     systemPrompt: _systemPrompt,
     pluginId: _pluginId,
@@ -45,11 +51,20 @@ function createChatModel(config: LlmConfig, temperature: number): ChatOllama {
     ...modelOptions
   } = config;
 
-  return new ChatOllama({
-    model: resolveModelName(model),
-    temperature,
-    ...modelOptions,
-  });
+  const ref = normalizeModelRef(resolveModelName(model), { provider, keyId });
+  // Ollama-specific options (numCtx, ...) never apply to cloud models.
+  const options = isCloudProvider(ref.provider)
+    ? { temperature }
+    : { temperature, ...modelOptions };
+  return { ref, options };
+}
+
+function buildNodeChatModel(
+  config: LlmConfig,
+  temperature: number,
+): Promise<BaseChatModel> {
+  const { ref, options } = splitModelConfig(config, temperature);
+  return createChatModel(ref, options);
 }
 
 function toolResultToString(toolResult: unknown): string {
@@ -62,11 +77,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function buildLlmInstance(
+export async function buildLlmInstance(
   nodeId: string,
   config: LlmConfig,
   toolProvider?: ToolProvider,
-): Runnable {
+): Promise<Runnable> {
   const toolsToBind: unknown[] = [];
 
   if (config.plugins && Array.isArray(config.plugins)) {
@@ -93,9 +108,9 @@ export function buildLlmInstance(
     );
   }
 
-  const llm = createChatModel(config, 0.8);
+  const llm = (await buildNodeChatModel(config, 0.8)) as BaseChatModel & { model?: string };
   console.log(
-    `\n[Compiler Native LLM] Executing model: ${llm.model} for node ${nodeId}`,
+    `\n[Compiler Native LLM] Executing model: ${config.model} for node ${nodeId}`,
   );
   if (toolsToBind.length > 0) {
     console.log(`[Compiler Native LLM] Tools bound: ${toolsToBind.length}`);
@@ -316,7 +331,7 @@ async function runToolCall(
 
 async function runReactLoop(
   nodeId: string,
-  baseLlm: ChatOllama,
+  baseLlm: BaseChatModel,
   tools: ToolLike[],
   messages: BaseMessage[],
   toolProvider?: ToolProvider,
@@ -361,21 +376,12 @@ async function runReactLoop(
 }
 
 function resolveModelOptions(config: LlmConfig, temperature: number) {
-  const {
-    model,
-    plugins: _plugins,
-    systemPrompt: _systemPrompt,
-    pluginId: _pluginId,
-    structuredOutput: _structuredOutput,
-    outputKey: _outputKey,
-    inputMapping: _inputMapping,
-    ...modelOptions
-  } = config;
-
+  const { ref, options } = splitModelConfig(config, temperature);
   return {
-    model: resolveModelName(model),
-    temperature,
-    ...modelOptions,
+    model: ref.model,
+    provider: ref.provider,
+    keyId: ref.keyId,
+    ...options,
   };
 }
 
@@ -384,12 +390,21 @@ export async function executeLlmNode(
   config: LlmConfig,
   state: Record<string, unknown>,
   toolProvider?: ToolProvider,
-  llmFactory: (opts: { model: string; temperature: number; [key: string]: unknown }) => any = (opts) =>
-    new ChatOllama(opts as any),
+  llmFactory: (opts: {
+    model: string;
+    provider: string;
+    keyId?: string;
+    temperature: number;
+    [key: string]: unknown;
+  }) => any = ({ model, provider, keyId, ...options }) =>
+    createChatModel(
+      normalizeModelRef(model, { provider, keyId }),
+      options as Record<string, unknown>,
+    ),
 ): Promise<Record<string, unknown>> {
   try {
     const tools = resolveTools(nodeId, config, toolProvider);
-    const baseLlm = llmFactory(resolveModelOptions(config, 0.2));
+    const baseLlm = await llmFactory(resolveModelOptions(config, 0.2));
     const messages = buildPromptMessages(state, config);
 
     if (tools.length > 0) {
@@ -483,9 +498,12 @@ export function handleLlmError(
   nodeId: string,
   config: LlmConfig,
 ): Record<string, unknown> {
-  const errorMsg = errorMessage(error);
+  const errorMsg = normalizeProviderError(
+    error,
+    typeof config.provider === "string" ? config.provider : undefined,
+  ).message;
   console.error(
-    `[Compiler Native LLM] Network error with Ollama (Node ${nodeId}):`,
+    `[Compiler Native LLM] Model error (Node ${nodeId}):`,
     errorMsg,
   );
 

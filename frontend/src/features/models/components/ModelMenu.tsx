@@ -1,4 +1,4 @@
-import { BrainCircuit, Check, Settings } from "lucide-react";
+import { BrainCircuit, Check, Cloud, KeyRound, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -7,25 +7,43 @@ import {
   DropdownMenuSeparator,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
-import type { CurrentModels, ModelInfo } from "@/features/models/types";
+import type {
+  CloudModelGroup,
+  CurrentModels,
+  ModelInfo,
+} from "@/features/models/types";
+import {
+  buildChoiceGroups,
+  currentChoice,
+  isCloud,
+  sameChoice,
+  type ModelChoice,
+} from "@/features/models/lib/modelChoices";
 
 interface ModelMenuProps {
   models: ModelInfo[];
+  cloudGroups: CloudModelGroup[];
   current: CurrentModels;
-  onChangeModel: (name: string) => void;
+  onChangeModel: (choice: ModelChoice) => void;
   onOpenManage: () => void;
+  onOpenKeys: () => void;
   onOpen?: () => void;
   forceOpenDownward?: boolean;
 }
 
 export function ModelMenu({
   models,
+  cloudGroups,
   current,
   onChangeModel,
   onOpenManage,
+  onOpenKeys,
   onOpen,
   forceOpenDownward = false,
 }: ModelMenuProps) {
+  const groups = buildChoiceGroups(models, cloudGroups);
+  const active = currentChoice(current);
+
   return (
     <DropdownMenu
       onOpenChange={(open) => {
@@ -36,7 +54,11 @@ export function ModelMenu({
         className="flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring px-1.5 py-0.5 gap-2"
         title="Models"
       >
-        <BrainCircuit className="size-4" />
+        {isCloud(current.provider) ? (
+          <Cloud className="size-4" />
+        ) : (
+          <BrainCircuit className="size-4" />
+        )}
         <span className="text-sm font-mono truncate max-w-32">
           {current.model || "No model"}
         </span>
@@ -46,44 +68,56 @@ export function ModelMenu({
         side="bottom"
         sideOffset={8}
         collisionAvoidance={forceOpenDownward ? { side: "none" } : undefined}
-        className="w-64"
+        className="w-72 max-h-96 overflow-y-auto"
       >
         <DropdownMenuGroup>
           <div className="px-1.5 py-1">
             <span className="text-sm font-medium">Models</span>
           </div>
 
-          <DropdownMenuSeparator />
-
-          {models.length === 0 ? (
+          {groups.length === 0 && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
               No models available
             </div>
-          ) : (
-            models.map((model) => {
-              const isModel = model.name === current.model;
+          )}
 
-              return (
+          {groups.map((group) => (
+            <div key={group.id}>
+              <DropdownMenuSeparator />
+              <div
+                className="px-2 py-1 text-xs font-medium text-muted-foreground truncate"
+                title={group.error}
+              >
+                {group.label}
+                {group.error && " ⚠"}
+              </div>
+              {group.choices.map((choice) => (
                 <DropdownMenuItem
-                  key={model.name}
+                  key={`${group.id}:${choice.model}`}
                   closeOnClick={false}
-                  onClick={() => onChangeModel(model.name)}
-                  title={model.name}
+                  onClick={() => onChangeModel(choice)}
+                  title={choice.model}
                 >
                   <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-                    <span className="text-sm font-mono truncate max-w-40">
-                      {model.name}
+                    <span className="text-sm font-mono truncate max-w-48">
+                      {choice.model}
                     </span>
-                    {isModel && <Check className="size-4 shrink-0" />}
+                    {sameChoice(choice, active) && (
+                      <Check className="size-4 shrink-0" />
+                    )}
                   </div>
                 </DropdownMenuItem>
-              );
-            })
-          )}
+              ))}
+            </div>
+          ))}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
 
+        <DropdownMenuItem onClick={onOpenKeys}>
+          <KeyRound className="mr-2 size-4" />
+          <span>API keys...</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={onOpenManage}>
           <Settings className="mr-2 size-4" />
           <span>Manage Models...</span>

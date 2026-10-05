@@ -1,5 +1,6 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import type { ChatOllama } from "@langchain/ollama";
+import type { ModelSelection } from "../providers/model-selection.ts";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
 import type z from "zod";
 import type { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
@@ -77,7 +78,11 @@ export interface GraphEdge {
 }
 
 export interface LlmConfig {
-  model?: string
+  model?: string;
+  /** "ollama" (default) or a cloud provider; see ModelRef. */
+  provider?: string;
+  /** Id of the stored API key used for cloud providers. */
+  keyId?: string;
   systemPrompt?: string;
   plugins?: string[];
   pluginId?: string;
@@ -190,14 +195,14 @@ export interface PluginParameterInfo {
 
 export interface ConditionNodeConfiguratorContext {
   prompt: string;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   graphStateText: string;
 }
 
 export interface EndNodeConfiguratorContext {
   prompt: string;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   intermediateNodes: GraphNode[];
 }
@@ -209,16 +214,18 @@ export interface InvocableAgent {
 export interface InterpolationSelfCorrectionContext {
   graph: LangGraphAbstraction;
   availablePlugins: PluginInfo[];
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   nodeDescriptions: Map<string, string>;
 }
 
 export interface LlmNodeConfiguratorContext {
   prompt: string;
   modelName: string;
+  /** Orchestrator + available models; enables per-node model proposals. */
+  modelSelection?: ModelSelection;
   availablePlugins: PluginInfo[];
   pluginNames: Set<string>;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   intermediateNodes: GraphNode[];
   nodeDescriptions: Map<string, string>;
@@ -232,7 +239,7 @@ export interface PluginNodeConfiguratorContext {
   prompt: string;
   availablePlugins: PluginInfo[];
   pluginNames: Set<string>;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   intermediateNodes: GraphNode[];
   nodeDescriptions: Map<string, string>;

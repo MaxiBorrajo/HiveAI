@@ -1,4 +1,5 @@
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../providers/create-chat-model.ts";
+import { normalizeModelRef, type ModelRef } from "../../providers/types.ts";
 import {
   AIMessage,
   BaseMessage,
@@ -146,13 +147,15 @@ export async function runTopologyCompilerPhase(
     violations: string[];
   },
   existingGraph?: LangGraphAbstraction,
+  orchestrator?: ModelRef,
 ): Promise<WorkflowSkeleton> {
   const workflowSkeletonSchema = buildWorkflowSkeletonSchema(availablePlugins);
 
-  const compilerAgent = new ChatOllama({
-    model: modelName,
-    temperature: 0.1,
-  }).withStructuredOutput(workflowSkeletonSchema, {
+  const compilerAgent = (
+    await createChatModel(orchestrator ?? normalizeModelRef(modelName), {
+      temperature: 0.1,
+    })
+  ).withStructuredOutput(workflowSkeletonSchema, {
     name: "TopologyCompiler",
   });
 

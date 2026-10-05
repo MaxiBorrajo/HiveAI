@@ -5,6 +5,7 @@ import { getCurrentModels } from "./use-cases/get-current-models.ts";
 import { setModels } from "./use-cases/set-models.ts";
 import { getEmbeddingModelStatus } from "./use-cases/get-embedding-model-status.ts";
 import { handlePullEmbeddingModel } from "./use-cases/pull-embedding-model.ts";
+import { getCloudModels } from "./use-cases/get-cloud-models.ts";
 import { ModelFilters } from "./types.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 
@@ -16,6 +17,10 @@ modelsRouter.get("/current", (c) => {
   return getCurrentModels(c.get("hive"), {
     "content-type": "application/json",
   });
+});
+
+modelsRouter.get("/cloud", () => {
+  return getCloudModels({ "content-type": "application/json" });
 });
 
 modelsRouter.get("/embedding-status", (c) => {

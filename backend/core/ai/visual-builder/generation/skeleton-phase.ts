@@ -1,3 +1,4 @@
+import type { ModelRef } from "../../providers/types.ts";
 import type {
   IncrementalEvent,
   LangGraphAbstraction,
@@ -21,6 +22,7 @@ export async function* requestValidatedSkeleton(
   availablePlugins: PluginInfo[],
   graph: LangGraphAbstraction,
   existingGraph?: LangGraphAbstraction,
+  orchestrator?: ModelRef,
 ): AsyncGenerator<IncrementalEvent, NormalizedSkeleton, unknown> {
   const nodesBefore = graph.nodes.length;
   let correctionContext:
@@ -34,6 +36,7 @@ export async function* requestValidatedSkeleton(
       availablePlugins,
       correctionContext,
       existingGraph,
+      orchestrator,
     );
 
     yield { type: "planning", thoughts: skeleton.thought };

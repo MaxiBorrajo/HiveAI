@@ -1,3 +1,5 @@
+import type { ModelProvider } from "../../core/ai/providers/types.ts";
+
 export interface ModelInfo {
   name: string;
   architecture: string;
@@ -43,4 +45,6 @@ export interface ModelFilters {
 
 export interface CurrentModels {
   model: string;
+  provider: ModelProvider;
+  keyId: string;
 }

@@ -5,7 +5,7 @@ import {
 } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
 import { HiveAIState } from "../graph.ts";
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../../providers/create-chat-model.ts";
 import {
   RESPONDER_FAILURE_SYSTEM_PROMPT,
   RESPONDER_NO_TOOL_SYSTEM_PROMPT,
@@ -29,7 +29,10 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
     numPredict: 1024,
     ...state.modelOptions,
   };
-  const responder = new ChatOllama(responderOptions);
+  const responder = await createChatModel(
+    { provider: "ollama", model: state.model },
+    (responderOptions),
+  );
 
   console.log(
     `[SADER - Responder] Effective Ollama options:`,

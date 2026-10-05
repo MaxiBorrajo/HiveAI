@@ -7,6 +7,8 @@ export function fetchCurrentModels(hive: HiveMicrokernel): CurrentModels {
 
   return {
     model: config.get("model"),
+    provider: config.get("modelProvider"),
+    keyId: config.get("modelKeyId"),
   };
 }
 

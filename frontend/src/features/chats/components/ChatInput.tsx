@@ -6,6 +6,7 @@ import { PluginsManager } from "../../plugins/components/PluginsManager.tsx";
 import { ModesManager } from "../../modes/components/ModesManager.tsx";
 import { ModelsManager } from "../../models/components/ModelsManager.tsx";
 import { useModels } from "@/features/models/ModelsContext";
+import { isCloud } from "@/features/models/lib/modelChoices";
 import {
   pullEmbeddingModel,
   type PullProgress,
@@ -35,6 +36,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const {
     hasModel,
+    current,
     hasAvailableModels,
     embeddingModelStatus,
     openManage,
@@ -183,7 +185,7 @@ export function ChatInput({
             {!hidePluginsAndModes && (
               <>
                 <PluginsManager forceOpenDownward={isEmpty} />
-                <ModesManager />
+                {!isCloud(current.provider) && <ModesManager />}
               </>
             )}
             <ModelsManager forceOpenDownward={isEmpty} />

@@ -44,6 +44,20 @@ export class ExecutionRepository {
     await this.db.delete(executions).where(eq(executions.id, id));
   }
 
+  /** Latest graph version of every execution that has one. */
+  async findLatestGraphs(): Promise<
+    { execution: Execution; graph: ExecutionGraph }[]
+  > {
+    const all = await this.findAll();
+    const result: { execution: Execution; graph: ExecutionGraph }[] = [];
+    for (const execution of all) {
+      if (!execution.lastGraphId) continue;
+      const graph = await this.findGraphById(execution.lastGraphId);
+      if (graph) result.push({ execution, graph });
+    }
+    return result;
+  }
+
   // Execution Graphs
   async findGraphById(id: number): Promise<ExecutionGraph | undefined> {
     const [graph] = await this.db.select().from(executionGraphs).where(eq(executionGraphs.id, id));

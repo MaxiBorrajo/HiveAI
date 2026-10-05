@@ -1,4 +1,8 @@
-import { ChatOllama } from "@langchain/ollama";
+import {
+  describeCatalog,
+  modelConfigFields,
+  resolveNodeModel,
+} from "../../providers/model-selection.ts";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import {
@@ -22,6 +26,7 @@ import {
 export function buildLlmConfigSchema(
   availablePlugins: PluginInfo[],
   availableStateKeys: string[] = [],
+  modelChoices: string[] = [],
 ) {
   const pluginNames = availablePlugins.map((p) => p.name);
   const stateKeyField = stateKeySchema(
@@ -66,6 +71,16 @@ export function buildLlmConfigSchema(
       .record(z.string(), statePropertyDefinitionSchema)
       .optional()
       .describe("If outputKey is new, define its schema here"),
+    ...(modelChoices.length > 0
+      ? {
+          modelChoice: z
+            .string()
+            .optional()
+            .describe(
+              `Model this node should run on. Exactly one of: [${modelChoices.join(", ")}]. Omit to use the default model.`,
+            ),
+        }
+      : {}),
   });
 }
 
@@ -84,6 +99,12 @@ function buildAgentToolHint(nodePlugins: string[]): string {
   if (nodePlugins.length === 0) return "";
   return `\nNOTE: This LLM node is an autonomous agent equipped with tools: [${nodePlugins.join(", ")}].
 Instruct it in systemPrompt to use its tools iteratively (e.g. searching the web, reading multiple relevant URLs, extracting details, saving files) to compile a rich, thorough response before concluding.`;
+}
+
+function buildModelHint(selection: LlmNodeConfiguratorContext["modelSelection"]): string {
+  if (!selection || selection.catalog.length < 2) return "";
+  return `\nMODEL CHOICE: pick 'modelChoice' for this node from the models below. Default (omit) is ${selection.orchestrator.provider}:${selection.orchestrator.model}. Use the strongest model only for steps that need hard reasoning, planning or synthesis; prefer small/local models for simple extraction, formatting, classification or yes/no checks, and keep nodes that call tools on a model tagged [tools].
+${describeCatalog(selection)}`;
 }
 
 function buildConditionPromptHint(feedsIntoCondition: boolean): string {
@@ -272,8 +293,22 @@ function applyLlmConfigCandidate(
   );
   const finalPlugins = resolveFinalPlugins(config, nodePlugins, availablePlugins, pluginNames);
 
+  // Reconfiguring a node keeps the model the user already gave it unless a new one is proposed.
+  const existingModel = node.config?.model
+    ? {
+        model: node.config.model as string,
+        ...(node.config.provider ? { provider: node.config.provider as string } : {}),
+        ...(node.config.keyId ? { keyId: node.config.keyId as string } : {}),
+      }
+    : undefined;
+  const modelChoice = (config as { modelChoice?: string }).modelChoice;
+  const nodeModel = resolveNodeModel(modelChoice, ctx.modelSelection);
   const llmConfig: LlmConfig = {
-    model: modelName,
+    ...(modelChoice || !existingModel
+      ? nodeModel
+        ? modelConfigFields(nodeModel)
+        : { model: modelName }
+      : existingModel),
     temperature: 0.1,
     systemPrompt: buildFinalSystemPrompt(
       config,
@@ -323,8 +358,9 @@ function applyFallbackLlmConfig(
     ? `${node.id}_is_approved`
     : `${node.id}_result`;
 
+  const fallbackModel = resolveNodeModel(undefined, ctx.modelSelection);
   const llmConfig: LlmConfig = {
-    model: modelName,
+    ...(fallbackModel ? modelConfigFields(fallbackModel) : { model: modelName }),
     temperature: 0.1,
     systemPrompt: feedsIntoCondition
       ? `Evaluate if the input meets the required criteria. Return true if approved/satisfied, or false otherwise.`
@@ -364,6 +400,7 @@ export async function configureLlmNode(
   const dynamicLlmConfigSchema = buildLlmConfigSchema(
     availablePlugins,
     currentStateKeysForLlm,
+    ctx.modelSelection?.catalog.map((o) => o.id) ?? [],
   );
   const llmAgent = configLlm.withStructuredOutput(dynamicLlmConfigSchema, {
     name: "LLMConfig",
@@ -381,7 +418,8 @@ export async function configureLlmNode(
     {
       branchHint: buildBranchHint(incomingEdge),
       neighborHint,
-      agentToolHint: buildAgentToolHint(nodePlugins),
+      agentToolHint:
+        buildAgentToolHint(nodePlugins) + buildModelHint(ctx.modelSelection),
       conditionPromptHint: buildConditionPromptHint(feedsIntoCondition),
     },
     graphStateText,

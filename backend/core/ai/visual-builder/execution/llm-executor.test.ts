@@ -106,25 +106,25 @@ Deno.test("buildPromptMessages - state.input is surfaced as USER GOAL context", 
 
 // --- buildLlmInstance ---
 
-Deno.test("buildLlmInstance - throws when plugins are requested but no ToolProvider is given", () => {
-  assertThrows(
+Deno.test("buildLlmInstance - throws when plugins are requested but no ToolProvider is given", async () => {
+  await assertRejects(
     () => buildLlmInstance("n1", { model: "qwen3:8b", plugins: ["web-search"] }),
     Error,
     "no ToolProvider was injected",
   );
 });
 
-Deno.test("buildLlmInstance - throws when a requested plugin isn't registered in the provider", () => {
+Deno.test("buildLlmInstance - throws when a requested plugin isn't registered in the provider", async () => {
   const provider: ToolProvider = { getTool: () => undefined };
-  assertThrows(
+  await assertRejects(
     () => buildLlmInstance("n1", { model: "qwen3:8b", plugins: ["missing-tool"] }, provider),
     Error,
     "is not registered in the Microkernel",
   );
 });
 
-Deno.test("buildLlmInstance - throws when no model is specified", () => {
-  assertThrows(() => buildLlmInstance("n1", {}), Error, "No model was specified");
+Deno.test("buildLlmInstance - throws when no model is specified", async () => {
+  await assertRejects(() => buildLlmInstance("n1", {}), Error, "No model was specified");
 });
 
 // --- mapResponseToState ---
@@ -372,4 +372,44 @@ Deno.test("executeLlmNode - a thrown error from the LLM factory itself is caught
     ),
     true,
   );
+});
+
+// --- provider-aware model construction ---
+
+Deno.test("executeLlmNode - passes provider + keyId to the factory and drops ollama options for cloud nodes", async () => {
+  let seen: Record<string, unknown> = {};
+  await executeLlmNode(
+    "cloud",
+    { model: "claude-sonnet-5-5", provider: "anthropic", keyId: "k1", numCtx: 8192 },
+    {},
+    undefined,
+    (opts) => {
+      seen = opts;
+      return { invoke: () => Promise.resolve(new AIMessage("ok")) };
+    },
+  );
+  assertEquals(seen.provider, "anthropic");
+  assertEquals(seen.keyId, "k1");
+  assertEquals("numCtx" in seen, false);
+});
+
+Deno.test("executeLlmNode - local nodes keep ollama options and default to the ollama provider", async () => {
+  let seen: Record<string, unknown> = {};
+  await executeLlmNode("local", { model: "qwen3:8b", numCtx: 4096 }, {}, undefined, (opts) => {
+    seen = opts;
+    return { invoke: () => Promise.resolve(new AIMessage("ok")) };
+  });
+  assertEquals(seen.provider, "ollama");
+  assertEquals(seen.numCtx, 4096);
+});
+
+Deno.test("executeLlmNode - a provider error becomes a clear message in the node output, without throwing", async () => {
+  const result = await executeLlmNode(
+    "n1",
+    { model: "gpt-4.1", provider: "openai", keyId: "k", outputKey: "out" },
+    {},
+    undefined,
+    () => ({ invoke: () => Promise.reject(Object.assign(new Error("401"), { status: 401 })) }),
+  );
+  assertEquals(String(result.out).includes("API key was rejected"), true);
 });

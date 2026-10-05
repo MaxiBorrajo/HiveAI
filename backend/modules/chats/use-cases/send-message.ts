@@ -11,6 +11,8 @@ import { type ThinkingRun } from "../../../core/memory/types.ts";
 import { resolveModelOptions } from "../../modes/lib/resolve-model-options.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { embedText } from "../../../core/memory/embeddings.ts";
+import { splitContent } from "../../../core/ai/providers/capabilities.ts";
+import { normalizeProviderError } from "../../../core/ai/providers/errors.ts";
 import type { BeePlugin } from "../../../core/microkernel/bee-plugin.ts";
 
 const MAX_MESSAGE_LENGTH = 20_000;
@@ -113,7 +115,11 @@ export async function consumeStream(
     if (mode === "messages") {
       const [message, metadata] = payload;
 
-      const reasoningChunk = message.additional_kwargs?.reasoning_content;
+      const { text: contentText, thinking: contentThinking } = splitContent(
+        message.content,
+      );
+      const reasoningChunk =
+        message.additional_kwargs?.reasoning_content || contentThinking;
       if (reasoningChunk) {
         appendThinkingDelta(
           thinkingRuns,
@@ -128,7 +134,7 @@ export async function consumeStream(
 
       if (metadata.langgraph_node !== finalNodeName) continue;
 
-      const chunkText = String(message.content ?? "");
+      const chunkText = contentText;
       if (!chunkText) continue;
       fullContent += chunkText;
       send("token", { content: chunkText });
@@ -208,16 +214,27 @@ export async function sendMessage(
       userText,
     );
 
-    const streamIterable = await Scout.stream(
-      { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
-      { streamMode: ["messages", "values"], signal: req.signal },
-    );
-
-    const { fullContent, steps, thinkingRuns } = await consumeStream(
-      streamIterable,
-      "Agent",
-      send,
-    );
+    const config = hive.getConfig();
+    const modelProvider = config.get("modelProvider");
+    let streamResult: Awaited<ReturnType<typeof consumeStream>>;
+    try {
+      const streamIterable = await Scout.stream(
+        {
+          messages: contextMessages,
+          chatId: resolvedChatId.toString(),
+          model,
+          modelProvider,
+          modelKeyId: config.get("modelKeyId"),
+          modelOptions: modelProvider === "ollama" ? modelOptions : {},
+        },
+        { streamMode: ["messages", "values"], signal: req.signal },
+      );
+      streamResult = await consumeStream(streamIterable, "Agent", send);
+    } catch (error) {
+      if (req.signal.aborted) throw error;
+      throw normalizeProviderError(error, modelProvider);
+    }
+    const { fullContent, steps, thinkingRuns } = streamResult;
 
     const usedTools = Array.from(
       new Set(

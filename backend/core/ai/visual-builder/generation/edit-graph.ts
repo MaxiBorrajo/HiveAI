@@ -1,4 +1,4 @@
-import type { ChatOllama } from "@langchain/ollama";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { createBaseStateSchema, createDraftGraph } from "../graph-factory.ts";
 import type {
   GraphNode,
@@ -11,6 +11,7 @@ import { runInterpolationSelfCorrection } from "./interpolation-self-correction.
 import { configureNodes } from "./node-configuration.ts";
 import { requestValidatedSkeleton } from "./skeleton-phase.ts";
 import { sanitizeGraphEdges } from "./graph-sanitizer.ts";
+import type { ModelSelection } from "../../providers/model-selection.ts";
 import { BUILTIN_STATE_KEYS } from "../constants.ts";
 
 export async function* reconfigureTargetNode(
@@ -18,9 +19,10 @@ export async function* reconfigureTargetNode(
   modelName: string,
   availablePlugins: PluginInfo[],
   pluginNames: Set<string>,
-  configLlm: ChatOllama,
+  configLlm: BaseChatModel,
   currentGraph: LangGraphAbstraction,
   target: GraphNode,
+  modelSelection?: ModelSelection,
 ): AsyncGenerator<IncrementalEvent, LangGraphAbstraction, unknown> {
   const graph: LangGraphAbstraction = createDraftGraph(currentGraph);
   const node = graph.nodes.find((n) => n.id === target.id)!;
@@ -59,6 +61,7 @@ export async function* reconfigureTargetNode(
   yield* configureNodes([node], {
     prompt: request,
     modelName,
+    modelSelection,
     availablePlugins,
     pluginNames,
     configLlm,
@@ -110,8 +113,9 @@ export async function* editExistingGraph(
   modelName: string,
   availablePlugins: PluginInfo[],
   pluginNames: Set<string>,
-  configLlm: ChatOllama,
+  configLlm: BaseChatModel,
   current: LangGraphAbstraction,
+  modelSelection?: ModelSelection,
 ): AsyncGenerator<IncrementalEvent, LangGraphAbstraction, unknown> {
   const previousById = new Map(current.nodes.map((n) => [n.id, n]));
   const previousKeys = outputKeysOf(current);
@@ -130,6 +134,7 @@ export async function* editExistingGraph(
     availablePlugins,
     graph,
     current,
+    modelSelection?.orchestrator,
   );
   const { intermediateNodes, rawEdges, nodeDescriptions, modifiedIds } = normalized;
 
@@ -186,6 +191,7 @@ export async function* editExistingGraph(
     yield* configureNodes([node], {
       prompt: request,
       modelName,
+      modelSelection,
       availablePlugins,
       pluginNames,
       configLlm,

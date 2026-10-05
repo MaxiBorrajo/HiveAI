@@ -12,6 +12,11 @@ import type {
   LangGraphAbstraction,
   ToolProvider,
 } from "../../../../core/ai/visual-builder/types.ts";
+import {
+  applyDefaultModel,
+  checkGraphModels,
+  defaultModelCheckDeps,
+} from "./check-models.ts";
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { createPluginNodeRegistry } from "./plugin-node-executor.ts";
 import { finalizeExecutionResult } from "./result-normalizer.ts";
@@ -126,6 +131,15 @@ export async function runExecution(
     }
 
     const { abstraction, graphId } = loaded;
+    applyDefaultModel(abstraction, hive);
+    const problems = await checkGraphModels(abstraction, defaultModelCheckDeps());
+    if (problems.length > 0) {
+      return ResponseBuilder.error(
+        problems.map((p) => p.reason),
+        { problems },
+        { headers, status: 422 },
+      );
+    }
     const app = compileExecutionGraph(hive, abstraction);
 
     return createSseResponse(headers, (send) =>

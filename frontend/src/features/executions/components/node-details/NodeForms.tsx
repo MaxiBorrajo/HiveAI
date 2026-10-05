@@ -1,4 +1,10 @@
 import { useModels } from "@/features/models/ModelsContext";
+import {
+  buildChoiceGroups,
+  choiceValue,
+  isCloud,
+  parseChoiceValue,
+} from "@/features/models/lib/modelChoices";
 import type { Plugin } from "@/features/plugins/types";
 import { CONDITION_OPERATORS, RESULT_OUTPUT_TYPES } from "../../lib/graphOps";
 import {
@@ -35,7 +41,37 @@ export function LlmNodeForm({
   stateKeys,
   plugins,
 }: NodeFormProps) {
-  const { models } = useModels();
+  const { models, cloudGroups } = useModels();
+  const choiceGroups = buildChoiceGroups(models, cloudGroups);
+  const nodeChoice = config.model
+    ? {
+        provider: config.provider ?? "ollama",
+        model: config.model as string,
+        keyId: config.keyId ?? "",
+      }
+    : null;
+  const nodeChoiceValue = nodeChoice ? choiceValue(nodeChoice) : "";
+  const nodeChoiceKnown =
+    !nodeChoice ||
+    choiceGroups.some((g) =>
+      g.choices.some((c) => choiceValue(c) === nodeChoiceValue),
+    );
+  const setModelChoice = (value: string) => {
+    const choice = parseChoiceValue(value);
+    const { provider: _p, keyId: _k, ...rest } = config;
+    setConfig(
+      !choice
+        ? { ...rest, model: undefined }
+        : isCloud(choice.provider)
+          ? {
+              ...rest,
+              model: choice.model,
+              provider: choice.provider,
+              keyId: choice.keyId,
+            }
+          : { ...rest, model: choice.model },
+    );
+  };
   const set = (patch: Record<string, any>) =>
     setConfig({ ...config, ...patch });
   const equipped: string[] = Array.isArray(config.plugins)
@@ -54,14 +90,35 @@ export function LlmNodeForm({
       <StateKeysDatalist id={KEYS_LIST_ID} keys={stateKeys} />
       <Field
         label="Model"
-        hint="Leave on default to use the globally selected model."
+        hint="Local or cloud. Cloud models are grouped by the API key they use. Leave on default to use the model selected in the chat."
       >
-        <Select
-          value={config.model ?? ""}
-          onChange={(model) => set({ model: model || undefined })}
-          placeholder="Default model"
-          options={models.map((m) => ({ value: m.name }))}
-        />
+        <select
+          value={nodeChoiceValue}
+          onChange={(e) => setModelChoice(e.target.value)}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Default model</option>
+          {!nodeChoiceKnown && nodeChoice && (
+            <option value={nodeChoiceValue}>
+              {nodeChoice.model} (unavailable)
+            </option>
+          )}
+          {choiceGroups.map((group) => (
+            <optgroup key={group.id} label={group.label}>
+              {group.choices.map((choice) => (
+                <option key={choiceValue(choice)} value={choiceValue(choice)}>
+                  {choice.model}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        {!nodeChoiceKnown && (
+          <p className="mt-1 text-[11px] text-destructive">
+            This model or its API key no longer exists. The execution will not
+            start until you pick another one.
+          </p>
+        )}
       </Field>
       <Field
         label="System prompt"

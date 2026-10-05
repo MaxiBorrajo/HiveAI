@@ -1,4 +1,5 @@
-import type { ChatOllama } from "@langchain/ollama";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { ModelSelection } from "../../providers/model-selection.ts";
 import type {
   GraphNode,
   IncrementalEvent,
@@ -15,9 +16,10 @@ export async function* configureNodes(
   ctx: {
     prompt: string;
     modelName: string;
+    modelSelection?: ModelSelection;
     availablePlugins: PluginInfo[];
     pluginNames: Set<string>;
-    configLlm: ChatOllama;
+    configLlm: BaseChatModel;
     graph: LangGraphAbstraction;
     nodeDescriptions: Map<string, string>;
     allIntermediateNodes?: GraphNode[];
@@ -26,6 +28,7 @@ export async function* configureNodes(
   const {
     prompt,
     modelName,
+    modelSelection,
     availablePlugins,
     pluginNames,
     configLlm,
@@ -70,6 +73,7 @@ export async function* configureNodes(
     yield* configureNode(node, {
       prompt,
       modelName,
+      modelSelection,
       availablePlugins,
       pluginNames,
       configLlm,
@@ -87,9 +91,10 @@ async function* configureNode(
   ctx: {
     prompt: string;
     modelName: string;
+    modelSelection?: ModelSelection;
     availablePlugins: PluginInfo[];
     pluginNames: Set<string>;
-    configLlm: ChatOllama;
+    configLlm: BaseChatModel;
     graph: LangGraphAbstraction;
     intermediateNodes: GraphNode[];
     nodeDescriptions: Map<string, string>;
@@ -100,6 +105,7 @@ async function* configureNode(
   const {
     prompt,
     modelName,
+    modelSelection,
     availablePlugins,
     pluginNames,
     configLlm,
@@ -115,6 +121,7 @@ async function* configureNode(
       await configureLlmNode(node, {
         prompt,
         modelName,
+        modelSelection,
         availablePlugins,
         pluginNames,
         configLlm,

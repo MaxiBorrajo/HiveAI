@@ -1,4 +1,5 @@
 import { useModels } from "@/features/models/ModelsContext";
+import { ApiKeysModal } from "@/features/api-keys/components/ApiKeysModal";
 import { ModelMenu } from "./ModelMenu";
 import { ModelsModal } from "./ModelsModal";
 
@@ -9,11 +10,15 @@ interface ModelsManagerProps {
 export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
   const {
     models,
+    cloudGroups,
     current,
     changeModel,
     isManageOpen,
     openManage,
     closeManage,
+    isKeysOpen,
+    openKeys,
+    closeKeys,
     refreshModels,
   } = useModels();
 
@@ -21,9 +26,11 @@ export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
     <>
       <ModelMenu
         models={models}
+        cloudGroups={cloudGroups}
         current={current}
         onChangeModel={changeModel}
         onOpenManage={openManage}
+        onOpenKeys={openKeys}
         onOpen={refreshModels}
         forceOpenDownward={forceOpenDownward}
       />
@@ -33,6 +40,11 @@ export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
         models={models}
         current={current}
         onChangeModel={changeModel}
+      />
+      <ApiKeysModal
+        isOpen={isKeysOpen}
+        onOpenChange={(open) => (open ? openKeys() : closeKeys())}
+        onChanged={refreshModels}
       />
     </>
   );

@@ -1,5 +1,7 @@
 import { HumanMessage } from "@langchain/core/messages";
 import { ConditionConfig } from "../types.ts";
+import { HiveMicrokernel } from "../../../microkernel/hive-microkernel.ts";
+import { getCurrentModelRef } from "../../providers/current-model.ts";
 import { buildLlmInstance, coerceLlmBooleanReply } from "./llm-executor.ts";
 
 
@@ -10,13 +12,15 @@ export async function evaluateConditionWithFallback(
   state: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   try {
-    const modelName = (state.model as string);
+    const current = getCurrentModelRef(HiveMicrokernel.getInstance().getConfig());
+    const modelName = (state.model as string) || current.model;
 
     // temperature: 0 to keep the true/false evaluation deterministic.
-    const llm = buildLlmInstance(nodeId, {
+    const llm = (await buildLlmInstance(nodeId, {
       model: modelName,
+      ...(state.model ? {} : { provider: current.provider, keyId: current.keyId }),
       temperature: 0,
-    }) as any;
+    })) as any;
 
     let contextContent = "";
     if (Array.isArray(state.messages) && state.messages.length > 0) {
