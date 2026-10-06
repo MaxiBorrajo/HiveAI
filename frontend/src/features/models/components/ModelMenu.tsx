@@ -7,10 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
-import type {
-  CurrentModels,
-  ModelOptionGroup,
-} from "@/features/models/types";
+import type { CurrentModels, ModelOptionGroup } from "@/features/models/types";
 import {
   currentChoice,
   isCloud,
@@ -26,7 +23,6 @@ interface ModelMenuProps {
   onOpenManage: () => void;
   onOpenKeys: () => void;
   onOpen?: () => void;
-  forceOpenDownward?: boolean;
 }
 
 export function ModelMenu({
@@ -36,7 +32,6 @@ export function ModelMenu({
   onOpenManage,
   onOpenKeys,
   onOpen,
-  forceOpenDownward = false,
 }: ModelMenuProps) {
   const active = currentChoice(current);
 
@@ -63,7 +58,7 @@ export function ModelMenu({
         align="start"
         side="bottom"
         sideOffset={8}
-        collisionAvoidance={forceOpenDownward ? { side: "none" } : undefined}
+        collisionAvoidance={undefined}
         className="w-72 max-h-96 overflow-y-auto"
       >
         <DropdownMenuGroup>
@@ -94,7 +89,7 @@ export function ModelMenu({
                   onClick={() => onChangeModel(choice)}
                   title={choice.model}
                 >
-                  <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
+                  <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
                     <span className="text-sm font-mono truncate max-w-48">
                       {choice.model}
                     </span>

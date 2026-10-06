@@ -3,11 +3,7 @@ import { ApiKeysModal } from "@/features/api-keys/components/ApiKeysModal";
 import { ModelMenu } from "./ModelMenu";
 import { ModelsModal } from "./ModelsModal";
 
-interface ModelsManagerProps {
-  forceOpenDownward?: boolean;
-}
-
-export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
+export function ModelsManager() {
   const {
     models,
     optionGroups,
@@ -31,7 +27,6 @@ export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
         onOpenManage={openManage}
         onOpenKeys={openKeys}
         onOpen={refreshModels}
-        forceOpenDownward={forceOpenDownward}
       />
       <ModelsModal
         isOpen={isManageOpen}

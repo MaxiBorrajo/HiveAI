@@ -15,7 +15,10 @@ import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/features/models/ModelsContext";
 import { ChatsProvider, useChats } from "@/features/chats/ChatsContext";
-import { ExecutionsProvider, useExecutions } from "@/features/executions/ExecutionsContext";
+import {
+  ExecutionsProvider,
+  useExecutions,
+} from "@/features/executions/ExecutionsContext";
 import {
   DraftEditorProvider,
   useDraftEditor,
@@ -126,10 +129,12 @@ function AppContent() {
         {...sidebarProps}
         actions={
           <>
-            <ViewSwitcher
-              currentView={currentView}
-              onViewChange={setCurrentView}
-            />
+            <div className="ml-2">
+              <ViewSwitcher
+                currentView={currentView}
+                onViewChange={setCurrentView}
+              />
+            </div>
             <ThemeToggle />
           </>
         }
@@ -171,11 +176,11 @@ function App() {
         <ModelsProvider>
           <ChatsProvider>
             <ExecutionsProvider>
-            <DraftEditorProvider>
+              <DraftEditorProvider>
                 <AppContent />
               </DraftEditorProvider>
             </ExecutionsProvider>
-        </ChatsProvider>
+          </ChatsProvider>
         </ModelsProvider>
 
         <ToastPortal>

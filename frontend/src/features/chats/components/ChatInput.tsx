@@ -184,11 +184,11 @@ export function ChatInput({
           <div className="flex gap-2">
             {!hidePluginsAndModes && (
               <>
-                <PluginsManager forceOpenDownward={isEmpty} />
+                <PluginsManager />
                 {!isCloud(current.provider) && <ModesManager />}
               </>
             )}
-            <ModelsManager forceOpenDownward={isEmpty} />
+            <ModelsManager />
           </div>
           {isThinking ? (
             <Button variant="secondary" onClick={handleStop} title="Stop">
