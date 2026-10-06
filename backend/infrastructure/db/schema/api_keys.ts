@@ -1,6 +1,5 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/** Metadata only: the key value lives in the encrypted secret store. */
 export const apiKeys = sqliteTable("api_keys", {
   id: text("id").primaryKey(),
   provider: text("provider").notNull(),

@@ -28,7 +28,6 @@ import {
 interface ApiKeysModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Called after any change so model lists can refresh. */
   onChanged?: () => void;
 }
 

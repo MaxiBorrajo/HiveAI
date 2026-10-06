@@ -36,7 +36,6 @@ function resolveModelName(model: unknown): string {
   return name;
 }
 
-/** Splits node config into the model reference and provider-specific options. */
 function splitModelConfig(config: LlmConfig, temperature: number) {
   const {
     model,
@@ -52,7 +51,6 @@ function splitModelConfig(config: LlmConfig, temperature: number) {
   } = config;
 
   const ref = normalizeModelRef(resolveModelName(model), { provider, keyId });
-  // Ollama-specific options (numCtx, ...) never apply to cloud models.
   const options = isCloudProvider(ref.provider)
     ? { temperature }
     : { temperature, ...modelOptions };

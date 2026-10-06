@@ -1,6 +1,6 @@
 import type { ExecutionRepository } from "../../infrastructure/db/repositories/execution-repository.ts";
 import type { HiveConfig } from "../../core/microkernel/hive-settings.ts";
-import type { ApiKeyUsage } from "./api-key-service.ts";
+import type { ApiKeyUsage } from "./types.ts";
 
 interface GraphLike {
   nodes?: { id: string; type: string; config?: Record<string, unknown> }[];

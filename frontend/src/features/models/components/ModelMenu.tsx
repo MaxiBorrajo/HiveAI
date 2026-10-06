@@ -8,21 +8,19 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import type {
-  CloudModelGroup,
   CurrentModels,
-  ModelInfo,
+  ModelOptionGroup,
 } from "@/features/models/types";
 import {
-  buildChoiceGroups,
   currentChoice,
   isCloud,
   sameChoice,
+  toChoice,
   type ModelChoice,
 } from "@/features/models/lib/modelChoices";
 
 interface ModelMenuProps {
-  models: ModelInfo[];
-  cloudGroups: CloudModelGroup[];
+  groups: ModelOptionGroup[];
   current: CurrentModels;
   onChangeModel: (choice: ModelChoice) => void;
   onOpenManage: () => void;
@@ -32,8 +30,7 @@ interface ModelMenuProps {
 }
 
 export function ModelMenu({
-  models,
-  cloudGroups,
+  groups,
   current,
   onChangeModel,
   onOpenManage,
@@ -41,7 +38,6 @@ export function ModelMenu({
   onOpen,
   forceOpenDownward = false,
 }: ModelMenuProps) {
-  const groups = buildChoiceGroups(models, cloudGroups);
   const active = currentChoice(current);
 
   return (
@@ -91,7 +87,7 @@ export function ModelMenu({
                 {group.label}
                 {group.error && " ⚠"}
               </div>
-              {group.choices.map((choice) => (
+              {group.options.map(toChoice).map((choice) => (
                 <DropdownMenuItem
                   key={`${group.id}:${choice.model}`}
                   closeOnClick={false}

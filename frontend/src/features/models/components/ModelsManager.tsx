@@ -10,7 +10,7 @@ interface ModelsManagerProps {
 export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
   const {
     models,
-    cloudGroups,
+    optionGroups,
     current,
     changeModel,
     isManageOpen,
@@ -25,8 +25,7 @@ export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
   return (
     <>
       <ModelMenu
-        models={models}
-        cloudGroups={cloudGroups}
+        groups={optionGroups}
         current={current}
         onChangeModel={changeModel}
         onOpenManage={openManage}

@@ -24,10 +24,6 @@ function fromBase64(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-/**
- * Stores secrets encrypted with AES-256-GCM. The master key lives in a
- * separate 0600 file; the secrets file never contains plaintext values.
- */
 export class SecretStore {
   private key: CryptoKey | undefined;
   private queue: Promise<unknown> = Promise.resolve();

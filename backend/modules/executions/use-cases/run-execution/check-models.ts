@@ -18,16 +18,10 @@ export interface ModelProblem {
 }
 
 export interface ModelCheckDeps {
-  /** Alias for the key id, or undefined if the key no longer exists. */
   findKeyAlias: (keyId: string) => Promise<string | undefined>;
-  /** Names of installed local models, or null if Ollama can't be queried. */
   listLocalModels: () => Promise<Set<string> | null>;
 }
 
-/**
- * Fills in the chat model on llm nodes that have none, so a graph never runs
- * with an undefined model. Mutates and returns the given graph.
- */
 export function applyDefaultModel(
   graph: LangGraphAbstraction,
   hive: HiveMicrokernel,
@@ -47,7 +41,6 @@ export function applyDefaultModel(
   return graph;
 }
 
-/** Explains why a graph can't start because of a missing model or key. */
 export async function checkGraphModels(
   graph: LangGraphAbstraction,
   deps: ModelCheckDeps,

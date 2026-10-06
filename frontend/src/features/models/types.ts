@@ -44,24 +44,18 @@ export interface CurrentModels {
   keyId: string;
 }
 
-export type ModelProvider =
-  | "ollama"
-  | "ollama-cloud"
-  | "anthropic"
-  | "openai"
-  | "google";
+export type ModelProvider = "ollama" | "anthropic" | "google";
 
-export interface CloudModel {
-  name: string;
-  label?: string;
+export interface ModelOption {
+  id: string;
+  ref: { provider: ModelProvider; model: string; keyId?: string };
+  label: string;
   capabilities: string[];
 }
 
-export interface CloudModelGroup {
-  keyId: string;
-  alias: string;
-  provider: Exclude<ModelProvider, "ollama">;
-  models: CloudModel[];
-  /** Set when the live model list failed and a fallback list is shown. */
+export interface ModelOptionGroup {
+  id: string;
+  label: string;
   error?: string;
+  options: ModelOption[];
 }

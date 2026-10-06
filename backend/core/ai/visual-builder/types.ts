@@ -79,9 +79,7 @@ export interface GraphEdge {
 
 export interface LlmConfig {
   model?: string;
-  /** "ollama" (default) or a cloud provider; see ModelRef. */
   provider?: string;
-  /** Id of the stored API key used for cloud providers. */
   keyId?: string;
   systemPrompt?: string;
   plugins?: string[];
@@ -221,7 +219,6 @@ export interface InterpolationSelfCorrectionContext {
 export interface LlmNodeConfiguratorContext {
   prompt: string;
   modelName: string;
-  /** Orchestrator + available models; enables per-node model proposals. */
   modelSelection?: ModelSelection;
   availablePlugins: PluginInfo[];
   pluginNames: Set<string>;

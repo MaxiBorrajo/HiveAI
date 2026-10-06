@@ -14,8 +14,6 @@ export async function evaluateConditionWithFallback(
   try {
     const current = getCurrentModelRef(HiveMicrokernel.getInstance().getConfig());
     const modelName = (state.model as string) || current.model;
-
-    // temperature: 0 to keep the true/false evaluation deterministic.
     const llm = (await buildLlmInstance(nodeId, {
       model: modelName,
       ...(state.model ? {} : { provider: current.provider, keyId: current.keyId }),

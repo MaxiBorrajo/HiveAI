@@ -1,6 +1,4 @@
-import { ResponseBuilder } from "../../../core/api/response.ts";
 import {
-  fallbackModels,
   listCloudModels,
   type CloudModel,
 } from "../../../core/ai/providers/list-cloud-models.ts";
@@ -15,7 +13,6 @@ export interface CloudModelGroup {
   alias: string;
   provider: CloudProvider;
   models: CloudModel[];
-  /** Set when the live list failed; models then come from a static fallback. */
   error?: string;
 }
 
@@ -55,16 +52,10 @@ export async function fetchCloudModelGroups(): Promise<CloudModelGroup[]> {
       } catch (error) {
         return {
           ...base,
-          models: fallbackModels(provider),
+          models: [],
           error: normalizeProviderError(error, provider).message,
         };
       }
     }),
   );
-}
-
-export async function getCloudModels(
-  headers: Record<string, string>,
-): Promise<Response> {
-  return ResponseBuilder.success(await fetchCloudModelGroups(), { headers });
 }

@@ -1,14 +1,12 @@
 import { type ModelRef, PROVIDER_LABELS } from "./types.ts";
 
 export interface ModelOption {
-  /** Stable id shown to the orchestrator, e.g. "anthropic:claude-sonnet-5-5". */
   id: string;
   ref: ModelRef;
   label: string;
   capabilities: string[];
 }
 
-/** What HiveQueen can choose from when proposing a model per node. */
 export interface ModelSelection {
   orchestrator: ModelRef;
   catalog: ModelOption[];
@@ -27,7 +25,6 @@ export function describeCatalog(selection: ModelSelection): string {
     .join("\n");
 }
 
-/** The orchestrator model is the default for every node unless a valid choice is proposed. */
 export function resolveNodeModel(
   choice: string | undefined,
   selection: ModelSelection | undefined,
@@ -39,7 +36,6 @@ export function resolveNodeModel(
   return found?.ref ?? selection.orchestrator;
 }
 
-/** Fields to store in an llm node config for a given model reference. */
 export function modelConfigFields(ref: ModelRef): {
   model: string;
   provider?: string;

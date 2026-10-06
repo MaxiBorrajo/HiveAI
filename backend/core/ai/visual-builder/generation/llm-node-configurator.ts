@@ -12,6 +12,7 @@ import {
   LangGraphAbstraction,
   LlmConfig,
   LlmConfigCandidate,
+  InvocableAgent,
   LlmNodeConfiguratorContext,
   PluginInfo,
 } from "../types.ts";
@@ -292,8 +293,7 @@ function applyLlmConfigCandidate(
     nodeRole,
   );
   const finalPlugins = resolveFinalPlugins(config, nodePlugins, availablePlugins, pluginNames);
-
-  // Reconfiguring a node keeps the model the user already gave it unless a new one is proposed.
+  
   const existingModel = node.config?.model
     ? {
         model: node.config.model as string,
@@ -382,6 +382,33 @@ function applyFallbackLlmConfig(
   };
 }
 
+class InvalidModelChoiceError extends Error {
+  constructor(
+    public readonly candidate: LlmConfigCandidate,
+    choice: string,
+  ) {
+    super(`Model '${choice}' is not one of the available models.`);
+  }
+}
+
+function withModelChoiceCheck(
+  agent: InvocableAgent,
+  ctx: LlmNodeConfiguratorContext,
+): InvocableAgent {
+  const valid = new Set(ctx.modelSelection?.catalog.map((o) => o.id) ?? []);
+  if (valid.size === 0) return agent;
+  return {
+    invoke: async (input, config) => {
+      const result = await agent.invoke(input, config);
+      const choice = (result as { modelChoice?: string }).modelChoice?.trim();
+      if (choice && !valid.has(choice)) {
+        throw new InvalidModelChoiceError(result, choice);
+      }
+      return result;
+    },
+  };
+}
+
 export async function configureLlmNode(
   node: GraphNode,
   ctx: LlmNodeConfiguratorContext,
@@ -434,7 +461,7 @@ export async function configureLlmNode(
 
   await runConfigStep<LlmConfigCandidate, void>({
     label: "LLM/Agent Node Configurator",
-    agent: llmAgent,
+    agent: withModelChoiceCheck(llmAgent, ctx),
     messages: builderMessages,
     onSuccess: (config) => {
       applyLlmConfigCandidate(
@@ -446,7 +473,21 @@ export async function configureLlmNode(
         nodePlugins,
       );
     },
-    onFallback: () => {
+    onFallback: (err) => {
+      if (err instanceof InvalidModelChoiceError) {
+        console.warn(
+          `[Visual Builder - Generator] ${err.message} Using the default model for ${node.id}.`,
+        );
+        applyLlmConfigCandidate(
+          { ...err.candidate, modelChoice: undefined } as LlmConfigCandidate,
+          node,
+          nodeRole,
+          feedsIntoCondition,
+          ctx,
+          nodePlugins,
+        );
+        return;
+      }
       applyFallbackLlmConfig(node, ctx, feedsIntoCondition, nodePlugins);
     },
   });

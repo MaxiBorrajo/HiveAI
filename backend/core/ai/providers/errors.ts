@@ -16,7 +16,6 @@ export class ProviderError extends Error {
   }
 }
 
-/** The model or key a node/chat points to no longer exists. */
 export class ModelUnavailableError extends ProviderError {
   constructor(message: string, provider?: string) {
     super("model_unavailable", message, provider);
@@ -36,7 +35,6 @@ function statusOf(error: unknown): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-/** Maps any error thrown by a provider SDK to a user-readable ProviderError. */
 export function normalizeProviderError(
   error: unknown,
   provider?: string,
@@ -54,6 +52,7 @@ export function normalizeProviderError(
       provider,
     );
   }
+
   if (status === 429) {
     return new ProviderError(
       "rate_limit",
@@ -61,6 +60,7 @@ export function normalizeProviderError(
       provider,
     );
   }
+
   if (
     /fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|network|socket|getaddrinfo/i.test(
       raw,
@@ -72,5 +72,6 @@ export function normalizeProviderError(
       provider,
     );
   }
+  
   return new ProviderError("unknown", `Provider error${name}: ${raw}`, provider);
 }

@@ -104,8 +104,6 @@ Deno.test("buildPromptMessages - state.input is surfaced as USER GOAL context", 
   assertEquals(combined.includes("Do the thing"), true);
 });
 
-// --- buildLlmInstance ---
-
 Deno.test("buildLlmInstance - throws when plugins are requested but no ToolProvider is given", async () => {
   await assertRejects(
     () => buildLlmInstance("n1", { model: "qwen3:8b", plugins: ["web-search"] }),
@@ -126,8 +124,6 @@ Deno.test("buildLlmInstance - throws when a requested plugin isn't registered in
 Deno.test("buildLlmInstance - throws when no model is specified", async () => {
   await assertRejects(() => buildLlmInstance("n1", {}), Error, "No model was specified");
 });
-
-// --- mapResponseToState ---
 
 Deno.test("mapResponseToState - plain text response with outputKey sets both outputKey and result", () => {
   const state = mapResponseToState(new AIMessage("hello world"), { outputKey: "summary" }, {});
@@ -151,7 +147,6 @@ Deno.test("mapResponseToState - outputKey 'result' does not duplicate into a sec
 Deno.test("mapResponseToState - boolean field coerces a string reply via coerceLlmBooleanReply", () => {
   const state = mapResponseToState(new AIMessage("true"), { outputKey: "is_valid" }, {});
   assertEquals(state.is_valid, true);
-  // boolean fields should NOT also populate `result`
   assertEquals("result" in state, false);
 });
 
@@ -406,7 +401,7 @@ Deno.test("executeLlmNode - local nodes keep ollama options and default to the o
 Deno.test("executeLlmNode - a provider error becomes a clear message in the node output, without throwing", async () => {
   const result = await executeLlmNode(
     "n1",
-    { model: "gpt-4.1", provider: "openai", keyId: "k", outputKey: "out" },
+    { model: "gemini-2.5-flash", provider: "google", keyId: "k", outputKey: "out" },
     {},
     undefined,
     () => ({ invoke: () => Promise.reject(Object.assign(new Error("401"), { status: 401 })) }),

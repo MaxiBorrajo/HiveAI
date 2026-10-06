@@ -8,7 +8,12 @@ import { GraphNode } from "@langchain/langgraph/web";
 import { END } from "@langchain/langgraph";
 import { createChatModel } from "../../../providers/create-chat-model.ts";
 import { normalizeModelRef, isCloudProvider } from "../../../providers/types.ts";
-import { cloudModelSupportsThinking, splitContent } from "../../../providers/capabilities.ts";
+import { splitContent } from "../../../providers/capabilities.ts";
+import {
+  isThinkingRejection,
+  markThinkingUnsupported,
+  shouldRequestThinking,
+} from "../../../providers/thinking.ts";
 import { normalizeProviderError } from "../../../providers/errors.ts";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { ScoutState, type ChatStep } from "../graph.ts";
@@ -35,10 +40,11 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     provider: state.modelProvider,
     keyId: state.modelKeyId,
   });
-  const agentOptions = isCloudProvider(modelRef.provider)
-    ? { think: cloudModelSupportsThinking(modelRef.provider, modelRef.model) }
+  const isCloud = isCloudProvider(modelRef.provider);
+  const agentOptions = isCloud
+    ? { think: shouldRequestThinking(modelRef) }
     : { think: true, ...state.modelOptions };
-  const agentModel = await createChatModel(modelRef, agentOptions);
+  let agentModel = await createChatModel(modelRef, agentOptions);
 
   console.log(
     `[SCOUT - Agent] Model ${modelRef.provider}/${modelRef.model}, options:`,
@@ -60,15 +66,24 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     ...buildNativeTools(Number(state.chatId)),
   ];
 
-  const invoke = async (messages: BaseMessage[]) => {
+  const invoke = async (messages: BaseMessage[]): Promise<AIMessage> => {
     try {
-      return outOfIterations
+      return (outOfIterations
         ? await agentModel.invoke(messages, { signal: config.signal })
         : await agentModel
             .bindTools(tools)
-            .invoke(messages, { signal: config.signal });
+            .invoke(messages, { signal: config.signal })) as AIMessage;
     } catch (error) {
       if (config.signal?.aborted) throw error;
+      if (isCloud && agentOptions.think && isThinkingRejection(error)) {
+        console.warn(
+          `[SCOUT - Agent] ${modelRef.model} rejected thinking, retrying without it`,
+        );
+        markThinkingUnsupported(modelRef);
+        agentModel = await createChatModel(modelRef, { think: false });
+        agentOptions.think = false;
+        return await invoke(messages);
+      }
       throw normalizeProviderError(error, modelRef.provider);
     }
   };

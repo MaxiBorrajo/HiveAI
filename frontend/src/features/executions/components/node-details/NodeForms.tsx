@@ -1,9 +1,9 @@
 import { useModels } from "@/features/models/ModelsContext";
 import {
-  buildChoiceGroups,
   choiceValue,
   isCloud,
   parseChoiceValue,
+  toChoice,
 } from "@/features/models/lib/modelChoices";
 import type { Plugin } from "@/features/plugins/types";
 import { CONDITION_OPERATORS, RESULT_OUTPUT_TYPES } from "../../lib/graphOps";
@@ -41,8 +41,7 @@ export function LlmNodeForm({
   stateKeys,
   plugins,
 }: NodeFormProps) {
-  const { models, cloudGroups } = useModels();
-  const choiceGroups = buildChoiceGroups(models, cloudGroups);
+  const { optionGroups } = useModels();
   const nodeChoice = config.model
     ? {
         provider: config.provider ?? "ollama",
@@ -53,8 +52,8 @@ export function LlmNodeForm({
   const nodeChoiceValue = nodeChoice ? choiceValue(nodeChoice) : "";
   const nodeChoiceKnown =
     !nodeChoice ||
-    choiceGroups.some((g) =>
-      g.choices.some((c) => choiceValue(c) === nodeChoiceValue),
+    optionGroups.some((g) =>
+      g.options.some((o) => choiceValue(toChoice(o)) === nodeChoiceValue),
     );
   const setModelChoice = (value: string) => {
     const choice = parseChoiceValue(value);
@@ -103,9 +102,9 @@ export function LlmNodeForm({
               {nodeChoice.model} (unavailable)
             </option>
           )}
-          {choiceGroups.map((group) => (
+          {optionGroups.map((group) => (
             <optgroup key={group.id} label={group.label}>
-              {group.choices.map((choice) => (
+              {group.options.map(toChoice).map((choice) => (
                 <option key={choiceValue(choice)} value={choiceValue(choice)}>
                   {choice.model}
                 </option>

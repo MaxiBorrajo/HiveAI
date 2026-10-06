@@ -7,7 +7,7 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { getModels } from "@/features/models/api/getModels";
-import { getCloudModels } from "@/features/models/api/getCloudModels";
+import { getModelOptions } from "@/features/models/api/getModelOptions";
 import { getCurrentModels } from "@/features/models/api/getCurrentModels";
 import { setModels as setModelsRequest } from "@/features/models/api/setModels";
 import {
@@ -15,15 +15,15 @@ import {
   type EmbeddingModelStatus,
 } from "@/features/models/api/getEmbeddingModelStatus";
 import type {
-  CloudModelGroup,
   CurrentModels,
   ModelInfo,
+  ModelOptionGroup,
 } from "@/features/models/types";
 import type { ModelChoice } from "@/features/models/lib/modelChoices";
 
 interface ModelsContextValue {
   models: ModelInfo[];
-  cloudGroups: CloudModelGroup[];
+  optionGroups: ModelOptionGroup[];
   current: CurrentModels;
   isKeysOpen: boolean;
   openKeys: () => void;
@@ -44,7 +44,7 @@ const ModelsContext = createContext<ModelsContextValue | null>(null);
 
 export function ModelsProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [cloudGroups, setCloudGroups] = useState<CloudModelGroup[]>([]);
+  const [optionGroups, setOptionGroups] = useState<ModelOptionGroup[]>([]);
   const [isKeysOpen, setIsKeysOpen] = useState(false);
   const [current, setCurrent] = useState<CurrentModels>({
     model: "",
@@ -71,9 +71,9 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
 
   function refreshModels() {
     getModels().then(({ data }) => setModels(data ?? []));
-    getCloudModels()
-      .then(({ data }) => setCloudGroups(data ?? []))
-      .catch(() => setCloudGroups([]));
+    getModelOptions()
+      .then(({ data }) => setOptionGroups(data ?? []))
+      .catch(() => setOptionGroups([]));
     getCurrentModels().then(({ data }) => {
       if (data) setCurrent(data);
     });
@@ -109,7 +109,7 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
 
   const value: ModelsContextValue = {
     models,
-    cloudGroups,
+    optionGroups,
     current,
     isKeysOpen,
     openKeys: () => setIsKeysOpen(true),

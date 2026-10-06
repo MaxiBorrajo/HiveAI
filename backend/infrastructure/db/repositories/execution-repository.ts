@@ -44,7 +44,6 @@ export class ExecutionRepository {
     await this.db.delete(executions).where(eq(executions.id, id));
   }
 
-  /** Latest graph version of every execution that has one. */
   async findLatestGraphs(): Promise<
     { execution: Execution; graph: ExecutionGraph }[]
   > {

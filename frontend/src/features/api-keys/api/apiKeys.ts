@@ -2,7 +2,6 @@ import { apiClient } from "../../../lib/apiClient";
 import type { ResponseEntity } from "../../../lib/config";
 import type { ApiKey, ApiKeyUsage, CloudProvider } from "../types";
 
-// Errors are shown inline by the keys screen, so the global toast is silenced.
 const quiet = { silenceErrorToast: true };
 
 export async function listApiKeys(): Promise<ResponseEntity<ApiKey[]>> {

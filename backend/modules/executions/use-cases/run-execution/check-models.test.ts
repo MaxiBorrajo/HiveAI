@@ -38,7 +38,7 @@ Deno.test("checkGraphModels - cloud + local mix with live key passes", async () 
 
 Deno.test("checkGraphModels - deleted key explains the reason and the node", async () => {
   const [p] = await checkGraphModels(
-    graph({ model: "gpt-4.1", provider: "openai", keyId: "gone" }),
+    graph({ model: "gemini-2.5-flash", provider: "google", keyId: "gone" }),
     deps,
   );
   assertEquals(p.nodeId, "n0");

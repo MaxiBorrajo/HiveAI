@@ -4,7 +4,6 @@ import { SecretStore } from "./secret-store.ts";
 let store: SecretStore | undefined;
 let storeDir: string | undefined;
 
-/** Secret store rooted at the Hive config dir (created lazily). */
 export function getSecretStore(): SecretStore {
   const dir = HiveMicrokernel.getInstance().getConfig().get("configDir");
   if (!store || storeDir !== dir) {
