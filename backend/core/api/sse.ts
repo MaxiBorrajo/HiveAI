@@ -16,7 +16,9 @@ export function createSseResponse(
       try {
         await run(send);
       } catch (error) {
-        console.error("[SSE] Error while streaming:", error);
+        if ((error as Error)?.name !== "AbortError") {
+          console.error("[SSE] Error while streaming:", error);
+        }
         const detail = error instanceof Error ? error.message : String(error);
         try {
           send("error", { message: detail });

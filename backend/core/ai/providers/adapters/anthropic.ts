@@ -7,6 +7,10 @@ const headers = (apiKey: string) => ({
   "anthropic-version": "2023-06-01",
 });
 
+// Claude 5+ models reject any non-default temperature.
+const rejectsTemperature = (model: string) =>
+  /^claude-[a-z]+-([5-9]|\d{2,})(-|$)/.test(model);
+
 export const anthropicAdapter: ProviderAdapter = {
   id: "anthropic",
   label: "Anthropic",
@@ -39,6 +43,11 @@ export const anthropicAdapter: ProviderAdapter = {
         thinking: { type: "adaptive", display: "summarized" },
       } as ConstructorParameters<typeof ChatAnthropic>[0]);
     }
-    return new ChatAnthropic({ model, apiKey, temperature, maxTokens });
+    return new ChatAnthropic({
+      model,
+      apiKey,
+      maxTokens,
+      ...(rejectsTemperature(model) ? {} : { temperature }),
+    });
   },
 };

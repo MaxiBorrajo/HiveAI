@@ -50,6 +50,7 @@ async function persistAssistantMessage(
   usedTools: string[],
   steps: ChatStep[],
   thinkingRuns: ThinkingRun[],
+  wasStopped = false,
 ) {
   const chatRepo = new ChatRepository(db);
   const msgRepo = new MessageRepository(db);
@@ -67,9 +68,43 @@ async function persistAssistantMessage(
     role: "agent",
     content: fullContent,
     timestamp: Date.now(),
-    metadata: JSON.stringify({ usedTools, steps, thinkingRuns }),
+    metadata: JSON.stringify({
+      usedTools,
+      steps,
+      thinkingRuns,
+      ...(wasStopped ? { wasStopped } : {}),
+    }),
     vector: JSON.stringify(vector),
   });
+}
+
+async function persistStoppedMessage(
+  db: AppDatabase,
+  chatId: number,
+  { fullContent, steps, thinkingRuns }: StreamResult,
+) {
+  if (!fullContent) return;
+  try {
+    await persistAssistantMessage(
+      db,
+      chatId,
+      fullContent,
+      usedToolsOf(steps),
+      steps,
+      thinkingRuns,
+      true,
+    );
+  } catch (error) {
+    console.error("[Chat] Could not save the stopped response:", error);
+  }
+}
+
+function usedToolsOf(steps: ChatStep[]): string[] {
+  return Array.from(
+    new Set(
+      steps.filter((step) => step.node === "Executor").map((s) => s.label),
+    ),
+  );
 }
 
 export function appendThinkingDelta(
@@ -85,18 +120,21 @@ export function appendThinkingDelta(
   }
 }
 
+export interface StreamResult {
+  fullContent: string;
+  steps: ChatStep[];
+  thinkingRuns: ThinkingRun[];
+}
+
 export async function consumeStream(
   streamIterable: AsyncIterable<unknown>,
   finalNodeName: string,
   send: (event: string, data: unknown) => void,
-): Promise<{
-  fullContent: string;
-  steps: ChatStep[];
-  thinkingRuns: ThinkingRun[];
-}> {
-  let fullContent = "";
-  const steps: ChatStep[] = [];
-  const thinkingRuns: ThinkingRun[] = [];
+  // Filled in place so the caller still has the partial result if the stream
+  // is aborted (the promise rejects and returns nothing).
+  progress: StreamResult = { fullContent: "", steps: [], thinkingRuns: [] },
+): Promise<StreamResult> {
+  const { steps, thinkingRuns } = progress;
 
   for await (const chunk of streamIterable) {
     const [mode, payload] = chunk as
@@ -136,7 +174,7 @@ export async function consumeStream(
 
       const chunkText = contentText;
       if (!chunkText) continue;
-      fullContent += chunkText;
+      progress.fullContent += chunkText;
       send("token", { content: chunkText });
       continue;
     }
@@ -145,7 +183,7 @@ export async function consumeStream(
     steps.push(...payload.steps);
   }
 
-  return { fullContent, steps, thinkingRuns };
+  return progress;
 }
 
 export async function sendMessage(
@@ -216,7 +254,12 @@ export async function sendMessage(
 
     const config = hive.getConfig();
     const modelProvider = config.get("modelProvider");
-    let streamResult: Awaited<ReturnType<typeof consumeStream>>;
+    const progress: StreamResult = {
+      fullContent: "",
+      steps: [],
+      thinkingRuns: [],
+    };
+    let streamResult: StreamResult;
     try {
       const streamIterable = await Scout.stream(
         {
@@ -229,20 +272,22 @@ export async function sendMessage(
         },
         { streamMode: ["messages", "values"], signal: req.signal },
       );
-      streamResult = await consumeStream(streamIterable, "Agent", send);
+      streamResult = await consumeStream(
+        streamIterable,
+        "Agent",
+        send,
+        progress,
+      );
     } catch (error) {
-      if (req.signal.aborted) throw error;
+      if (req.signal.aborted) {
+        await persistStoppedMessage(db, resolvedChatId, progress);
+        throw error;
+      }
       throw normalizeProviderError(error, modelProvider);
     }
     const { fullContent, steps, thinkingRuns } = streamResult;
 
-    const usedTools = Array.from(
-      new Set(
-        steps
-          .filter((step) => step.node === "Executor")
-          .map((step) => step.label),
-      ),
-    );
+    const usedTools = usedToolsOf(steps);
 
     await persistAssistantMessage(
       db,

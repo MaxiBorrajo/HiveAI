@@ -35,6 +35,14 @@ function statusOf(error: unknown): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+// The provider's own text says which limit was hit (per minute, per day,
+// tokens...), so keep it, trimmed, instead of replacing it with a generic line.
+function providerDetail(raw: string): string {
+  const detail = raw.replace(/\s+/g, " ").trim();
+  if (!detail) return "";
+  return ` Provider said: ${detail.length > 300 ? `${detail.slice(0, 300)}…` : detail}`;
+}
+
 export function normalizeProviderError(
   error: unknown,
   provider?: string,
@@ -56,7 +64,7 @@ export function normalizeProviderError(
   if (status === 429) {
     return new ProviderError(
       "rate_limit",
-      `The provider${name} rate limit or quota was reached. Try again later.`,
+      `The provider${name} rate limit or quota was reached. Try again later.${providerDetail(raw)}`,
       provider,
     );
   }
@@ -72,6 +80,14 @@ export function normalizeProviderError(
       provider,
     );
   }
-  
+
+  if (/failed to parse stream/i.test(raw)) {
+    return new ProviderError(
+      "unknown",
+      `The response stream from the provider${name} was cut off. This usually means a rate limit, quota or an overloaded model; try again in a moment.`,
+      provider,
+    );
+  }
+
   return new ProviderError("unknown", `Provider error${name}: ${raw}`, provider);
 }

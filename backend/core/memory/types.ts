@@ -7,6 +7,7 @@ export interface ChatStepMetadata {
   usedTools: string[];
   steps: unknown[];
   thinkingRuns?: ThinkingRun[];
+  wasStopped?: boolean;
 }
 
 export interface ChatRecord {

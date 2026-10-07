@@ -40,6 +40,7 @@ export interface StoredMessage {
     usedTools: string[];
     steps: ChatStep[];
     thinkingRuns?: ThinkingRun[];
+    wasStopped?: boolean;
   } | null;
 }
 

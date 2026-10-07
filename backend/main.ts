@@ -10,6 +10,13 @@ import { createApp } from "./bootstrap/create-app.ts";
 import { openDesktopWindow } from "./bootstrap/desktop.ts";
 import { loadPlugins } from "./bootstrap/load-plugins.ts";
 
+// A provider SDK can reject a stream promise nobody awaits (e.g. Google's
+// "Failed to parse stream"); without this Deno exits and takes the backend down.
+globalThis.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  console.error("[Unhandled rejection]", event.reason);
+});
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const hive = HiveMicrokernel.getInstance();
 

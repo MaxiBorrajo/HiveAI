@@ -102,7 +102,6 @@ export function ModelMenu({
               {group.options.map(toChoice).map((choice) => (
                 <DropdownMenuItem
                   key={`${group.id}:${choice.model}`}
-                  closeOnClick={false}
                   onClick={() => onChangeModel(choice)}
                   title={choice.model}
                 >

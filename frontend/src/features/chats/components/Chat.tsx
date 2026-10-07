@@ -34,7 +34,8 @@ function ThinkingIndicator({ text }: { text: string }) {
 }
 
 export function Chat() {
-  const { messages, isThinking, thinkingText, send, stop } = useChatSession();
+  const { messages, isThinking, isBusy, thinkingText, send, stop } =
+    useChatSession();
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -44,7 +45,7 @@ export function Chat() {
 
   async function handleSend() {
     const content = input.trim();
-    if (await send(content)) setInput("");
+    await send(content, () => setInput(""));
   }
 
   const handleStop = stop;
@@ -65,7 +66,7 @@ export function Chat() {
               <ChatInput
                 input={input}
                 setInput={setInput}
-                isThinking={isThinking}
+                isThinking={isBusy}
                 handleSend={handleSend}
                 handleStop={handleStop}
                 isEmpty
@@ -92,7 +93,7 @@ export function Chat() {
                 <ChatInput
                   input={input}
                   setInput={setInput}
-                  isThinking={isThinking}
+                  isThinking={isBusy}
                   handleSend={handleSend}
                   handleStop={handleStop}
                 />
