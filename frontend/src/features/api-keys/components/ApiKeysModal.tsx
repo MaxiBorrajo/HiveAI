@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,6 +41,10 @@ function errorMessage(error: unknown): string {
   const data = (error as { response?: { data?: { errors?: string[] } } })
     ?.response?.data;
   return data?.errors?.[0] ?? (error as Error)?.message ?? "Something went wrong";
+}
+
+function hasUsage(usage: ApiKeyUsage): boolean {
+  return usage.chat || usage.executions.length > 0;
 }
 
 function usageSummary(usage: ApiKeyUsage): string {
@@ -160,6 +165,7 @@ export function ApiKeysModal({
   onChanged,
 }: ApiKeysModalProps) {
   const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState<Editing>(null);
   const [pendingDelete, setPendingDelete] = useState<{
     key: ApiKey;
@@ -171,18 +177,20 @@ export function ApiKeysModal({
     try {
       const { data } = await listApiKeys();
       setKeys(data ?? []);
+      setLoaded(true);
     } catch (e) {
       setError(errorMessage(e));
     }
   }, []);
 
   useEffect(() => {
+    // Reset on open, not on close, so the content doesn't change while the
+    // dialog is fading out.
     if (isOpen) {
       setError(null);
-      load();
-    } else {
       setEditing(null);
       setPendingDelete(null);
+      load();
     }
   }, [isOpen, load]);
 
@@ -197,13 +205,10 @@ export function ApiKeysModal({
     setError(null);
     try {
       const { data: usage } = await getApiKeyUsage(key.id);
-      const inUse = !!usage && (usage.chat || usage.executions.length > 0);
-      if (inUse) {
-        setPendingDelete({ key, usage });
-      } else {
-        await deleteApiKey(key.id);
-        await afterChange();
-      }
+      setPendingDelete({
+        key,
+        usage: usage ?? { chat: false, executions: [] },
+      });
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -213,6 +218,7 @@ export function ApiKeysModal({
     if (!pendingDelete) return;
     try {
       await deleteApiKey(pendingDelete.key.id, true);
+      setPendingDelete(null);
       await afterChange();
     } catch (e) {
       setError(errorMessage(e));
@@ -239,34 +245,6 @@ export function ApiKeysModal({
               </p>
             )}
 
-            {pendingDelete && (
-              <div
-                role="alertdialog"
-                className="flex flex-col gap-2 rounded-lg border border-destructive/50 bg-card p-4"
-              >
-                <p className="text-sm font-semibold">
-                  Delete "{pendingDelete.key.alias}"?
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  This key is used by {usageSummary(pendingDelete.usage)}. Those
-                  models will stop working until you pick another key; past
-                  results are kept.
-                </p>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPendingDelete(null)}
-                  >
-                    Keep it
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={confirmDelete}>
-                    Delete anyway
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {editing ? (
               <KeyForm
                 editing={editing}
@@ -284,7 +262,7 @@ export function ApiKeysModal({
               </Button>
             )}
 
-            {keys.length === 0 && !editing && (
+            {loaded && keys.length === 0 && !editing && (
               <p className="text-sm text-muted-foreground">
                 No keys yet. Add one to use cloud models in the chat and in
                 executions.
@@ -328,6 +306,19 @@ export function ApiKeysModal({
           </div>
         </ScrollArea>
       </DialogContent>
+
+      <DeleteConfirmationDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        entityName="API key"
+        itemName={pendingDelete?.key.alias}
+        warning={
+          pendingDelete && hasUsage(pendingDelete.usage)
+            ? `It is used by ${usageSummary(pendingDelete.usage)}; those models will stop working until you pick another key. Past results are kept.`
+            : undefined
+        }
+        onConfirm={confirmDelete}
+      />
     </Dialog>
   );
 }

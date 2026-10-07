@@ -59,12 +59,29 @@ export function ModelMenu({
         side="bottom"
         sideOffset={8}
         collisionAvoidance={undefined}
-        className="w-72 max-h-96 overflow-y-auto"
+        className="w-72 max-h-[min(24rem,var(--available-height))] overflow-hidden flex flex-col"
       >
-        <DropdownMenuGroup>
-          <div className="px-1.5 py-1">
-            <span className="text-sm font-medium">Models</span>
+        <div className="flex shrink-0 items-center justify-between px-1.5 py-1">
+          <span className="text-sm font-medium">Models</span>
+          <div className="flex items-center gap-1">
+            <DropdownMenuItem
+              className="size-7 justify-center p-0"
+              title="API keys"
+              onClick={onOpenKeys}
+            >
+              <KeyRound className="size-4" />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="size-7 justify-center p-0"
+              title="Manage models"
+              onClick={onOpenManage}
+            >
+              <Settings className="size-4" />
+            </DropdownMenuItem>
           </div>
+        </div>
+
+        <DropdownMenuGroup className="min-h-0 flex-1 overflow-y-auto">
 
           {groups.length === 0 && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -102,17 +119,6 @@ export function ModelMenu({
             </div>
           ))}
         </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem onClick={onOpenKeys}>
-          <KeyRound className="mr-2 size-4" />
-          <span>API keys...</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onOpenManage}>
-          <Settings className="mr-2 size-4" />
-          <span>Manage Models...</span>
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
