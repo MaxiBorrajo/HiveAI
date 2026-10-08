@@ -12,6 +12,7 @@ import {
 } from "@langchain/core/messages";
 import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
+import { withLocalNumCtx } from "../../providers/local-context.ts";
 import { splitContent } from "../../providers/capabilities.ts";
 
 export function coerceLlmBooleanReply(text: string): boolean {
@@ -58,12 +59,12 @@ function splitModelConfig(config: LlmConfig, temperature: number) {
   return { ref, options };
 }
 
-function buildNodeChatModel(
+async function buildNodeChatModel(
   config: LlmConfig,
   temperature: number,
 ): Promise<BaseChatModel> {
   const { ref, options } = splitModelConfig(config, temperature);
-  return createChatModel(ref, options);
+  return createChatModel(ref, await withLocalNumCtx(ref.provider, ref.model, options));
 }
 
 function toolResultToString(toolResult: unknown): string {
@@ -396,10 +397,13 @@ export async function executeLlmNode(
     temperature: number;
     [key: string]: unknown;
   }) => any = ({ model, provider, keyId, ...options }) =>
-    createChatModel(
-      normalizeModelRef(model, { provider, keyId }),
-      options as Record<string, unknown>,
-    ),
+    (async () => {
+      const ref = normalizeModelRef(model, { provider, keyId });
+      return createChatModel(
+        ref,
+        await withLocalNumCtx(ref.provider, ref.model, options as Record<string, unknown>),
+      );
+    })(),
 ): Promise<Record<string, unknown>> {
   try {
     const tools = resolveTools(nodeId, config, toolProvider);

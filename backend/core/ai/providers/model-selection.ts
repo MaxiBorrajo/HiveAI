@@ -25,7 +25,11 @@ export function describeCatalog(selection: ModelSelection): string {
   return selection.catalog
     .map((o) => {
       const details = [
-        o.location ?? PROVIDER_LABELS[o.ref.provider],
+        o.location === "local"
+          ? "local, free"
+          : o.location === "cloud"
+            ? `cloud ${PROVIDER_LABELS[o.ref.provider]}, paid`
+            : PROVIDER_LABELS[o.ref.provider],
         o.label,
         o.contextLength ? `ctx ${formatContext(o.contextLength)}` : "",
       ].filter(Boolean);

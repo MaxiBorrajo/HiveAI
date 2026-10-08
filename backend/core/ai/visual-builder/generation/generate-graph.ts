@@ -22,6 +22,7 @@ import {
   sanitizeGraphEdges,
 } from "./graph-sanitizer.ts";
 import { configureNodes } from "./node-configuration.ts";
+import { wireLoopFeedback } from "./loop-feedback.ts";
 import { requestValidatedSkeleton } from "./skeleton-phase.ts";
 import { editExistingGraph, reconfigureTargetNode } from "./edit-graph.ts";
 import { configureEndNodeDeliverable } from "./end-node-configurator.ts";
@@ -104,6 +105,10 @@ export async function* generateIncrementalGraph(
     graph,
     nodeDescriptions,
   });
+
+  for (const node of wireLoopFeedback(graph)) {
+    yield { type: "node_updated", node };
+  }
 
   console.log(
     `[Visual Builder - Generator] === Phase 2.5: Configuring End Node Deliverable ===`,
