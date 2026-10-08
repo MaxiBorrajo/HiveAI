@@ -94,17 +94,12 @@ deno task test
 Para correr un solo archivo o carpeta:
 ```bash
 deno test -A tests/unit/
-deno test -A tests/unit/setPluginsActive.test.ts
+deno test -A tests/unit/modules/plugins/set-plugins-active.test.ts
 ```
 
-**Ubicación — dos convenciones conviven:**
-- `backend/tests/unit/` — carpeta central para tests de use cases, repositorios y flujos que cruzan varios módulos (ej. `PluginStateRepository.test.ts`, `HiveMicrokernel.pluginState.test.ts`, `setPluginsActive.test.ts`, `pluginsRouter.batchActive.test.ts`).
-- Archivos `nombre.test.ts` junto al módulo, para lo que es puramente local a ese archivo:
-  - `core/ai/strategy/scout/agent/prompt.test.ts` — funciones puras (prompts), sin mocks.
-  - `plugins/counter/index.test.ts` — un plugin probado en aislamiento, con un `BeeContext` fake apuntando a un directorio temporal (nunca toca `~/.hiveai` real).
-  - `modules/plugins/router.test.ts` — un endpoint Hono probado con `app.request()`.
+**Ubicación — todo vive en `backend/tests/unit/`**, en subcarpetas que replican la ruta del código que prueban (ej. `core/ai/strategy/scout/agent/prompt.test.ts` → `tests/unit/core/ai/strategy/scout/agent/prompt.test.ts`; `plugins/counter/index.ts` → `tests/unit/plugins/counter/index.test.ts`). Esto aplica tanto a tests puramente locales a un archivo como a flujos que cruzan varios módulos (microkernel + repo + router, por ejemplo).
 
-Al agregar un test nuevo: si prueba un solo archivo aislado, va al lado del archivo; si cruza módulos (microkernel + repo + router, por ejemplo), va a `tests/unit/`.
+Al agregar un test nuevo, creá su archivo en `tests/unit/<misma-ruta-que-el-código>/`.
 
 **Mockear el LLM:** cualquier test que pase por un nodo del grafo (`ChatOllama`, `Scout.stream`, etc.) debe mockear la respuesta del modelo — no depender de que Ollama esté corriendo. El LLM es no determinístico y lento; lo que se testea acá es que el grafo/routing reaccione bien a una respuesta dada, no la calidad de esa respuesta. Para eso está el eval de LLM (ver abajo).
 
