@@ -49,3 +49,13 @@ Deno.test("splitContent - separates text and thinking blocks", () => {
   );
   assertEquals(splitContent(undefined), { text: "", thinking: "" });
 });
+
+Deno.test("describeCatalog - includes location, size and context when known", () => {
+  const text = describeCatalog({
+    ...selection,
+    catalog: [
+      { id: "ollama:qwen3:8b", ref: { provider: "ollama", model: "qwen3:8b" }, label: "8.2B local", capabilities: ["tools"], location: "local", contextLength: 40960 },
+    ],
+  });
+  assertEquals(text, "- ollama:qwen3:8b — local, 8.2B local, ctx 41k [tools]");
+});

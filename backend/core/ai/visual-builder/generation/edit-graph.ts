@@ -135,6 +135,7 @@ export async function* editExistingGraph(
     graph,
     current,
     modelSelection?.orchestrator,
+    modelSelection,
   );
   const { intermediateNodes, rawEdges, nodeDescriptions, modifiedIds } = normalized;
 

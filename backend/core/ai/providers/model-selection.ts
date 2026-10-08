@@ -5,6 +5,8 @@ export interface ModelOption {
   ref: ModelRef;
   label: string;
   capabilities: string[];
+  location?: "local" | "cloud";
+  contextLength?: number;
 }
 
 export interface ModelSelection {
@@ -16,12 +18,20 @@ export function modelOptionId(ref: ModelRef): string {
   return `${ref.provider}:${ref.model}`;
 }
 
+const formatContext = (n: number) =>
+  n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+
 export function describeCatalog(selection: ModelSelection): string {
   return selection.catalog
-    .map(
-      (o) =>
-        `- ${o.id} — ${PROVIDER_LABELS[o.ref.provider]}${o.label ? `, ${o.label}` : ""}${o.capabilities.length ? ` [${o.capabilities.join(", ")}]` : ""}`,
-    )
+    .map((o) => {
+      const details = [
+        o.location ?? PROVIDER_LABELS[o.ref.provider],
+        o.label,
+        o.contextLength ? `ctx ${formatContext(o.contextLength)}` : "",
+      ].filter(Boolean);
+      const caps = o.capabilities.length ? ` [${o.capabilities.join(", ")}]` : "";
+      return `- ${o.id} — ${details.join(", ")}${caps}`;
+    })
     .join("\n");
 }
 

@@ -99,12 +99,29 @@ function nodeFeedsIntoCondition(
 function buildAgentToolHint(nodePlugins: string[]): string {
   if (nodePlugins.length === 0) return "";
   return `\nNOTE: This LLM node is an autonomous agent equipped with tools: [${nodePlugins.join(", ")}].
-Instruct it in systemPrompt to use its tools iteratively (e.g. searching the web, reading multiple relevant URLs, extracting details, saving files) to compile a rich, thorough response before concluding.`;
+Instruct it in systemPrompt to use its tools iteratively (e.g. searching the web, reading multiple relevant URLs, extracting details, saving files) to compile a rich, thorough response before concluding.
+DATA HANDOFF: later nodes see ONLY this node's final answer text — never temp files, shell variables or paths it created. If the next node needs data, instruct the agent to include the actual data in its final answer (not a path or a count summary). Keep that answer bounded in size: when the raw data can be large (logs, many files, long pages), tell the agent to reduce it first with tools (filter, dedupe, aggregate — e.g. normalize numbers/ids and use sort | uniq -c | sort -rn | head -N) and return the reduced result with counts.`;
 }
 
-function buildModelHint(selection: LlmNodeConfiguratorContext["modelSelection"]): string {
+function buildModelHint(
+  selection: LlmNodeConfiguratorContext["modelSelection"],
+  graph: LangGraphAbstraction,
+  nodeDescriptions: Map<string, string>,
+): string {
   if (!selection || selection.catalog.length < 2) return "";
-  return `\nMODEL CHOICE: pick 'modelChoice' for this node from the models below. Default (omit) is ${selection.orchestrator.provider}:${selection.orchestrator.model}. Use the strongest model only for steps that need hard reasoning, planning or synthesis; prefer small/local models for simple extraction, formatting, classification or yes/no checks, and keep nodes that call tools on a model tagged [tools].
+  const flow = graph.nodes
+    .filter((n) => n.type !== "start" && n.type !== "end")
+    .map((n) => `- ${n.name}: ${nodeDescriptions.get(n.id) || n.type}`)
+    .join("\n");
+  return `\nMODEL CHOICE: pick 'modelChoice' for this node from the models below. Default (omit) is ${selection.orchestrator.provider}:${selection.orchestrator.model}, the strongest model. The goal is to fulfil the objective while spending as little of the strongest model as possible: keep it for the steps that need it and delegate the rest to lighter models.
+- Executor step (a well-scoped task with clear instructions: moving or formatting data, extracting fields, classifying, summarizing or drafting from given material, researching one concrete topic with search/read tools, saving files, running a command, producing one piece of a larger result): pick the lightest model in the catalog that has the capabilities the node needs ([tools] if the node has plugins). Small models are good at specific, well-scoped tasks.
+- Orchestrator step (planning or decomposing a complex objective, deciding what other nodes must do, coordinating or reconciling the outputs of several nodes, reviewing quality and deciding whether work must be redone, integrating many pieces into a coherent whole): keep the default model. The strongest model is reserved for the steps that direct and verify the work of others.
+- If the workflow has no orchestrator-style step, every node can be an executor.
+- When torn, consider how much information flows into this node and how ambiguous its instructions are: lots of heterogeneous input or open-ended judgment raises the requirement.
+- Very small models (under ~7B) only for nodes without tools that do a single simple operation.
+Workflow nodes, for relative comparison:
+${flow}
+Available models:
 ${describeCatalog(selection)}`;
 }
 
@@ -303,6 +320,11 @@ function applyLlmConfigCandidate(
     : undefined;
   const modelChoice = (config as { modelChoice?: string }).modelChoice;
   const nodeModel = resolveNodeModel(modelChoice, ctx.modelSelection);
+  if (nodeModel) {
+    console.log(
+      `[Visual Builder - Generator] Node "${node.name}" model: ${nodeModel.provider}:${nodeModel.model}${nodeModel === ctx.modelSelection?.orchestrator ? " (default)" : ""}`,
+    );
+  }
   const llmConfig: LlmConfig = {
     ...(modelChoice || !existingModel
       ? nodeModel
@@ -446,7 +468,7 @@ export async function configureLlmNode(
       branchHint: buildBranchHint(incomingEdge),
       neighborHint,
       agentToolHint:
-        buildAgentToolHint(nodePlugins) + buildModelHint(ctx.modelSelection),
+        buildAgentToolHint(nodePlugins) + buildModelHint(ctx.modelSelection, graph, nodeDescriptions),
       conditionPromptHint: buildConditionPromptHint(feedsIntoCondition),
     },
     graphStateText,

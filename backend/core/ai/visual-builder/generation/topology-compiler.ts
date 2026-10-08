@@ -1,3 +1,4 @@
+import type { ModelSelection } from "../../providers/model-selection.ts";
 import { createChatModel } from "../../providers/create-chat-model.ts";
 import { normalizeModelRef, type ModelRef } from "../../providers/types.ts";
 import {
@@ -148,6 +149,7 @@ export async function runTopologyCompilerPhase(
   },
   existingGraph?: LangGraphAbstraction,
   orchestrator?: ModelRef,
+  modelSelection?: ModelSelection,
 ): Promise<WorkflowSkeleton> {
   const workflowSkeletonSchema = buildWorkflowSkeletonSchema(availablePlugins);
 
@@ -214,6 +216,16 @@ export async function runTopologyCompilerPhase(
     WRONG: outputKey "is_good_enough" (boolean) with condition operator "equals" true/false — this discards the actual numeric scale the user asked for.
     RIGHT: the "llm" node's outputKey is "quality_score", producing a real number (not a 0/1 flag); the "condition" node's field is "quality_score" with a numeric operator ("greater_than_or_equals") and a numeric value (8, not "8" or true/false). Use "string" outputs the same way for category/label judgments (e.g. field "severity", operator "equals", value "critical") — only use a boolean when the objective is a literal yes/no question.`;
 
+  const hasLightModels = (modelSelection?.catalog ?? []).some(
+    (o) => o.location === "local",
+  );
+  const smallModelRules = hasLightModels
+    ? `
+
+  SMALL-MODEL DESIGN PRINCIPLE (overrides the 2-5 node limit of rule 6 — use as many nodes as the workflow needs):
+  Light and local models are very good at narrow, well-scoped tasks and cost nothing, while the strongest model is expensive and should be spent only where it matters. Design the workflow so each node does ONE specific, clearly bounded job (e.g. "extract the errors", "classify the sentiment", "write one section"), even if that means more nodes. A narrow node with precise instructions gets done correctly by a small model; a broad node ("research, analyze and write everything") forces an expensive one. Reserve broad, ambiguous or coordinating work (planning the whole job, reconciling several outputs, reviewing quality and deciding to redo) for dedicated orchestrator-style nodes. This does NOT override rule 3: never split one tool chain whose steps depend on each other across nodes.`
+    : "";
+
   const editRules = existingGraph
     ? `
 
@@ -228,7 +240,7 @@ export async function runTopologyCompilerPhase(
     : "";
 
   const messages: BaseMessage[] = [
-    new SystemMessage(compilerPrompt + editRules),
+    new SystemMessage(compilerPrompt + smallModelRules + editRules),
     new HumanMessage(
       existingGraph ? `Change request: "${prompt}"` : `User Objective: "${prompt}"`,
     ),

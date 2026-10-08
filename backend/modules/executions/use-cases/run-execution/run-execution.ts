@@ -82,7 +82,10 @@ async function streamRun(
   };
 
   let finalState: FinalState = {};
-  const events = await app.streamEvents(initialInputs, { version: "v2" });
+  const events = await app.streamEvents(initialInputs, {
+    version: "v2",
+    recursionLimit: EXECUTION_RECURSION_LIMIT,
+  });
   for await (const event of events) {
     send(event.event, event);
     if (event.event === "on_chain_end" && event.name === "LangGraph") {
@@ -111,6 +114,9 @@ async function saveRun(
 
   return { historyId: history.id, iteration };
 }
+
+// LangGraph counts one step per node run; the default (25) cuts review loops after ~2 cycles.
+const EXECUTION_RECURSION_LIMIT = 60;
 
 export async function runExecution(
   db: AppDatabase,

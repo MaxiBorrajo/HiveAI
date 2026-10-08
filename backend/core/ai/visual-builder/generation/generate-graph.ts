@@ -80,6 +80,7 @@ export async function* generateIncrementalGraph(
       graph,
       undefined,
       orchestrator,
+      modelSelection,
     );
 
   yield {

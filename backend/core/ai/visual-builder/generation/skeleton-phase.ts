@@ -1,3 +1,4 @@
+import type { ModelSelection } from "../../providers/model-selection.ts";
 import type { ModelRef } from "../../providers/types.ts";
 import type {
   IncrementalEvent,
@@ -23,6 +24,7 @@ export async function* requestValidatedSkeleton(
   graph: LangGraphAbstraction,
   existingGraph?: LangGraphAbstraction,
   orchestrator?: ModelRef,
+  modelSelection?: ModelSelection,
 ): AsyncGenerator<IncrementalEvent, NormalizedSkeleton, unknown> {
   const nodesBefore = graph.nodes.length;
   let correctionContext:
@@ -37,6 +39,7 @@ export async function* requestValidatedSkeleton(
       correctionContext,
       existingGraph,
       orchestrator,
+      modelSelection,
     );
 
     yield { type: "planning", thoughts: skeleton.thought };

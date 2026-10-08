@@ -12,6 +12,7 @@ import {
 } from "@langchain/core/messages";
 import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
+import { splitContent } from "../../providers/capabilities.ts";
 
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -440,7 +441,9 @@ export function mapResponseToState(
   if (config.structuredOutput) {
     resultValue = response;
   } else {
-    resultValue = (response as AIMessage).content;
+    // Claude may return content blocks (thinking + text fragments); keep only the text.
+    const content = (response as AIMessage).content;
+    resultValue = Array.isArray(content) ? splitContent(content).text : content;
   }
 
   const outKey = config.outputKey;

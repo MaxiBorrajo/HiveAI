@@ -29,6 +29,8 @@ export async function buildModelOptionGroups(): Promise<ModelOptionGroup[]> {
           ref,
           label: m.parameterSize ? `${m.parameterSize} local` : "local",
           capabilities: m.capabilities,
+          location: "local" as const,
+          ...(m.contextLength ? { contextLength: m.contextLength } : {}),
         };
       }),
     });
@@ -46,6 +48,7 @@ export async function buildModelOptionGroups(): Promise<ModelOptionGroup[]> {
           ref,
           label: m.label ?? "cloud",
           capabilities: m.capabilities,
+          location: "cloud" as const,
         };
       }),
     });

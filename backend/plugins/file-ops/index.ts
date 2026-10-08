@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { dirname, join } from "node:path";
+import { expandHome } from "../expand-home.ts";
 import type {
   BeeContext,
   BeePlugin,
@@ -210,6 +211,9 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       destination?: string;
       content?: string;
     };
+
+    path = expandHome(path);
+    if (destination) destination = expandHome(destination);
 
     // If the path points directly to root filesystem (e.g. "/notes.txt" or "/system_health.md"),
     // models often emit leading slashes intending project-root/workspace-relative paths.
