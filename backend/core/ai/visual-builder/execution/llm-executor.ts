@@ -498,11 +498,12 @@ export function mapResponseToState(
   return stateUpdate;
 }
 
+/** A failed model call fails the node: continuing with made-up output would corrupt later nodes. */
 export function handleLlmError(
   error: unknown,
   nodeId: string,
   config: LlmConfig,
-): Record<string, unknown> {
+): never {
   const errorMsg = normalizeProviderError(
     error,
     typeof config.provider === "string" ? config.provider : undefined,
@@ -511,21 +512,5 @@ export function handleLlmError(
     `[Compiler Native LLM] Model error (Node ${nodeId}):`,
     errorMsg,
   );
-
-  const resultValue = config.structuredOutput
-    ? { error: `Mock Fallback due to error: ${errorMsg}` }
-    : `(Mock Fallback due to connection error: ${errorMsg})`;
-
-  const stateUpdate: Record<string, unknown> = {};
-  if (config.outputKey) {
-    stateUpdate[config.outputKey] = resultValue;
-  } else {
-    if (typeof resultValue === "string") {
-      stateUpdate.messages = [{ role: "assistant", content: resultValue }];
-    } else {
-      stateUpdate.result = resultValue;
-    }
-  }
-
-  return stateUpdate;
+  throw new Error(errorMsg, { cause: error });
 }

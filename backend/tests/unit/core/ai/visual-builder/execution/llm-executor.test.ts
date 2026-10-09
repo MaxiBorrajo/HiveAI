@@ -181,37 +181,27 @@ Deno.test("mapResponseToState - carries forward attempts counter when present in
 
 // --- handleLlmError ---
 
-Deno.test("handleLlmError - non-structured config wraps error into a mock messages fallback", () => {
-  const state = handleLlmError(new Error("connection refused"), "n1", {});
-  assertEquals(Array.isArray(state.messages), true);
-  assertEquals(String((state.messages as any[])[0].content).includes("connection refused"), true);
+Deno.test("handleLlmError - a model failure throws instead of producing fake output", () => {
+  assertThrows(() => handleLlmError(new Error("connection refused"), "n1", {}), Error, "connection refused");
 });
 
-Deno.test("handleLlmError - structuredOutput config wraps error into an object under outputKey", () => {
-  const state = handleLlmError(new Error("timeout"), "n1", {
-    outputKey: "result_data",
-    structuredOutput: { type: "object", required: true },
-  });
-  assertEquals(typeof state.result_data, "object");
-  assertEquals(String((state.result_data as any).error).includes("timeout"), true);
+Deno.test("handleLlmError - structuredOutput configs also throw", () => {
+  assertThrows(
+    () => handleLlmError(new Error("timeout"), "n1", { outputKey: "r", structuredOutput: { type: "object", required: true } }),
+    Error,
+    "timeout",
+  );
 });
 
 Deno.test("handleLlmError - non-Error thrown values are stringified", () => {
-  const state = handleLlmError("plain string failure", "n1", {});
-  assertEquals(String((state.messages as any[])[0].content).includes("plain string failure"), true);
+  assertThrows(() => handleLlmError("plain string failure", "n1", {}), Error, "plain string failure");
 });
 
 // --- executeLlmNode (error paths that don't require a live Ollama instance) ---
 
-Deno.test("executeLlmNode - plugins requested without a ToolProvider is caught and returns a mock fallback (does not throw)", async () => {
+Deno.test("executeLlmNode - plugins requested without a ToolProvider fails the node", async () => {
   const config: LlmConfig = { model: "qwen3:8b", plugins: ["web-search"] };
-  const result = await executeLlmNode("n1", config, {});
-  // executeLlmNode wraps all errors via handleLlmError instead of throwing
-  assertEquals(Array.isArray(result.messages), true);
-  assertEquals(
-    String((result.messages as any[])[0].content).includes("no ToolProvider was provided"),
-    true,
-  );
+  await assertRejects(() => executeLlmNode("n1", config, {}), Error, "no ToolProvider was provided");
 });
 
 // --- executeLlmNode ReAct loop (deterministic, via injected llmFactory) ---
@@ -351,21 +341,14 @@ Deno.test("executeLlmNode - the loop stops at maxIterations (8) if the model kee
   assertEquals("summary" in result, true);
 });
 
-Deno.test("executeLlmNode - a thrown error from the LLM factory itself is caught and returns a mock fallback", async () => {
-  const result = await executeLlmNode(
-    "n1",
-    { model: "fake-model", outputKey: "answer" },
-    {},
-    undefined,
-    () => {
-      throw new Error("ollama connection refused");
-    },
-  );
-  assertEquals(
-    String((result.messages as any[])?.[0]?.content ?? result.answer).includes(
-      "ollama connection refused",
-    ),
-    true,
+Deno.test("executeLlmNode - a thrown error from the LLM factory fails the node", async () => {
+  await assertRejects(
+    () =>
+      executeLlmNode("n1", { model: "fake-model", outputKey: "answer" }, {}, undefined, () => {
+        throw new Error("ollama connection refused");
+      }),
+    Error,
+    "ollama connection refused",
   );
 });
 
@@ -398,13 +381,17 @@ Deno.test("executeLlmNode - local nodes keep ollama options and default to the o
   assertEquals(seen.numCtx, 4096);
 });
 
-Deno.test("executeLlmNode - a provider error becomes a clear message in the node output, without throwing", async () => {
-  const result = await executeLlmNode(
-    "n1",
-    { model: "gemini-2.5-flash", provider: "google", keyId: "k", outputKey: "out" },
-    {},
-    undefined,
-    () => ({ invoke: () => Promise.reject(Object.assign(new Error("401"), { status: 401 })) }),
+Deno.test("executeLlmNode - a provider error fails the node with a clear message", async () => {
+  await assertRejects(
+    () =>
+      executeLlmNode(
+        "n1",
+        { model: "gemini-2.5-flash", provider: "google", keyId: "k", outputKey: "out" },
+        {},
+        undefined,
+        () => ({ invoke: () => Promise.reject(Object.assign(new Error("401"), { status: 401 })) }),
+      ),
+    Error,
+    "API key was rejected",
   );
-  assertEquals(String(result.out).includes("API key was rejected"), true);
 });
