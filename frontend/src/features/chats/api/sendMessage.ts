@@ -1,12 +1,22 @@
 import { postSse } from "../../../lib/sse";
-import type { ChatStep } from "@/features/chats/types";
+import type {
+  ChatStep,
+  ConversationUsage,
+  MessageUsage,
+} from "@/features/chats/types";
 
 export interface StreamHandlers {
   onChatCreated: (chatId: string) => void;
   onThinking: () => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
-  onDone: (content: string, usedTools: string[], steps: ChatStep[]) => void;
+  onDone: (
+    content: string,
+    usedTools: string[],
+    steps: ChatStep[],
+    usage: MessageUsage | null,
+    conversationUsage: ConversationUsage | null,
+  ) => void;
   onError: (message: string) => void;
 }
 
@@ -33,6 +43,8 @@ export async function sendMessage(
           payload.content,
           payload.usedTools ?? [],
           payload.steps ?? [],
+          payload.usage ?? null,
+          payload.conversationUsage ?? null,
         );
       } else if (eventName === "error") {
         handlers.onError(payload.message);

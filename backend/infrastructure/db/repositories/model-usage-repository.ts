@@ -157,7 +157,12 @@ export class ModelUsageRepository implements UsageRecorder {
       );
   }
 
-  async list(filters: UsageFilters): Promise<UsageRecord[]> {
+  // Every call of a chat, unpaginated: the conversation totals need them all.
+  listByChat(chatId: number): Promise<UsageRecord[]> {
+    return this.query([eq(chatUsage.chatId, chatId)]);
+  }
+
+  list(filters: UsageFilters): Promise<UsageRecord[]> {
     const conditions: SQL[] = [];
     const add = (condition: SQL | undefined) => {
       if (condition) conditions.push(condition);
@@ -187,11 +192,18 @@ export class ModelUsageRepository implements UsageRecorder {
     if (filters.from !== undefined) add(gte(modelUsage.createdAt, filters.from));
     if (filters.to !== undefined) add(lte(modelUsage.createdAt, filters.to));
 
+    return this.query(conditions, filters);
+  }
+
+  private async query(
+    conditions: SQL[],
+    page?: { limit: number; offset: number },
+  ): Promise<UsageRecord[]> {
     // The sqlite proxy turns each row into an object before positional
     // mapping, so two selected columns with the same name would collapse into
     // one. The columns the link tables share (usage_id, execution_id) are
     // aliased to stay distinct.
-    const rows: JoinedRow[] = await this.db
+    const base = this.db
       .select({
         usage: modelUsage,
         chatUsageId: sql<number | null>`${chatUsage.usageId}`.as("chat_usage_id"),
@@ -216,9 +228,10 @@ export class ModelUsageRepository implements UsageRecorder {
       .leftJoin(executionUsage, eq(executionUsage.usageId, modelUsage.id))
       .leftJoin(generationUsage, eq(generationUsage.usageId, modelUsage.id))
       .where(and(...conditions))
-      .orderBy(desc(modelUsage.createdAt), desc(modelUsage.id))
-      .limit(filters.limit)
-      .offset(filters.offset);
+      .orderBy(desc(modelUsage.createdAt), desc(modelUsage.id));
+    const rows: JoinedRow[] = await (page
+      ? base.limit(page.limit).offset(page.offset)
+      : base);
 
     return rows.map((row) => ({ ...row.usage, context: contextOf(row) }));
   }

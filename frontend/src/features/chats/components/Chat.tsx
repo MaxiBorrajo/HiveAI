@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { GaugeIcon } from "lucide-react";
+import { Button } from "../../../components/ui/button.tsx";
+import { ConversationUsagePanel } from "./ConversationUsagePanel.tsx";
 import { ScrollArea } from "../../../components/ui/scroll-area.tsx";
 import { Skeleton } from "../../../components/ui/skeleton.tsx";
 import { ChatInput } from "./ChatInput.tsx";
@@ -34,9 +37,17 @@ function ThinkingIndicator({ text }: { text: string }) {
 }
 
 export function Chat() {
-  const { messages, isThinking, isBusy, thinkingText, send, stop } =
-    useChatSession();
+  const {
+    messages,
+    isThinking,
+    isBusy,
+    thinkingText,
+    conversationUsage,
+    send,
+    stop,
+  } = useChatSession();
   const [input, setInput] = useState("");
+  const [usageOpen, setUsageOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,6 +87,22 @@ export function Chat() {
           </div>
         ) : (
           <>
+            <div className="flex justify-end border-b border-border px-6 py-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => setUsageOpen(true)}
+              >
+                <GaugeIcon className="size-3.5" />
+                Usage
+              </Button>
+            </div>
+            <ConversationUsagePanel
+              usage={conversationUsage}
+              open={usageOpen}
+              onOpenChange={setUsageOpen}
+            />
             <ScrollArea className="flex-1 min-h-0 **:data-[slot=scroll-area-thumb]:bg-muted-foreground/30 **:data-[slot=scroll-area-thumb]:hover:bg-muted-foreground/50 **:data-[slot=scroll-area-thumb]:transition-colors">
               <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
                 {messages.map((message) => (

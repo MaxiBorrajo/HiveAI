@@ -4,7 +4,12 @@ import { getChatMessages } from "../api/getChatMessages.ts";
 import { reportError } from "../../../lib/toastManager.ts";
 import { getErrorMessage } from "../../../lib/errors.ts";
 import { useKeyedState } from "../../../hooks/useKeyedState.ts";
-import type { Message, StoredMessage, ThinkingRun } from "../types.ts";
+import type {
+  ConversationUsage,
+  Message,
+  StoredMessage,
+  ThinkingRun,
+} from "../types.ts";
 import { useChats } from "../ChatsContext.tsx";
 import { useModels } from "../../models/ModelsContext.tsx";
 import {
@@ -54,6 +59,7 @@ function toMessage(stored: StoredMessage): Message {
     steps: stored.metadata?.steps,
     thinkingRuns: stored.metadata?.thinkingRuns,
     wasStopped: stored.metadata?.wasStopped,
+    usage: stored.usage ?? null,
   };
 }
 
@@ -72,6 +78,7 @@ export function useChatSession() {
   const displayKey = activeChatId ?? newChatKey(newChatToken);
   const messagesState = useKeyedState<Message[]>(displayKey, NO_MESSAGES);
   const thinkingState = useKeyedState<ThinkingState>(displayKey, IDLE_THINKING);
+  const usageState = useKeyedState<ConversationUsage | null>(displayKey, null);
 
   const justCreatedChatIdRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -95,6 +102,7 @@ export function useChatSession() {
     getChatMessages(activeChatId).then(({ data }) => {
       if (cancelled || !data) return;
       setMessages(data.messages.map(toMessage), activeChatId);
+      usageState.set(data.usage ?? null, activeChatId);
     });
 
     return () => {
@@ -154,6 +162,7 @@ export function useChatSession() {
             justCreatedChatIdRef.current = chatId;
             messagesState.moveKey(startKey, chatId);
             thinkingState.moveKey(startKey, chatId);
+            usageState.moveKey(startKey, chatId);
             key = chatId;
             onChatCreated(chatId);
           },
@@ -179,14 +188,16 @@ export function useChatSession() {
             }
             patchAgentMessage((m) => ({ ...m, content: m.content + token }));
           },
-          onDone: (finalContent, usedTools, steps) => {
+          onDone: (finalContent, usedTools, steps, usage, conversationUsage) => {
             patchAgentMessage((m) => ({
               ...m,
               content: finalContent,
               usedTools,
               steps,
               thinkingRuns,
+              usage,
             }));
+            if (conversationUsage) usageState.set(conversationUsage, key);
             refreshChats();
 
             const isBeingViewed =
@@ -254,6 +265,7 @@ export function useChatSession() {
     isThinking: thinkingState.value.isThinking,
     isBusy: thinkingState.value.isBusy,
     thinkingText: thinkingState.value.thinkingText,
+    conversationUsage: usageState.value,
     send,
     stop: () => abortControllerRef.current?.abort(),
   };

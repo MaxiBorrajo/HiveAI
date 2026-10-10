@@ -4,6 +4,7 @@ import { Button } from "../../../components/ui/button.tsx";
 import type { Message } from "../types.ts";
 import { MessageMarkdown } from "./MessageMarkdown.tsx";
 import { StepsPanel } from "./StepsPanel.tsx";
+import { MessageUsageLine } from "./MessageUsageLine.tsx";
 
 export const ChatMessage = memo(function ChatMessage({
   message,
@@ -58,6 +59,9 @@ export const ChatMessage = memo(function ChatMessage({
             <span>· used {message.usedTools.join(", ")}</span>
           )}
         </div>
+        {!message.isError && message.usage !== undefined && (
+          <MessageUsageLine usage={message.usage} />
+        )}
         {!!message.steps?.length && (
           <StepsPanel
             steps={message.steps}

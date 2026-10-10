@@ -15,6 +15,7 @@ import { splitContent } from "../../../core/ai/providers/capabilities.ts";
 import { normalizeProviderError } from "../../../core/ai/providers/errors.ts";
 import type { BeePlugin } from "../../../core/microkernel/bee-plugin.ts";
 import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
+import { loadChatUsage } from "../../usage/load-chat-usage.ts";
 import { ModelUsageRepository } from "../../../infrastructure/db/repositories/model-usage-repository.ts";
 
 const MAX_MESSAGE_LENGTH = 20_000;
@@ -138,6 +139,26 @@ export function appendThinkingDelta(
     last.text += content;
   } else {
     runs.push({ node, text: content });
+  }
+}
+
+// The response's consumption and the conversation totals, sent with `done` so
+// the screen does not have to reload. Reading metrics must never cost the user
+// the response they already got.
+async function usageForDone(
+  db: AppDatabase,
+  chatId: number,
+  messageId: number,
+) {
+  try {
+    const { byMessage, conversation } = await loadChatUsage(db, chatId);
+    return {
+      usage: byMessage.get(messageId) ?? null,
+      conversationUsage: conversation,
+    };
+  } catch (error) {
+    console.error("[Usage] Could not read the response usage:", error);
+    return {};
   }
 }
 
@@ -316,7 +337,7 @@ export async function sendMessage(
 
     const usedTools = usedToolsOf(steps);
 
-    await persistAssistantMessage(
+    const messageId = await persistAssistantMessage(
       db,
       resolvedChatId,
       fullContent,
@@ -332,6 +353,7 @@ export async function sendMessage(
       usedTools,
       steps,
       thinkingRuns,
+      ...(await usageForDone(db, resolvedChatId, messageId)),
     });
   });
 }

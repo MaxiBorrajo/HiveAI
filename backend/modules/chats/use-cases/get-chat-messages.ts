@@ -2,6 +2,7 @@ import { ResponseBuilder } from "../../../core/api/response.ts";
 import { ChatRepository } from "../../../infrastructure/db/repositories/chat-repository.ts";
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
+import { loadChatUsage } from "../../usage/load-chat-usage.ts";
 import type { FrontendChat, FrontendMessage } from "../types.ts";
 
 export async function getChatMessages(
@@ -30,18 +31,24 @@ export async function getChatMessages(
     }
 
     const messages = await msgRepo.findByChatId(chatId);
+    const { byMessage, conversation } = await loadChatUsage(db, chatId);
 
     const formattedMessages: FrontendMessage[] = messages.map((m) => ({
       ...m,
       id: m.id.toString(),
       chatId: m.chatId.toString(),
       metadata: m.metadata ? JSON.parse(m.metadata) : null,
+      usage: byMessage.get(m.id) ?? null,
     }));
 
     const formattedChat: FrontendChat = { ...chat, id: chat.id.toString() };
 
     return ResponseBuilder.success(
-      { chat: formattedChat, messages: formattedMessages },
+      {
+        chat: formattedChat,
+        messages: formattedMessages,
+        usage: conversation,
+      },
       { headers },
     );
   } catch (error) {
