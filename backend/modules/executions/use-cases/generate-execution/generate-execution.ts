@@ -10,6 +10,7 @@ import type {
 } from "../../../../core/ai/visual-builder/types.ts";
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { describeActivePlugins } from "./describe-plugins.ts";
+import { withUsageContext } from "../../../../core/ai/usage/usage-context.ts";
 
 const LOG = "[Executions Generator]";
 const MAX_NAME_LENGTH = 50;
@@ -138,13 +139,22 @@ export async function generateExecution(
       await buildModelSelection(hive),
     );
 
-    let result = await generator.next();
-    while (!result.done) {
-      logStreamEvent(result.value);
-      send(result.value.type, result.value);
-      result = await generator.next();
-    }
-    const finalGraph: LangGraphAbstraction | null = result.value ?? null;
+    const finalGraph: LangGraphAbstraction | null = await withUsageContext(
+      {
+        kind: "graph_generation",
+        role: "orchestrator",
+        executionId: targetExecutionId,
+      },
+      async () => {
+        let result = await generator.next();
+        while (!result.done) {
+          logStreamEvent(result.value);
+          send(result.value.type, result.value);
+          result = await generator.next();
+        }
+        return result.value ?? null;
+      },
+    );
     if (!finalGraph) return;
 
     const graphId = dryRun

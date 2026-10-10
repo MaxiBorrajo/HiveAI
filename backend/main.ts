@@ -5,7 +5,13 @@ import { initORM } from "./infrastructure/db/orm.ts";
 import { PluginStateRepository } from "./infrastructure/db/repositories/plugin-state-repository.ts";
 import { homeDir } from "./core/env.ts";
 import { getSecretStore } from "./core/secrets/index.ts";
-import { setSecretResolver } from "./core/ai/providers/create-chat-model.ts";
+import {
+  setKeyAliasResolver,
+  setSecretResolver,
+} from "./core/ai/providers/create-chat-model.ts";
+import { setUsageRecorder } from "./core/ai/usage/usage-recorder.ts";
+import { ApiKeyRepository } from "./infrastructure/db/repositories/api-key-repository.ts";
+import { ModelUsageRepository } from "./infrastructure/db/repositories/model-usage-repository.ts";
 import { createApp } from "./bootstrap/create-app.ts";
 import { openDesktopWindow } from "./bootstrap/desktop.ts";
 import { loadPlugins } from "./bootstrap/load-plugins.ts";
@@ -26,6 +32,9 @@ await hive.getConfig().load();
 const db = await initORM(hive.getConfig().get("dataDir"));
 hive.setPluginStateRepository(new PluginStateRepository(db));
 setSecretResolver((keyId) => getSecretStore().get(keyId));
+const apiKeyRepository = new ApiKeyRepository(db);
+setKeyAliasResolver(async (keyId) => (await apiKeyRepository.findById(keyId))?.alias);
+setUsageRecorder(new ModelUsageRepository(db));
 
 const server = Deno.serve({ port: 0 }, createApp(hive).fetch);
 const port = (server.addr as Deno.NetAddr).port;

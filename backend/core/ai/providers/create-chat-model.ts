@@ -3,6 +3,7 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { ModelUnavailableError } from "./errors.ts";
 import { getAdapter } from "./registry.ts";
 import { isCloudProvider, type ModelRef } from "./types.ts";
+import { UsageCallbackHandler } from "../usage/usage-callback.ts";
 
 export interface ChatModelOptions {
   temperature?: number;
@@ -22,12 +23,37 @@ export function setSecretResolver(resolver: SecretResolver): void {
   secretResolver = resolver;
 }
 
+export type KeyAliasResolver = (keyId: string) => Promise<string | undefined>;
+
+let keyAliasResolver: KeyAliasResolver = () => Promise.resolve(undefined);
+
+export function setKeyAliasResolver(resolver: KeyAliasResolver): void {
+  keyAliasResolver = resolver;
+}
+
+// The only place a chat model is built: every model gets the usage callback
+// here, so no call site has to record its own consumption.
 export async function createChatModel(
   ref: ModelRef,
   options: ChatModelOptions = {},
   resolveSecret: SecretResolver = secretResolver,
 ): Promise<ProviderChatModel> {
-  return (await buildModel(ref, options, resolveSecret)) as ProviderChatModel;
+  const model = await buildModel(ref, options, resolveSecret);
+  const keyAlias = ref.keyId
+    ? ((await keyAliasResolver(ref.keyId)) ?? null)
+    : null;
+  const handler = new UsageCallbackHandler({
+    provider: ref.provider,
+    model: ref.model,
+    location: isCloudProvider(ref.provider) ? "cloud" : "local",
+    keyId: ref.keyId ?? null,
+    keyAlias,
+  });
+  model.callbacks = [
+    ...(Array.isArray(model.callbacks) ? model.callbacks : []),
+    handler,
+  ];
+  return model as ProviderChatModel;
 }
 
 async function buildModel(

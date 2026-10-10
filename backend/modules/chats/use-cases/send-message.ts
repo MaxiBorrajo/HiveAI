@@ -14,6 +14,8 @@ import { embedText } from "../../../core/memory/embeddings.ts";
 import { splitContent } from "../../../core/ai/providers/capabilities.ts";
 import { normalizeProviderError } from "../../../core/ai/providers/errors.ts";
 import type { BeePlugin } from "../../../core/microkernel/bee-plugin.ts";
+import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
+import { ModelUsageRepository } from "../../../infrastructure/db/repositories/model-usage-repository.ts";
 
 const MAX_MESSAGE_LENGTH = 20_000;
 
@@ -51,7 +53,8 @@ async function persistAssistantMessage(
   steps: ChatStep[],
   thinkingRuns: ThinkingRun[],
   wasStopped = false,
-) {
+  usageGroupId?: string,
+): Promise<number> {
   const chatRepo = new ChatRepository(db);
   const msgRepo = new MessageRepository(db);
 
@@ -63,7 +66,7 @@ async function persistAssistantMessage(
   await chatRepo.update(chat);
 
   const vector = await embedText(fullContent);
-  await msgRepo.create({
+  const messageId = await msgRepo.create({
     chatId: chat.id,
     role: "agent",
     content: fullContent,
@@ -76,12 +79,29 @@ async function persistAssistantMessage(
     }),
     vector: JSON.stringify(vector),
   });
+
+  if (usageGroupId) await linkUsageToMessage(db, usageGroupId, messageId);
+  return messageId;
+}
+
+// The calls were recorded before the message existed; link them by group.
+async function linkUsageToMessage(
+  db: AppDatabase,
+  groupId: string,
+  messageId: number,
+): Promise<void> {
+  try {
+    await new ModelUsageRepository(db).attachMessage(groupId, messageId);
+  } catch (error) {
+    console.error("[Usage] Could not link the calls to the message:", error);
+  }
 }
 
 async function persistStoppedMessage(
   db: AppDatabase,
   chatId: number,
   { fullContent, steps, thinkingRuns }: StreamResult,
+  usageGroupId: string,
 ) {
   if (!fullContent) return;
   try {
@@ -93,6 +113,7 @@ async function persistStoppedMessage(
       steps,
       thinkingRuns,
       true,
+      usageGroupId,
     );
   } catch (error) {
     console.error("[Chat] Could not save the stopped response:", error);
@@ -259,28 +280,34 @@ export async function sendMessage(
       steps: [],
       thinkingRuns: [],
     };
+    const usageGroupId = crypto.randomUUID();
     let streamResult: StreamResult;
     try {
-      const streamIterable = await Scout.stream(
+      streamResult = await withUsageContext(
         {
-          messages: contextMessages,
-          chatId: resolvedChatId.toString(),
-          model,
-          modelProvider,
-          modelKeyId: config.get("modelKeyId"),
-          modelOptions: modelProvider === "ollama" ? modelOptions : {},
+          kind: "chat",
+          role: "orchestrator",
+          chatId: resolvedChatId,
+          groupId: usageGroupId,
         },
-        { streamMode: ["messages", "values"], signal: req.signal },
-      );
-      streamResult = await consumeStream(
-        streamIterable,
-        "Agent",
-        send,
-        progress,
+        async () => {
+          const streamIterable = await Scout.stream(
+            {
+              messages: contextMessages,
+              chatId: resolvedChatId.toString(),
+              model,
+              modelProvider,
+              modelKeyId: config.get("modelKeyId"),
+              modelOptions: modelProvider === "ollama" ? modelOptions : {},
+            },
+            { streamMode: ["messages", "values"], signal: req.signal },
+          );
+          return await consumeStream(streamIterable, "Agent", send, progress);
+        },
       );
     } catch (error) {
       if (req.signal.aborted) {
-        await persistStoppedMessage(db, resolvedChatId, progress);
+        await persistStoppedMessage(db, resolvedChatId, progress, usageGroupId);
         throw error;
       }
       throw normalizeProviderError(error, modelProvider);
@@ -296,6 +323,8 @@ export async function sendMessage(
       usedTools,
       steps,
       thinkingRuns,
+      false,
+      usageGroupId,
     );
 
     send("done", {

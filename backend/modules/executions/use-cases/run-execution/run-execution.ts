@@ -20,6 +20,8 @@ import {
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { createPluginNodeRegistry } from "./plugin-node-executor.ts";
 import { finalizeExecutionResult } from "./result-normalizer.ts";
+import { withUsageContext } from "../../../../core/ai/usage/usage-context.ts";
+import { ModelUsageRepository } from "../../../../infrastructure/db/repositories/model-usage-repository.ts";
 
 type CompiledGraph = ReturnType<typeof compileGraph>;
 type FinalState = Record<string, any>;
@@ -115,6 +117,20 @@ async function saveRun(
   return { historyId: history.id, iteration };
 }
 
+// The calls were recorded while the run was in progress; the run row only
+// exists now, so link them by group.
+async function linkUsageToRun(
+  db: AppDatabase,
+  groupId: string,
+  historyId: number,
+): Promise<void> {
+  try {
+    await new ModelUsageRepository(db).attachHistory(groupId, historyId);
+  } catch (error) {
+    console.error("[Usage] Could not link the calls to the run:", error);
+  }
+}
+
 // LangGraph counts one step per node run; the default (25) cuts review loops after ~2 cycles.
 const EXECUTION_RECURSION_LIMIT = 60;
 
@@ -149,23 +165,29 @@ export async function runExecution(
     const app = compileExecutionGraph(hive, abstraction);
 
     return createSseResponse(headers, (send) =>
-      executionContextStorage.run({ autoApprove }, async () => {
-        const finalState = await streamRun(app, inputState, send);
-        finalizeExecutionResult(finalState, abstraction.nodes);
+      executionContextStorage.run({ autoApprove }, () =>
+        withUsageContext(
+          { kind: "execution", role: "delegate", executionId: id },
+          async (usageGroupId) => {
+            const finalState = await streamRun(app, inputState, send);
+            finalizeExecutionResult(finalState, abstraction.nodes);
 
-        const { historyId, iteration } = await saveRun(
-          repo,
-          id,
-          graphId,
-          finalState,
-        );
-        send("done", {
-          historyId,
-          iteration,
-          result: finalState.result,
-          finalState,
-        });
-      }));
+            const { historyId, iteration } = await saveRun(
+              repo,
+              id,
+              graphId,
+              finalState,
+            );
+            await linkUsageToRun(db, usageGroupId, historyId);
+            send("done", {
+              historyId,
+              iteration,
+              result: finalState.result,
+              finalState,
+            });
+          },
+        ),
+      ));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return ResponseBuilder.error(
