@@ -1,4 +1,7 @@
-import { ChatOllama } from "@langchain/ollama";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { createChatModel } from "../../providers/create-chat-model.ts";
+import { normalizeModelRef, isCloudProvider } from "../../providers/types.ts";
+import { normalizeProviderError } from "../../providers/errors.ts";
 import { Runnable } from "@langchain/core/runnables";
 import {
   SystemMessage,
@@ -9,6 +12,8 @@ import {
 } from "@langchain/core/messages";
 import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
+import { withLocalNumCtx } from "../../providers/local-context.ts";
+import { splitContent } from "../../providers/capabilities.ts";
 
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -33,9 +38,11 @@ function resolveModelName(model: unknown): string {
   return name;
 }
 
-function createChatModel(config: LlmConfig, temperature: number): ChatOllama {
+function splitModelConfig(config: LlmConfig, temperature: number) {
   const {
     model,
+    provider,
+    keyId,
     plugins: _plugins,
     systemPrompt: _systemPrompt,
     pluginId: _pluginId,
@@ -45,11 +52,19 @@ function createChatModel(config: LlmConfig, temperature: number): ChatOllama {
     ...modelOptions
   } = config;
 
-  return new ChatOllama({
-    model: resolveModelName(model),
-    temperature,
-    ...modelOptions,
-  });
+  const ref = normalizeModelRef(resolveModelName(model), { provider, keyId });
+  const options = isCloudProvider(ref.provider)
+    ? { temperature }
+    : { temperature, ...modelOptions };
+  return { ref, options };
+}
+
+async function buildNodeChatModel(
+  config: LlmConfig,
+  temperature: number,
+): Promise<BaseChatModel> {
+  const { ref, options } = splitModelConfig(config, temperature);
+  return createChatModel(ref, await withLocalNumCtx(ref.provider, ref.model, options));
 }
 
 function toolResultToString(toolResult: unknown): string {
@@ -62,11 +77,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function buildLlmInstance(
+export async function buildLlmInstance(
   nodeId: string,
   config: LlmConfig,
   toolProvider?: ToolProvider,
-): Runnable {
+): Promise<Runnable> {
   const toolsToBind: unknown[] = [];
 
   if (config.plugins && Array.isArray(config.plugins)) {
@@ -93,9 +108,9 @@ export function buildLlmInstance(
     );
   }
 
-  const llm = createChatModel(config, 0.8);
+  const llm = (await buildNodeChatModel(config, 0.8)) as BaseChatModel & { model?: string };
   console.log(
-    `\n[Compiler Native LLM] Executing model: ${llm.model} for node ${nodeId}`,
+    `\n[Compiler Native LLM] Executing model: ${config.model} for node ${nodeId}`,
   );
   if (toolsToBind.length > 0) {
     console.log(`[Compiler Native LLM] Tools bound: ${toolsToBind.length}`);
@@ -316,7 +331,7 @@ async function runToolCall(
 
 async function runReactLoop(
   nodeId: string,
-  baseLlm: ChatOllama,
+  baseLlm: BaseChatModel,
   tools: ToolLike[],
   messages: BaseMessage[],
   toolProvider?: ToolProvider,
@@ -361,21 +376,12 @@ async function runReactLoop(
 }
 
 function resolveModelOptions(config: LlmConfig, temperature: number) {
-  const {
-    model,
-    plugins: _plugins,
-    systemPrompt: _systemPrompt,
-    pluginId: _pluginId,
-    structuredOutput: _structuredOutput,
-    outputKey: _outputKey,
-    inputMapping: _inputMapping,
-    ...modelOptions
-  } = config;
-
+  const { ref, options } = splitModelConfig(config, temperature);
   return {
-    model: resolveModelName(model),
-    temperature,
-    ...modelOptions,
+    model: ref.model,
+    provider: ref.provider,
+    keyId: ref.keyId,
+    ...options,
   };
 }
 
@@ -384,12 +390,24 @@ export async function executeLlmNode(
   config: LlmConfig,
   state: Record<string, unknown>,
   toolProvider?: ToolProvider,
-  llmFactory: (opts: { model: string; temperature: number; [key: string]: unknown }) => any = (opts) =>
-    new ChatOllama(opts as any),
+  llmFactory: (opts: {
+    model: string;
+    provider: string;
+    keyId?: string;
+    temperature: number;
+    [key: string]: unknown;
+  }) => any = ({ model, provider, keyId, ...options }) =>
+    (async () => {
+      const ref = normalizeModelRef(model, { provider, keyId });
+      return createChatModel(
+        ref,
+        await withLocalNumCtx(ref.provider, ref.model, options as Record<string, unknown>),
+      );
+    })(),
 ): Promise<Record<string, unknown>> {
   try {
     const tools = resolveTools(nodeId, config, toolProvider);
-    const baseLlm = llmFactory(resolveModelOptions(config, 0.2));
+    const baseLlm = await llmFactory(resolveModelOptions(config, 0.2));
     const messages = buildPromptMessages(state, config);
 
     if (tools.length > 0) {
@@ -427,7 +445,9 @@ export function mapResponseToState(
   if (config.structuredOutput) {
     resultValue = response;
   } else {
-    resultValue = (response as AIMessage).content;
+    // Claude may return content blocks (thinking + text fragments); keep only the text.
+    const content = (response as AIMessage).content;
+    resultValue = Array.isArray(content) ? splitContent(content).text : content;
   }
 
   const outKey = config.outputKey;
@@ -478,31 +498,19 @@ export function mapResponseToState(
   return stateUpdate;
 }
 
+/** A failed model call fails the node: continuing with made-up output would corrupt later nodes. */
 export function handleLlmError(
   error: unknown,
   nodeId: string,
   config: LlmConfig,
-): Record<string, unknown> {
-  const errorMsg = errorMessage(error);
+): never {
+  const errorMsg = normalizeProviderError(
+    error,
+    typeof config.provider === "string" ? config.provider : undefined,
+  ).message;
   console.error(
-    `[Compiler Native LLM] Network error with Ollama (Node ${nodeId}):`,
+    `[Compiler Native LLM] Model error (Node ${nodeId}):`,
     errorMsg,
   );
-
-  const resultValue = config.structuredOutput
-    ? { error: `Mock Fallback due to error: ${errorMsg}` }
-    : `(Mock Fallback due to connection error: ${errorMsg})`;
-
-  const stateUpdate: Record<string, unknown> = {};
-  if (config.outputKey) {
-    stateUpdate[config.outputKey] = resultValue;
-  } else {
-    if (typeof resultValue === "string") {
-      stateUpdate.messages = [{ role: "assistant", content: resultValue }];
-    } else {
-      stateUpdate.result = resultValue;
-    }
-  }
-
-  return stateUpdate;
+  throw new Error(errorMsg, { cause: error });
 }

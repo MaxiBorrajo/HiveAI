@@ -1,3 +1,4 @@
+import { buildModelSelection } from "../../../models/use-cases/build-model-selection.ts";
 import { createSseResponse } from "../../../../core/api/sse.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../../infrastructure/db/repositories/execution-repository.ts";
@@ -134,6 +135,7 @@ export async function generateExecution(
       describeActivePlugins(hive),
       currentGraph,
       targetNodeId,
+      await buildModelSelection(hive),
     );
 
     let result = await generator.next();

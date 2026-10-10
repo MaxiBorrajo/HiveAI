@@ -38,6 +38,8 @@ export class HiveMicrokernel {
     dataDir: "",
     configDir: "",
     model: "",
+    modelProvider: "ollama",
+    modelKeyId: "",
     currentMode: "default",
     ollamaKvCacheType: "",
     callbackBaseUrl: "",

@@ -7,17 +7,27 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { getModels } from "@/features/models/api/getModels";
+import { getModelOptions } from "@/features/models/api/getModelOptions";
 import { getCurrentModels } from "@/features/models/api/getCurrentModels";
 import { setModels as setModelsRequest } from "@/features/models/api/setModels";
 import {
   getEmbeddingModelStatus,
   type EmbeddingModelStatus,
 } from "@/features/models/api/getEmbeddingModelStatus";
-import type { CurrentModels, ModelInfo } from "@/features/models/types";
+import type {
+  CurrentModels,
+  ModelInfo,
+  ModelOptionGroup,
+} from "@/features/models/types";
+import type { ModelChoice } from "@/features/models/lib/modelChoices";
 
 interface ModelsContextValue {
   models: ModelInfo[];
+  optionGroups: ModelOptionGroup[];
   current: CurrentModels;
+  isKeysOpen: boolean;
+  openKeys: () => void;
+  closeKeys: () => void;
   hasModel: boolean;
   hasAvailableModels: boolean;
   embeddingModelStatus: EmbeddingModelStatus | null;
@@ -25,7 +35,7 @@ interface ModelsContextValue {
   openManage: () => void;
   closeManage: () => void;
   refreshModels: () => void;
-  changeModel: (name: string) => Promise<void>;
+  changeModel: (choice: string | ModelChoice) => Promise<void>;
   modeResetSignal: number;
   runBusy: <T>(message: string, task: () => Promise<T>) => Promise<T>;
 }
@@ -34,8 +44,12 @@ const ModelsContext = createContext<ModelsContextValue | null>(null);
 
 export function ModelsProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [optionGroups, setOptionGroups] = useState<ModelOptionGroup[]>([]);
+  const [isKeysOpen, setIsKeysOpen] = useState(false);
   const [current, setCurrent] = useState<CurrentModels>({
     model: "",
+    provider: "ollama",
+    keyId: "",
   });
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [modeResetSignal, setModeResetSignal] = useState(0);
@@ -57,6 +71,9 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
 
   function refreshModels() {
     getModels().then(({ data }) => setModels(data ?? []));
+    getModelOptions()
+      .then(({ data }) => setOptionGroups(data ?? []))
+      .catch(() => setOptionGroups([]));
     getCurrentModels().then(({ data }) => {
       if (data) setCurrent(data);
     });
@@ -67,24 +84,36 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
 
   useEffect(refreshModels, []);
 
-  async function changeModel(name: string) {
-    const previousModel = current.model;
-    setCurrent((prev) => ({ ...prev, model: name }));
+  async function changeModel(choice: string | ModelChoice) {
+    const target: ModelChoice =
+      typeof choice === "string"
+        ? { provider: "ollama", model: choice, keyId: "" }
+        : choice;
+    const previous = current;
+    setCurrent(target);
 
     await runBusy("Applying model change...", async () => {
       try {
-        const { data } = await setModelsRequest({ model: name });
-        if (data) setCurrent((prev) => ({ ...prev, model: data.model }));
+        const { data } = await setModelsRequest({
+          model: target.model,
+          provider: target.provider,
+          keyId: target.keyId,
+        });
+        if (data) setCurrent(data);
         setModeResetSignal((n) => n + 1);
       } catch {
-        setCurrent((prev) => ({ ...prev, model: previousModel }));
+        setCurrent(previous);
       }
     });
   }
 
   const value: ModelsContextValue = {
     models,
+    optionGroups,
     current,
+    isKeysOpen,
+    openKeys: () => setIsKeysOpen(true),
+    closeKeys: () => setIsKeysOpen(false),
     hasModel: !!current.model,
     hasAvailableModels: models.length > 0,
     embeddingModelStatus,

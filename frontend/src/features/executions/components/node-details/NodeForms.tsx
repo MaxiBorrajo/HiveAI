@@ -1,4 +1,10 @@
 import { useModels } from "@/features/models/ModelsContext";
+import {
+  buildProviderTree,
+  isCloud,
+  type ModelChoice,
+} from "@/features/models/lib/modelChoices";
+import type { ModelProvider } from "@/features/models/types";
 import type { Plugin } from "@/features/plugins/types";
 import { CONDITION_OPERATORS, RESULT_OUTPUT_TYPES } from "../../lib/graphOps";
 import {
@@ -35,7 +41,68 @@ export function LlmNodeForm({
   stateKeys,
   plugins,
 }: NodeFormProps) {
-  const { models } = useModels();
+  const { optionGroups } = useModels();
+  const tree = buildProviderTree(optionGroups);
+  const provider: ModelProvider | "" = config.model
+    ? (config.provider ?? "ollama")
+    : "";
+  const entry = tree.find((e) => e.provider === provider);
+  const modelEntry = entry?.models.find((m) => m.model === config.model);
+  const keyId: string = config.keyId ?? "";
+  const modelKnown =
+    !config.model ||
+    (!!modelEntry &&
+      (!isCloud(provider as ModelProvider) ||
+        modelEntry.keys.some((k) => k.keyId === keyId)));
+
+  const applyChoice = (choice: ModelChoice | null) => {
+    const { provider: _p, keyId: _k, ...rest } = config;
+    setConfig(
+      !choice
+        ? { ...rest, model: undefined }
+        : isCloud(choice.provider)
+          ? {
+              ...rest,
+              model: choice.model,
+              provider: choice.provider,
+              keyId: choice.keyId,
+            }
+          : { ...rest, model: choice.model },
+    );
+  };
+  const pickProvider = (value: string) => {
+    const next = tree.find((e) => e.provider === value);
+    const first = next?.models[0];
+    applyChoice(
+      next && first
+        ? {
+            provider: next.provider,
+            model: first.model,
+            keyId: first.keys[0]?.keyId ?? "",
+          }
+        : null,
+    );
+  };
+  const pickModel = (value: string) => {
+    const m = entry?.models.find((x) => x.model === value);
+    if (!entry || !m) return;
+    const keep = m.keys.find((k) => k.keyId === keyId);
+    applyChoice({
+      provider: entry.provider,
+      model: m.model,
+      keyId: keep?.keyId ?? m.keys[0]?.keyId ?? "",
+    });
+  };
+  const pickKey = (value: string) => {
+    if (!entry || !config.model) return;
+    applyChoice({
+      provider: entry.provider,
+      model: config.model as string,
+      keyId: value,
+    });
+  };
+  const selectClass =
+    "h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const set = (patch: Record<string, any>) =>
     setConfig({ ...config, ...patch });
   const equipped: string[] = Array.isArray(config.plugins)
@@ -54,14 +121,65 @@ export function LlmNodeForm({
       <StateKeysDatalist id={KEYS_LIST_ID} keys={stateKeys} />
       <Field
         label="Model"
-        hint="Leave on default to use the globally selected model."
+        hint="Pick a provider, then a model, then the API key to use with it. Leave on default to use the model selected in the chat."
       >
-        <Select
-          value={config.model ?? ""}
-          onChange={(model) => set({ model: model || undefined })}
-          placeholder="Default model"
-          options={models.map((m) => ({ value: m.name }))}
-        />
+        <div className="flex flex-col gap-1.5">
+          <select
+            value={provider}
+            onChange={(e) => pickProvider(e.target.value)}
+            className={selectClass}
+          >
+            <option value="">Default model</option>
+            {provider && !entry && (
+              <option value={provider}>{provider} (unavailable)</option>
+            )}
+            {tree.map((e) => (
+              <option key={e.provider} value={e.provider}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          {provider && (
+            <select
+              value={config.model ?? ""}
+              onChange={(e) => pickModel(e.target.value)}
+              className={selectClass}
+            >
+              {!modelEntry && (
+                <option value={config.model}>
+                  {config.model} (unavailable)
+                </option>
+              )}
+              {entry?.models.map((m) => (
+                <option key={m.model} value={m.model}>
+                  {m.model}
+                </option>
+              ))}
+            </select>
+          )}
+          {isCloud(provider as ModelProvider) && (
+            <select
+              value={keyId}
+              onChange={(e) => pickKey(e.target.value)}
+              className={selectClass}
+            >
+              {!modelEntry?.keys.some((k) => k.keyId === keyId) && (
+                <option value={keyId}>API key (unavailable)</option>
+              )}
+              {modelEntry?.keys.map((k) => (
+                <option key={k.keyId} value={k.keyId}>
+                  {k.alias}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {!modelKnown && (
+          <p className="mt-1 text-[11px] text-destructive">
+            This model or its API key no longer exists. The execution will not
+            start until you pick another one.
+          </p>
+        )}
       </Field>
       <Field
         label="System prompt"

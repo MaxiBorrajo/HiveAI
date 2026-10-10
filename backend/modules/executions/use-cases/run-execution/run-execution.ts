@@ -12,6 +12,11 @@ import type {
   LangGraphAbstraction,
   ToolProvider,
 } from "../../../../core/ai/visual-builder/types.ts";
+import {
+  applyDefaultModel,
+  checkGraphModels,
+  defaultModelCheckDeps,
+} from "./check-models.ts";
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { createPluginNodeRegistry } from "./plugin-node-executor.ts";
 import { finalizeExecutionResult } from "./result-normalizer.ts";
@@ -77,7 +82,10 @@ async function streamRun(
   };
 
   let finalState: FinalState = {};
-  const events = await app.streamEvents(initialInputs, { version: "v2" });
+  const events = await app.streamEvents(initialInputs, {
+    version: "v2",
+    recursionLimit: EXECUTION_RECURSION_LIMIT,
+  });
   for await (const event of events) {
     send(event.event, event);
     if (event.event === "on_chain_end" && event.name === "LangGraph") {
@@ -107,6 +115,9 @@ async function saveRun(
   return { historyId: history.id, iteration };
 }
 
+// LangGraph counts one step per node run; the default (25) cuts review loops after ~2 cycles.
+const EXECUTION_RECURSION_LIMIT = 60;
+
 export async function runExecution(
   db: AppDatabase,
   hive: HiveMicrokernel,
@@ -126,6 +137,15 @@ export async function runExecution(
     }
 
     const { abstraction, graphId } = loaded;
+    applyDefaultModel(abstraction, hive);
+    const problems = await checkGraphModels(abstraction, defaultModelCheckDeps());
+    if (problems.length > 0) {
+      return ResponseBuilder.error(
+        problems.map((p) => p.reason),
+        { problems },
+        { headers, status: 422 },
+      );
+    }
     const app = compileExecutionGraph(hive, abstraction);
 
     return createSseResponse(headers, (send) =>

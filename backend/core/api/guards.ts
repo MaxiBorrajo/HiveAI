@@ -19,6 +19,17 @@ export function requireModelsConfigured(
     );
   }
 
+  if (
+    config.get("modelProvider") !== "ollama" &&
+    !config.get("modelKeyId")
+  ) {
+    return ResponseBuilder.error(
+      ["The selected cloud model has no API key. Choose a key for it."],
+      undefined,
+      { headers, status: 400 },
+    );
+  }
+
   return null;
 }
 

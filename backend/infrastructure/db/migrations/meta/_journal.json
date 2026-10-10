@@ -15,6 +15,13 @@
       "when": 1790597056021,
       "tag": "0001_glorious_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791223713622,
+      "tag": "0002_superb_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }

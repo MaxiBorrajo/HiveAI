@@ -8,7 +8,7 @@ Deno.test("fetchCurrentModels reflects whatever model is configured on the hive"
     const hive = new HiveMicrokernel();
     hive.configure({ dataDir: tempDir, model: "qwen3:8b" });
 
-    assertEquals(fetchCurrentModels(hive), { model: "qwen3:8b" });
+    assertEquals(fetchCurrentModels(hive), { model: "qwen3:8b", provider: "ollama", keyId: "" });
   } finally {
     await Deno.remove(tempDir, { recursive: true });
   }
@@ -21,7 +21,7 @@ Deno.test("fetchCurrentModels reflects a model change via configure()", async ()
     hive.configure({ dataDir: tempDir, model: "qwen3:8b" });
     hive.configure({ model: "lfm2.5" });
 
-    assertEquals(fetchCurrentModels(hive), { model: "lfm2.5" });
+    assertEquals(fetchCurrentModels(hive), { model: "lfm2.5", provider: "ollama", keyId: "" });
   } finally {
     await Deno.remove(tempDir, { recursive: true });
   }

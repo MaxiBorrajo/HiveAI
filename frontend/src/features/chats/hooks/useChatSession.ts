@@ -16,10 +16,17 @@ import {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
+  // True from send until the response ends, including while tokens stream
+  // (isThinking is already false by then).
+  isBusy: boolean;
 }
 
 const NO_MESSAGES: Message[] = [];
-const IDLE_THINKING: ThinkingState = { isThinking: false, thinkingText: "" };
+const IDLE_THINKING: ThinkingState = {
+  isThinking: false,
+  thinkingText: "",
+  isBusy: false,
+};
 
 function newChatKey(token: string): string {
   return `__new__:${token}`;
@@ -46,6 +53,7 @@ function toMessage(stored: StoredMessage): Message {
     usedTools: stored.metadata?.usedTools,
     steps: stored.metadata?.steps,
     thinkingRuns: stored.metadata?.thinkingRuns,
+    wasStopped: stored.metadata?.wasStopped,
   };
 }
 
@@ -95,13 +103,17 @@ export function useChatSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChatId]);
 
-  async function send(content: string): Promise<boolean> {
-    if (!content || thinkingState.value.isThinking) return false;
+  async function send(
+    content: string,
+    onAccepted?: () => void,
+  ): Promise<boolean> {
+    if (!content || thinkingState.value.isBusy) return false;
     if (!hasModel) return false;
     if (embeddingModelStatus !== null && !embeddingModelStatus.available) {
       return false;
     }
 
+    onAccepted?.();
     requestNotificationPermission();
 
     const startKey = displayKey;
@@ -124,7 +136,10 @@ export function useChatSession() {
       content,
       timestamp: Date.now(),
     });
-    thinkingState.set({ isThinking: true, thinkingText: "" }, key);
+    thinkingState.set(
+      { isThinking: true, thinkingText: "", isBusy: true },
+      key,
+    );
     if (activeChatId) touchChat(activeChatId);
 
     const abortController = new AbortController();
@@ -153,7 +168,7 @@ export function useChatSession() {
           onToken: (token) => {
             if (!streamStarted) {
               streamStarted = true;
-              thinkingState.set(IDLE_THINKING, key);
+              thinkingState.set({ ...IDLE_THINKING, isBusy: true }, key);
               appendMessage({
                 id: agentMessageId,
                 role: "agent",
@@ -237,6 +252,7 @@ export function useChatSession() {
   return {
     messages: messagesState.value,
     isThinking: thinkingState.value.isThinking,
+    isBusy: thinkingState.value.isBusy,
     thinkingText: thinkingState.value.thinkingText,
     send,
     stop: () => abortControllerRef.current?.abort(),

@@ -14,6 +14,7 @@ import { draftsRouter } from "../modules/drafts/router.ts";
 import { modesRouter } from "../modules/modes/router.ts";
 import { modelsRouter } from "../modules/models/router.ts";
 import { executionsRouter } from "../modules/executions/router.ts";
+import { apiKeysRouter } from "../modules/api-keys/router.ts";
 import { appUpdatesRouter } from "../modules/app-updates/router.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -58,6 +59,7 @@ export function createApp(hive: HiveMicrokernel) {
   app.route("/api/external-plugin-callbacks", externalPluginCallbacksRouter);
   app.route("/api/drafts", draftsRouter);
   app.route("/api/executions", executionsRouter);
+  app.route("/api/api-keys", apiKeysRouter);
   app.route("/api/app", appUpdatesRouter);
 
   app.use("/*", serveStatic({ root: frontendDistPath }));

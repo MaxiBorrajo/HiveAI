@@ -12,11 +12,7 @@ import { PluginsMenu } from "./PluginsMenu";
 import { PluginsModal } from "./PluginsModal";
 import { useDraftEditor } from "../../drafts/DraftEditorContext";
 
-interface PluginsManagerProps {
-  forceOpenDownward?: boolean;
-}
-
-export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
+export function PluginsManager() {
   const { hasModel } = useModels();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -108,7 +104,6 @@ export function PluginsManager({ forceOpenDownward }: PluginsManagerProps) {
         onToggle={togglePlugin}
         onToggleAll={toggleAllPlugins}
         onOpenManage={() => setIsModalOpen(true)}
-        forceOpenDownward={forceOpenDownward}
       />
       <PluginsModal
         isOpen={isModalOpen}

@@ -6,7 +6,15 @@ import {
 } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
 import { END } from "@langchain/langgraph";
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../../providers/create-chat-model.ts";
+import { normalizeModelRef, isCloudProvider } from "../../../providers/types.ts";
+import { splitContent } from "../../../providers/capabilities.ts";
+import {
+  isThinkingRejection,
+  markThinkingUnsupported,
+  shouldRequestThinking,
+} from "../../../providers/thinking.ts";
+import { normalizeProviderError } from "../../../providers/errors.ts";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { ScoutState, type ChatStep } from "../graph.ts";
 import {
@@ -28,14 +36,20 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     elapsedMs >= MAX_AGENT_DURATION_MS;
 
   console.log(`[SCOUT - Agent] state.modelOptions:`, state.modelOptions);
-  const agentOptions = {
-    model: state.model,
-    think: true,
-    ...state.modelOptions,
-  };
-  const agentModel = new ChatOllama(agentOptions);
+  const modelRef = normalizeModelRef(state.model, {
+    provider: state.modelProvider,
+    keyId: state.modelKeyId,
+  });
+  const isCloud = isCloudProvider(modelRef.provider);
+  const agentOptions = isCloud
+    ? { think: shouldRequestThinking(modelRef) }
+    : { think: true, ...state.modelOptions };
+  let agentModel = await createChatModel(modelRef, agentOptions);
 
-  console.log(`[SCOUT - Agent] Effective Ollama options:`, agentOptions);
+  console.log(
+    `[SCOUT - Agent] Model ${modelRef.provider}/${modelRef.model}, options:`,
+    agentOptions,
+  );
   console.log(
     `\n[SCOUT - Agent] Starting turn (iteration ${state.iterations}, elapsed ${Math.round(elapsedMs / 1000)}s${outOfIterations ? ", out of tool budget" : ""})`,
   );
@@ -52,10 +66,27 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     ...buildNativeTools(Number(state.chatId)),
   ];
 
-  const invoke = (messages: BaseMessage[]) =>
-    outOfIterations
-      ? agentModel.invoke(messages, { signal: config.signal })
-      : agentModel.bindTools(tools).invoke(messages, { signal: config.signal });
+  const invoke = async (messages: BaseMessage[]): Promise<AIMessage> => {
+    try {
+      return (outOfIterations
+        ? await agentModel.invoke(messages, { signal: config.signal })
+        : await agentModel
+            .bindTools(tools)
+            .invoke(messages, { signal: config.signal })) as AIMessage;
+    } catch (error) {
+      if (config.signal?.aborted) throw error;
+      if (isCloud && agentOptions.think && isThinkingRejection(error)) {
+        console.warn(
+          `[SCOUT - Agent] ${modelRef.model} rejected thinking, retrying without it`,
+        );
+        markThinkingUnsupported(modelRef);
+        agentModel = await createChatModel(modelRef, { think: false });
+        agentOptions.think = false;
+        return await invoke(messages);
+      }
+      throw normalizeProviderError(error, modelRef.provider);
+    }
+  };
 
   let response = await invoke([...systemMessages, ...state.messages]);
 
@@ -98,7 +129,7 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
         durationMs,
         summary: response.tool_calls?.length
           ? `Decided: ${toolNames}`
-          : String(response.content).replace(/\s+/g, " ").trim().slice(0, 200),
+          : splitContent(response.content).text.replace(/\s+/g, " ").trim().slice(0, 200),
       } satisfies ChatStep,
     ],
   };

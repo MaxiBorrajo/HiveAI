@@ -104,30 +104,26 @@ Deno.test("buildPromptMessages - state.input is surfaced as USER GOAL context", 
   assertEquals(combined.includes("Do the thing"), true);
 });
 
-// --- buildLlmInstance ---
-
-Deno.test("buildLlmInstance - throws when plugins are requested but no ToolProvider is given", () => {
-  assertThrows(
+Deno.test("buildLlmInstance - throws when plugins are requested but no ToolProvider is given", async () => {
+  await assertRejects(
     () => buildLlmInstance("n1", { model: "qwen3:8b", plugins: ["web-search"] }),
     Error,
     "no ToolProvider was injected",
   );
 });
 
-Deno.test("buildLlmInstance - throws when a requested plugin isn't registered in the provider", () => {
+Deno.test("buildLlmInstance - throws when a requested plugin isn't registered in the provider", async () => {
   const provider: ToolProvider = { getTool: () => undefined };
-  assertThrows(
+  await assertRejects(
     () => buildLlmInstance("n1", { model: "qwen3:8b", plugins: ["missing-tool"] }, provider),
     Error,
     "is not registered in the Microkernel",
   );
 });
 
-Deno.test("buildLlmInstance - throws when no model is specified", () => {
-  assertThrows(() => buildLlmInstance("n1", {}), Error, "No model was specified");
+Deno.test("buildLlmInstance - throws when no model is specified", async () => {
+  await assertRejects(() => buildLlmInstance("n1", {}), Error, "No model was specified");
 });
-
-// --- mapResponseToState ---
 
 Deno.test("mapResponseToState - plain text response with outputKey sets both outputKey and result", () => {
   const state = mapResponseToState(new AIMessage("hello world"), { outputKey: "summary" }, {});
@@ -151,7 +147,6 @@ Deno.test("mapResponseToState - outputKey 'result' does not duplicate into a sec
 Deno.test("mapResponseToState - boolean field coerces a string reply via coerceLlmBooleanReply", () => {
   const state = mapResponseToState(new AIMessage("true"), { outputKey: "is_valid" }, {});
   assertEquals(state.is_valid, true);
-  // boolean fields should NOT also populate `result`
   assertEquals("result" in state, false);
 });
 
@@ -186,37 +181,27 @@ Deno.test("mapResponseToState - carries forward attempts counter when present in
 
 // --- handleLlmError ---
 
-Deno.test("handleLlmError - non-structured config wraps error into a mock messages fallback", () => {
-  const state = handleLlmError(new Error("connection refused"), "n1", {});
-  assertEquals(Array.isArray(state.messages), true);
-  assertEquals(String((state.messages as any[])[0].content).includes("connection refused"), true);
+Deno.test("handleLlmError - a model failure throws instead of producing fake output", () => {
+  assertThrows(() => handleLlmError(new Error("connection refused"), "n1", {}), Error, "connection refused");
 });
 
-Deno.test("handleLlmError - structuredOutput config wraps error into an object under outputKey", () => {
-  const state = handleLlmError(new Error("timeout"), "n1", {
-    outputKey: "result_data",
-    structuredOutput: { type: "object", required: true },
-  });
-  assertEquals(typeof state.result_data, "object");
-  assertEquals(String((state.result_data as any).error).includes("timeout"), true);
+Deno.test("handleLlmError - structuredOutput configs also throw", () => {
+  assertThrows(
+    () => handleLlmError(new Error("timeout"), "n1", { outputKey: "r", structuredOutput: { type: "object", required: true } }),
+    Error,
+    "timeout",
+  );
 });
 
 Deno.test("handleLlmError - non-Error thrown values are stringified", () => {
-  const state = handleLlmError("plain string failure", "n1", {});
-  assertEquals(String((state.messages as any[])[0].content).includes("plain string failure"), true);
+  assertThrows(() => handleLlmError("plain string failure", "n1", {}), Error, "plain string failure");
 });
 
 // --- executeLlmNode (error paths that don't require a live Ollama instance) ---
 
-Deno.test("executeLlmNode - plugins requested without a ToolProvider is caught and returns a mock fallback (does not throw)", async () => {
+Deno.test("executeLlmNode - plugins requested without a ToolProvider fails the node", async () => {
   const config: LlmConfig = { model: "qwen3:8b", plugins: ["web-search"] };
-  const result = await executeLlmNode("n1", config, {});
-  // executeLlmNode wraps all errors via handleLlmError instead of throwing
-  assertEquals(Array.isArray(result.messages), true);
-  assertEquals(
-    String((result.messages as any[])[0].content).includes("no ToolProvider was provided"),
-    true,
-  );
+  await assertRejects(() => executeLlmNode("n1", config, {}), Error, "no ToolProvider was provided");
 });
 
 // --- executeLlmNode ReAct loop (deterministic, via injected llmFactory) ---
@@ -356,20 +341,57 @@ Deno.test("executeLlmNode - the loop stops at maxIterations (8) if the model kee
   assertEquals("summary" in result, true);
 });
 
-Deno.test("executeLlmNode - a thrown error from the LLM factory itself is caught and returns a mock fallback", async () => {
-  const result = await executeLlmNode(
-    "n1",
-    { model: "fake-model", outputKey: "answer" },
+Deno.test("executeLlmNode - a thrown error from the LLM factory fails the node", async () => {
+  await assertRejects(
+    () =>
+      executeLlmNode("n1", { model: "fake-model", outputKey: "answer" }, {}, undefined, () => {
+        throw new Error("ollama connection refused");
+      }),
+    Error,
+    "ollama connection refused",
+  );
+});
+
+// --- provider-aware model construction ---
+
+Deno.test("executeLlmNode - passes provider + keyId to the factory and drops ollama options for cloud nodes", async () => {
+  let seen: Record<string, unknown> = {};
+  await executeLlmNode(
+    "cloud",
+    { model: "claude-sonnet-5-5", provider: "anthropic", keyId: "k1", numCtx: 8192 },
     {},
     undefined,
-    () => {
-      throw new Error("ollama connection refused");
+    (opts) => {
+      seen = opts;
+      return { invoke: () => Promise.resolve(new AIMessage("ok")) };
     },
   );
-  assertEquals(
-    String((result.messages as any[])?.[0]?.content ?? result.answer).includes(
-      "ollama connection refused",
-    ),
-    true,
+  assertEquals(seen.provider, "anthropic");
+  assertEquals(seen.keyId, "k1");
+  assertEquals("numCtx" in seen, false);
+});
+
+Deno.test("executeLlmNode - local nodes keep ollama options and default to the ollama provider", async () => {
+  let seen: Record<string, unknown> = {};
+  await executeLlmNode("local", { model: "qwen3:8b", numCtx: 4096 }, {}, undefined, (opts) => {
+    seen = opts;
+    return { invoke: () => Promise.resolve(new AIMessage("ok")) };
+  });
+  assertEquals(seen.provider, "ollama");
+  assertEquals(seen.numCtx, 4096);
+});
+
+Deno.test("executeLlmNode - a provider error fails the node with a clear message", async () => {
+  await assertRejects(
+    () =>
+      executeLlmNode(
+        "n1",
+        { model: "gemini-2.5-flash", provider: "google", keyId: "k", outputKey: "out" },
+        {},
+        undefined,
+        () => ({ invoke: () => Promise.reject(Object.assign(new Error("401"), { status: 401 })) }),
+      ),
+    Error,
+    "API key was rejected",
   );
 });

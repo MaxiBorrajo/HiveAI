@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { buildStateSchema, compileGraph } from "../../../../../../core/ai/visual-builder/execution/compiler.ts";
+import { buildStateSchema, compileGraph, MAX_LOOP_BACKS } from "../../../../../../core/ai/visual-builder/execution/compiler.ts";
 import { LangGraphAbstraction, NodeRegistry } from "../../../../../../core/ai/visual-builder/types.ts";
 
 function baseNodes() {
@@ -366,4 +366,45 @@ Deno.test("compileGraph - plain conditional edges with no matching condition thr
   const graph = compileGraph(abstraction, stateSchema, registry);
 
   await assertRejects(() => graph.invoke({ kind: "x" }), Error, "No matching conditional edge");
+});
+
+Deno.test("compileGraph - a review loop that never passes is forced forward after MAX_LOOP_BACKS retries", async () => {
+  let attempts = 0;
+  const registry: NodeRegistry = {
+    work: async () => {
+      attempts++;
+      return { score: 1 };
+    },
+    save: async () => ({ visited: "saved" }),
+  };
+  const abstraction: LangGraphAbstraction = {
+    nodes: [
+      ...baseNodes(),
+      { id: "w", name: "Work", type: "plugin", config: { pluginId: "work" } },
+      {
+        id: "cond",
+        name: "Check",
+        type: "condition",
+        config: { condition: { field: "score", operator: "greater_than", value: 5 } },
+      },
+      { id: "s", name: "Save", type: "plugin", config: { pluginId: "save" } },
+    ],
+    edges: [
+      { id: "e1", source: "start", target: "w", isConditional: false },
+      { id: "e2", source: "w", target: "cond", isConditional: false },
+      { id: "e3", source: "cond", target: "s", isConditional: true, path: "true" },
+      { id: "e4", source: "cond", target: "w", isConditional: true, path: "false" },
+      { id: "e5", source: "s", target: "end", isConditional: false },
+    ],
+    stateSchema: {},
+  };
+  const stateSchema = buildStateSchema({
+    score: { type: "number", required: false },
+    visited: { type: "string", required: false },
+  });
+  const graph = compileGraph(abstraction, stateSchema, registry);
+
+  const result = await graph.invoke({});
+  assertEquals(result.visited, "saved");
+  assertEquals(attempts, MAX_LOOP_BACKS + 1);
 });

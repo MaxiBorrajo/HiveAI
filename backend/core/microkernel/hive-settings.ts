@@ -1,16 +1,19 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import type { ModelProvider } from "../ai/providers/types.ts";
 
 export interface HiveSettings {
   dataDir: string;
   configDir: string;
   model: string;
+  modelProvider: ModelProvider;
+  modelKeyId: string;
   currentMode: string;
   ollamaKvCacheType: string;
   callbackBaseUrl: string;
 }
 
-const PERSISTED_KEYS = ["model", "currentMode", "ollamaKvCacheType"] as const;
+const PERSISTED_KEYS = ["model", "modelProvider", "modelKeyId", "currentMode", "ollamaKvCacheType"] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;
 
 const SETTINGS_FILE_NAME = "settings.json";

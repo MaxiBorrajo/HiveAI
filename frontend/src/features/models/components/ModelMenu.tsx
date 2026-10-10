@@ -1,4 +1,4 @@
-import { BrainCircuit, Check, Settings } from "lucide-react";
+import { BrainCircuit, Check, Cloud, KeyRound, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -6,26 +6,39 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import type { CurrentModels, ModelInfo } from "@/features/models/types";
+import type { CurrentModels, ModelOptionGroup } from "@/features/models/types";
+import {
+  currentChoice,
+  isCloud,
+  sameChoice,
+  buildProviderTree,
+  type ModelChoice,
+} from "@/features/models/lib/modelChoices";
 
 interface ModelMenuProps {
-  models: ModelInfo[];
+  groups: ModelOptionGroup[];
   current: CurrentModels;
-  onChangeModel: (name: string) => void;
+  onChangeModel: (choice: ModelChoice) => void;
   onOpenManage: () => void;
+  onOpenKeys: () => void;
   onOpen?: () => void;
-  forceOpenDownward?: boolean;
 }
 
 export function ModelMenu({
-  models,
+  groups,
   current,
   onChangeModel,
   onOpenManage,
+  onOpenKeys,
   onOpen,
-  forceOpenDownward = false,
 }: ModelMenuProps) {
+  const active = currentChoice(current);
+  const tree = buildProviderTree(groups);
+
   return (
     <DropdownMenu
       onOpenChange={(open) => {
@@ -36,7 +49,11 @@ export function ModelMenu({
         className="flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring px-1.5 py-0.5 gap-2"
         title="Models"
       >
-        <BrainCircuit className="size-4" />
+        {isCloud(current.provider) ? (
+          <Cloud className="size-4" />
+        ) : (
+          <BrainCircuit className="size-4" />
+        )}
         <span className="text-sm font-mono truncate max-w-32">
           {current.model || "No model"}
         </span>
@@ -45,49 +62,113 @@ export function ModelMenu({
         align="start"
         side="bottom"
         sideOffset={8}
-        collisionAvoidance={forceOpenDownward ? { side: "none" } : undefined}
-        className="w-64"
+        collisionAvoidance={undefined}
+        className="w-72 max-h-[min(24rem,var(--available-height))] overflow-hidden flex flex-col"
       >
-        <DropdownMenuGroup>
-          <div className="px-1.5 py-1">
-            <span className="text-sm font-medium">Models</span>
+        <div className="flex shrink-0 items-center justify-between px-1.5 py-1">
+          <span className="text-sm font-medium">Models</span>
+          <div className="flex items-center gap-1">
+            <DropdownMenuItem
+              className="size-7 justify-center p-0"
+              title="API keys"
+              onClick={onOpenKeys}
+            >
+              <KeyRound className="size-4" />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="size-7 justify-center p-0"
+              title="Manage models"
+              onClick={onOpenManage}
+            >
+              <Settings className="size-4" />
+            </DropdownMenuItem>
           </div>
+        </div>
 
-          <DropdownMenuSeparator />
+        <DropdownMenuGroup className="min-h-0 flex-1 overflow-y-auto">
 
-          {models.length === 0 ? (
+          {tree.length === 0 && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
               No models available
             </div>
-          ) : (
-            models.map((model) => {
-              const isModel = model.name === current.model;
-
-              return (
-                <DropdownMenuItem
-                  key={model.name}
-                  closeOnClick={false}
-                  onClick={() => onChangeModel(model.name)}
-                  title={model.name}
-                >
-                  <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-                    <span className="text-sm font-mono truncate max-w-40">
-                      {model.name}
-                    </span>
-                    {isModel && <Check className="size-4 shrink-0" />}
-                  </div>
-                </DropdownMenuItem>
-              );
-            })
           )}
+
+          {tree.map((entry) => (
+            <div key={entry.provider}>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1 text-xs font-medium text-muted-foreground truncate">
+                {entry.label}
+              </div>
+              {entry.keyErrors.map((e) => (
+                <div
+                  key={e.alias}
+                  className="px-2 py-0.5 text-[11px] text-destructive truncate"
+                  title={e.error}
+                >
+                  ⚠ {e.alias}: {e.error}
+                </div>
+              ))}
+              {entry.models.map((m) => {
+                const isActive =
+                  active.provider === entry.provider &&
+                  active.model === m.model;
+                const choiceFor = (keyId: string): ModelChoice => ({
+                  provider: entry.provider,
+                  model: m.model,
+                  keyId,
+                });
+
+                if (m.keys.length <= 1) {
+                  return (
+                    <DropdownMenuItem
+                      key={m.model}
+                      onClick={() => onChangeModel(choiceFor(m.keys[0]?.keyId ?? ""))}
+                      title={m.model}
+                    >
+                      <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
+                        <span className="text-sm font-mono truncate max-w-48">
+                          {m.model}
+                        </span>
+                        {isActive && <Check className="size-4 shrink-0" />}
+                      </div>
+                    </DropdownMenuItem>
+                  );
+                }
+
+                return (
+                  <DropdownMenuSub key={m.model}>
+                    <DropdownMenuSubTrigger title={m.model}>
+                      <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
+                        <span className="text-sm font-mono truncate max-w-40">
+                          {m.model}
+                        </span>
+                        {isActive && <Check className="size-4 shrink-0" />}
+                      </div>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      <div className="px-2 py-1 text-xs text-muted-foreground">
+                        API key
+                      </div>
+                      {m.keys.map((k) => (
+                        <DropdownMenuItem
+                          key={k.keyId}
+                          onClick={() => onChangeModel(choiceFor(k.keyId))}
+                        >
+                          <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
+                            <span className="text-sm truncate">{k.alias}</span>
+                            {sameChoice(choiceFor(k.keyId), active) && (
+                              <Check className="size-4 shrink-0" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                );
+              })}
+            </div>
+          ))}
         </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem onClick={onOpenManage}>
-          <Settings className="mr-2 size-4" />
-          <span>Manage Models...</span>
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
