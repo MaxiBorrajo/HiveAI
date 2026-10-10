@@ -56,6 +56,8 @@ export interface ModelOption {
 export interface ModelOptionGroup {
   id: string;
   label: string;
+  provider?: ModelProvider;
+  keyAlias?: string;
   error?: string;
   options: ModelOption[];
 }

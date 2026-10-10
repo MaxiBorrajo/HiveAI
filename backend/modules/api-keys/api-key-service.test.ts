@@ -67,7 +67,7 @@ Deno.test("ApiKeyService - two keys of the same provider, masked listing", async
 Deno.test("ApiKeyService - invalid key is rejected and not stored", async () => {
   const { service, repo, dir } = await setup();
   await assertRejects(
-    () => service.create({ provider: "openai", alias: "x", value: "bad-key" }),
+    () => service.create({ provider: "anthropic", alias: "x", value: "bad-key" }),
     Error,
     "rejected",
   );
@@ -77,9 +77,9 @@ Deno.test("ApiKeyService - invalid key is rejected and not stored", async () => 
 
 Deno.test("ApiKeyService - duplicate alias within provider is rejected", async () => {
   const { service, dir } = await setup();
-  await service.create({ provider: "openai", alias: "Main", value: "sk-1" });
+  await service.create({ provider: "anthropic", alias: "Main", value: "sk-1" });
   await assertRejects(() =>
-    service.create({ provider: "openai", alias: "main", value: "sk-2" }),
+    service.create({ provider: "anthropic", alias: "main", value: "sk-2" }),
   );
   await service.create({ provider: "google", alias: "Main", value: "g-1" });
   await Deno.remove(dir, { recursive: true });
@@ -87,7 +87,7 @@ Deno.test("ApiKeyService - duplicate alias within provider is rejected", async (
 
 Deno.test("ApiKeyService - rename and replace value (re-validates)", async () => {
   const { service, secrets, validated, dir } = await setup();
-  const k = await service.create({ provider: "openai", alias: "A", value: "sk-0000" });
+  const k = await service.create({ provider: "anthropic", alias: "A", value: "sk-0000" });
   const updated = await service.update(k.id, { alias: "B", value: "sk-9999" });
   assertEquals(updated.alias, "B");
   assertEquals(updated.masked, "••••9999");

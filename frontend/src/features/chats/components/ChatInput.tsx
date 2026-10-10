@@ -30,7 +30,6 @@ export function ChatInput({
   isThinking,
   handleSend,
   handleStop,
-  isEmpty,
   hidePluginsAndModes,
   placeholder,
 }: ChatInputProps) {

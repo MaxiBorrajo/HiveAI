@@ -6,13 +6,16 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import type { CurrentModels, ModelOptionGroup } from "@/features/models/types";
 import {
   currentChoice,
   isCloud,
   sameChoice,
-  toChoice,
+  buildProviderTree,
   type ModelChoice,
 } from "@/features/models/lib/modelChoices";
 
@@ -34,6 +37,7 @@ export function ModelMenu({
   onOpen,
 }: ModelMenuProps) {
   const active = currentChoice(current);
+  const tree = buildProviderTree(groups);
 
   return (
     <DropdownMenu
@@ -83,38 +87,85 @@ export function ModelMenu({
 
         <DropdownMenuGroup className="min-h-0 flex-1 overflow-y-auto">
 
-          {groups.length === 0 && (
+          {tree.length === 0 && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
               No models available
             </div>
           )}
 
-          {groups.map((group) => (
-            <div key={group.id}>
+          {tree.map((entry) => (
+            <div key={entry.provider}>
               <DropdownMenuSeparator />
-              <div
-                className="px-2 py-1 text-xs font-medium text-muted-foreground truncate"
-                title={group.error}
-              >
-                {group.label}
-                {group.error && " ⚠"}
+              <div className="px-2 py-1 text-xs font-medium text-muted-foreground truncate">
+                {entry.label}
               </div>
-              {group.options.map(toChoice).map((choice) => (
-                <DropdownMenuItem
-                  key={`${group.id}:${choice.model}`}
-                  onClick={() => onChangeModel(choice)}
-                  title={choice.model}
+              {entry.keyErrors.map((e) => (
+                <div
+                  key={e.alias}
+                  className="px-2 py-0.5 text-[11px] text-destructive truncate"
+                  title={e.error}
                 >
-                  <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
-                    <span className="text-sm font-mono truncate max-w-48">
-                      {choice.model}
-                    </span>
-                    {sameChoice(choice, active) && (
-                      <Check className="size-4 shrink-0" />
-                    )}
-                  </div>
-                </DropdownMenuItem>
+                  ⚠ {e.alias}: {e.error}
+                </div>
               ))}
+              {entry.models.map((m) => {
+                const isActive =
+                  active.provider === entry.provider &&
+                  active.model === m.model;
+                const choiceFor = (keyId: string): ModelChoice => ({
+                  provider: entry.provider,
+                  model: m.model,
+                  keyId,
+                });
+
+                if (m.keys.length <= 1) {
+                  return (
+                    <DropdownMenuItem
+                      key={m.model}
+                      onClick={() => onChangeModel(choiceFor(m.keys[0]?.keyId ?? ""))}
+                      title={m.model}
+                    >
+                      <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
+                        <span className="text-sm font-mono truncate max-w-48">
+                          {m.model}
+                        </span>
+                        {isActive && <Check className="size-4 shrink-0" />}
+                      </div>
+                    </DropdownMenuItem>
+                  );
+                }
+
+                return (
+                  <DropdownMenuSub key={m.model}>
+                    <DropdownMenuSubTrigger title={m.model}>
+                      <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
+                        <span className="text-sm font-mono truncate max-w-40">
+                          {m.model}
+                        </span>
+                        {isActive && <Check className="size-4 shrink-0" />}
+                      </div>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      <div className="px-2 py-1 text-xs text-muted-foreground">
+                        API key
+                      </div>
+                      {m.keys.map((k) => (
+                        <DropdownMenuItem
+                          key={k.keyId}
+                          onClick={() => onChangeModel(choiceFor(k.keyId))}
+                        >
+                          <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
+                            <span className="text-sm truncate">{k.alias}</span>
+                            {sameChoice(choiceFor(k.keyId), active) && (
+                              <Check className="size-4 shrink-0" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                );
+              })}
             </div>
           ))}
         </DropdownMenuGroup>

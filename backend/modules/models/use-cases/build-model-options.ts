@@ -3,13 +3,15 @@ import {
   type ModelOption,
   modelOptionId,
 } from "../../../core/ai/providers/model-selection.ts";
-import { PROVIDER_LABELS } from "../../../core/ai/providers/types.ts";
+import { type ModelProvider, PROVIDER_LABELS } from "../../../core/ai/providers/types.ts";
 import { fetchAvailableModels } from "./get-models.ts";
 import { fetchCloudModelGroups } from "./get-cloud-models.ts";
 
 export interface ModelOptionGroup {
   id: string;
   label: string;
+  provider?: ModelProvider;
+  keyAlias?: string;
   error?: string;
   options: ModelOption[];
 }
@@ -22,6 +24,7 @@ export async function buildModelOptionGroups(): Promise<ModelOptionGroup[]> {
     groups.push({
       id: "local",
       label: PROVIDER_LABELS.ollama,
+      provider: "ollama",
       options: local.map((m) => {
         const ref = { provider: "ollama", model: m.name } as const;
         return {
@@ -40,6 +43,8 @@ export async function buildModelOptionGroups(): Promise<ModelOptionGroup[]> {
     groups.push({
       id: g.keyId,
       label: `${PROVIDER_LABELS[g.provider]} · ${g.alias}`,
+      provider: g.provider,
+      keyAlias: g.alias,
       error: g.error,
       options: g.models.map((m) => {
         const ref = { provider: g.provider, model: m.name, keyId: g.keyId };

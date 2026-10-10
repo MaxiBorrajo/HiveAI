@@ -1,6 +1,7 @@
 import type {
   CurrentModels,
   ModelOption,
+  ModelOptionGroup,
   ModelProvider,
 } from "@/features/models/types";
 
@@ -47,4 +48,67 @@ export function currentChoice(current: CurrentModels): ModelChoice {
 
 export function isCloud(provider: ModelProvider | undefined) {
   return !!provider && provider !== "ollama";
+}
+
+export const PROVIDER_LABELS: Record<ModelProvider, string> = {
+  ollama: "Local (Ollama)",
+  anthropic: "Anthropic",
+  google: "Google Gemini",
+};
+
+export interface KeyRef {
+  keyId: string;
+  alias: string;
+}
+
+export interface ProviderModel {
+  model: string;
+  keys: KeyRef[];
+}
+
+export interface ProviderEntry {
+  provider: ModelProvider;
+  label: string;
+  models: ProviderModel[];
+  keyErrors: { alias: string; error: string }[];
+}
+
+export function buildProviderTree(groups: ModelOptionGroup[]): ProviderEntry[] {
+  const byProvider = new Map<ModelProvider, ProviderEntry>();
+
+  for (const group of groups) {
+    const provider =
+      group.provider ??
+      group.options[0]?.ref.provider ??
+      (group.id === "local" ? "ollama" : undefined);
+    if (!provider) continue;
+
+    let entry = byProvider.get(provider);
+    if (!entry) {
+      entry = {
+        provider,
+        label: PROVIDER_LABELS[provider],
+        models: [],
+        keyErrors: [],
+      };
+      byProvider.set(provider, entry);
+    }
+
+    const alias = group.keyAlias ?? group.label;
+    if (group.error) entry.keyErrors.push({ alias, error: group.error });
+
+    for (const option of group.options) {
+      const keyId = option.ref.keyId ?? "";
+      let model = entry.models.find((m) => m.model === option.ref.model);
+      if (!model) {
+        model = { model: option.ref.model, keys: [] };
+        entry.models.push(model);
+      }
+      if (keyId && !model.keys.some((k) => k.keyId === keyId)) {
+        model.keys.push({ keyId, alias });
+      }
+    }
+  }
+
+  return [...byProvider.values()];
 }
