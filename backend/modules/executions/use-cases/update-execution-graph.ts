@@ -53,10 +53,16 @@ export async function updateExecutionGraph(
       );
     }
 
+    // A manual edit keeps the model that orchestrated the generation.
+    const previous = execution.lastGraphId
+      ? await repo.findGraphById(execution.lastGraphId)
+      : undefined;
+
     const newGraph = await repo.createGraph({
       executionId: id,
       graph: normalized,
       state: normalized.stateSchema,
+      orchestrator: previous?.orchestrator ?? null,
       createdAt: Date.now(),
     });
 

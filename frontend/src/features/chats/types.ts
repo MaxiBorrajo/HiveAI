@@ -17,56 +17,16 @@ export interface ThinkingRun {
   text: string;
 }
 
-// Mirrors backend/modules/usage/types.ts. Every figure is null when the
-// provider did not report it; it is never a stand-in 0.
-export interface TokenTotals {
-  inputTokens: number | null;
-  outputTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheWriteTokens: number | null;
-  reasoningTokens: number | null;
-  // False when some call did not report tokens, so the sums are a lower bound.
-  tokensComplete: boolean;
-}
-
-export type UsageLocation = "local" | "cloud";
-
-export interface UsedModel {
-  provider: string;
-  model: string;
-  location: UsageLocation;
-  calls: number;
-}
-
-export interface MessageUsage extends TokenTotals {
-  calls: number;
-  failedCalls: number;
-  tokensPerSecond: number | null;
-  ttftMs: number | null;
-  latencyMs: number;
-  models: UsedModel[];
-}
-
-export interface ModelTotals extends TokenTotals {
-  provider: string;
-  model: string;
-  keyAliases: string[];
-  calls: number;
-  failedCalls: number;
-  tokensPerSecond: number | null;
-}
-
-export interface UsageBucket extends TokenTotals {
-  calls: number;
-  failedCalls: number;
-  models: ModelTotals[];
-}
-
-// Local and cloud stay apart on purpose: there is no combined figure.
-export interface ConversationUsage {
-  local: UsageBucket;
-  cloud: UsageBucket;
-}
+export type {
+  ConversationUsage,
+  MessageUsage,
+  ModelTotals,
+  TokenTotals,
+  UsageBucket,
+  UsageLocation,
+  UsedModel,
+} from "@/lib/usage";
+import type { MessageUsage } from "@/lib/usage";
 
 export interface Message {
   id: string;

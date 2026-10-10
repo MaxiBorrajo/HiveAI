@@ -162,6 +162,17 @@ export class ModelUsageRepository implements UsageRecorder {
     return this.query([eq(chatUsage.chatId, chatId)]);
   }
 
+  // Every call of an execution, unpaginated: those of its runs and those that
+  // generated its graph.
+  listByExecution(executionId: number): Promise<UsageRecord[]> {
+    return this.query([
+      or(
+        eq(executionUsage.executionId, executionId),
+        eq(generationUsage.executionId, executionId),
+      )!,
+    ]);
+  }
+
   list(filters: UsageFilters): Promise<UsageRecord[]> {
     const conditions: SQL[] = [];
     const add = (condition: SQL | undefined) => {

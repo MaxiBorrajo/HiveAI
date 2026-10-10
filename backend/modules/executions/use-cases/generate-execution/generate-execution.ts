@@ -10,6 +10,7 @@ import type {
 } from "../../../../core/ai/visual-builder/types.ts";
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { describeActivePlugins } from "./describe-plugins.ts";
+import type { ModelRef } from "../../../../core/ai/providers/types.ts";
 import { withUsageContext } from "../../../../core/ai/usage/usage-context.ts";
 
 const LOG = "[Executions Generator]";
@@ -80,11 +81,17 @@ async function saveGeneratedGraph(
   repo: ExecutionRepository,
   executionId: number,
   graph: LangGraphAbstraction,
+  orchestrator: ModelRef,
 ) {
   const saved = await repo.createGraph({
     executionId,
     graph,
     state: graph.stateSchema,
+    orchestrator: {
+      provider: orchestrator.provider,
+      model: orchestrator.model,
+      ...(orchestrator.keyId ? { keyId: orchestrator.keyId } : {}),
+    },
     createdAt: Date.now(),
   });
   await repo.update(executionId, { lastGraphId: saved.id });
@@ -130,13 +137,14 @@ export async function generateExecution(
 
     if (!dryRun) send("execution_created", { executionId: targetExecutionId });
 
+    const modelSelection = await buildModelSelection(hive);
     const generator = generateIncrementalGraph(
       content,
       model,
       describeActivePlugins(hive),
       currentGraph,
       targetNodeId,
-      await buildModelSelection(hive),
+      modelSelection,
     );
 
     const finalGraph: LangGraphAbstraction | null = await withUsageContext(
@@ -159,7 +167,12 @@ export async function generateExecution(
 
     const graphId = dryRun
       ? null
-      : (await saveGeneratedGraph(repo, targetExecutionId, finalGraph)).id;
+      : (await saveGeneratedGraph(
+        repo,
+        targetExecutionId,
+        finalGraph,
+        modelSelection.orchestrator,
+      )).id;
     send("done", {
       executionId: targetExecutionId,
       graphId,

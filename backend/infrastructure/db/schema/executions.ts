@@ -27,6 +27,11 @@ export const executionGraphs = sqliteTable("execution_graphs", {
   graph: text("graph", { mode: "json" }).notNull(),
   // JSON representing State Schema
   state: text("state", { mode: "json" }).notNull(),
+  // The model that orchestrated the generation of this graph. Null for graphs
+  // saved before it was recorded.
+  orchestrator: text("orchestrator", { mode: "json" }).$type<
+    { provider: string; model: string; keyId?: string } | null
+  >(),
   createdAt: integer("createdAt").notNull(),
 });
 

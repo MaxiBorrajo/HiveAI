@@ -29,6 +29,13 @@
       "when": 1791656034332,
       "tag": "0003_blushing_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791668726401,
+      "tag": "0004_curved_doorman",
+      "breakpoints": true
     }
   ]
 }

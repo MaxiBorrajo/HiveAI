@@ -6,13 +6,13 @@ import {
   formatTokens,
   formatTokensPerSecond,
   hasTokens,
-} from "../lib/formatUsage.ts";
+} from "@/lib/formatUsage";
 import type {
   ConversationUsage,
   UsageBucket,
   UsageLocation,
 } from "../types.ts";
-import { UsageLocationIcon } from "./UsageLocationIcon.tsx";
+import { UsageLocationIcon } from "@/components/UsageLocationIcon";
 
 const PROVIDER_LABELS: Record<string, string> = {
   ollama: "Ollama",

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil } from "lucide-react";
+import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil, History } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { LangGraphAbstraction } from "../types";
@@ -15,6 +15,7 @@ interface RunControlsBarProps {
   onRun: () => void;
   onOpenRunModal: () => void;
   onShowResult: () => void;
+  onShowHistory: () => void;
   onEdit: () => void;
 }
 
@@ -31,6 +32,7 @@ export function RunControlsBar({
   onRun,
   onOpenRunModal,
   onShowResult,
+  onShowHistory,
   onEdit,
 }: RunControlsBarProps) {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
@@ -86,6 +88,18 @@ export function RunControlsBar({
           >
             <CircleCheckBig className="size-3.5 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
             <span>Result</span>
+          </button>
+        )}
+
+        {graph && (
+          <button
+            type="button"
+            onClick={onShowHistory}
+            className={SEGMENT}
+            title="Past runs and what each one consumed"
+          >
+            <History className="size-3.5" />
+            <span>History</span>
           </button>
         )}
 

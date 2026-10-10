@@ -1,3 +1,4 @@
+import type { RunUsage } from "@/lib/usage";
 export type DataType = "string" | "number" | "boolean" | "object" | "array" | "enum" | "unknown";
 export type ReducerStrategy = "overwrite" | "append" | "prepend" | "unique_append" | "merge_dict" | "sum" | "subtract" | "multiply" | "divide";
 
@@ -128,3 +129,14 @@ export interface ExecutionResultData {
   createdAt?: number;
 }
 
+
+// One past run of an execution, with what it consumed. `usage` is null for
+// runs that predate usage tracking.
+export interface RunSummary {
+  historyId: number;
+  iteration: number;
+  createdAt: number;
+  graphId: number;
+  result: unknown;
+  usage: RunUsage | null;
+}

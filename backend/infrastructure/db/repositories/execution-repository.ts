@@ -88,6 +88,17 @@ export class ExecutionRepository {
     return row?.total ?? 0;
   }
 
+  // Newest run first.
+  async findHistoriesByExecutionId(
+    executionId: number,
+  ): Promise<ExecutionHistory[]> {
+    return await this.db
+      .select()
+      .from(executionHistory)
+      .where(eq(executionHistory.executionId, executionId))
+      .orderBy(desc(executionHistory.iteration));
+  }
+
   async findHistoryById(id: number): Promise<ExecutionHistory | undefined> {
     const [history] = await this.db
       .select()

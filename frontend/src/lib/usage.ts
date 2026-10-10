@@ -1,21 +1,16 @@
-import type {
-  UsageLocation,
-  UsageStatus,
-} from "../../infrastructure/db/schema/model_usage.ts";
-import type { RunModel, RunOrchestrator } from "./run-info.ts";
-
-// Every token figure is the sum of what the provider reported, or null when no
-// call reported it. A missing figure is never turned into 0.
+// Mirrors backend/modules/usage/types.ts. Every figure is null when the
+// provider did not report it; it is never a stand-in 0.
 export interface TokenTotals {
   inputTokens: number | null;
   outputTokens: number | null;
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
-  // False when some successful call did not report its tokens, so the sums
-  // above are a lower bound.
+  // False when some call did not report tokens, so the sums are a lower bound.
   tokensComplete: boolean;
 }
+
+export type UsageLocation = "local" | "cloud";
 
 export interface UsedModel {
   provider: string;
@@ -24,17 +19,11 @@ export interface UsedModel {
   calls: number;
 }
 
-// One chat response, summing every model call made for it (agent iterations,
-// tool-selection calls, verifiers).
 export interface MessageUsage extends TokenTotals {
   calls: number;
   failedCalls: number;
-  // Output tokens over generation time (call duration minus time to first
-  // token). Tool waits happen between calls, so they are never in it.
   tokensPerSecond: number | null;
-  // Time to first token of the first model call of the response.
   ttftMs: number | null;
-  // Wall clock from the first call starting to the last one ending.
   latencyMs: number;
   models: UsedModel[];
 }
@@ -54,13 +43,31 @@ export interface UsageBucket extends TokenTotals {
   models: ModelTotals[];
 }
 
-// Local and cloud are kept apart on purpose: there is no combined figure.
+// Local and cloud stay apart on purpose: there is no combined figure.
 export interface ConversationUsage {
   local: UsageBucket;
   cloud: UsageBucket;
 }
 
-// ---- One run of an execution ----
+// ---- One run of an execution (mirrors backend/modules/usage/types.ts) ----
+
+export type UsageStatus = "ok" | "error";
+
+// The model of a node as it was resolved when the run started, and the key
+// alias as it was then.
+export interface RunModel {
+  provider: string;
+  model: string;
+  location: UsageLocation;
+  keyId: string | null;
+  keyAlias: string | null;
+}
+
+export interface RunOrchestrator extends RunModel {
+  // "current": the graph predates recording its orchestrator, so the chat's
+  // model at run time was assumed.
+  source: "generation" | "current";
+}
 
 export interface RunModelTotals extends ModelTotals {
   location: UsageLocation;
@@ -89,12 +96,9 @@ export interface RunCall {
 }
 
 export interface RunNodeUsage {
-  // null groups the calls that could not be tied to a node.
   nodeId: string | null;
   nodeName: string;
   nodeType: string | null;
-  // The model the node was configured with when the run started, already
-  // resolved. null for nodes that do not call a model.
   configuredModel: RunModel | null;
   calls: RunCall[];
   failedCalls: number;
@@ -106,14 +110,12 @@ export interface TokenPair {
 }
 
 // The orchestrator is the model that generated the graph; every node of a run
-// is delegated work. Shares are of the tokens the providers reported (input +
-// output), null when they cannot be told.
+// is delegated work.
 export interface RunDelegation {
-  // What designing the graph cost: the generation calls of this execution made
-  // before the run. Null tokens when none were recorded (older graphs).
+  // What designing the graph cost. Null tokens when no generation was recorded.
   orchestrator: TokenPair;
   orchestratorCalls: number;
-  // What the nodes of this run consumed.
+  // What this run's nodes consumed.
   delegated: TokenPair;
   // Of the delegated work, what ran on local models.
   local: TokenPair;

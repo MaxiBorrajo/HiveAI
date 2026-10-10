@@ -11,6 +11,7 @@ import { deleteExecution } from "./use-cases/delete-execution.ts";
 import { updateExecution } from "./use-cases/update-execution.ts";
 import { createExecution } from "./use-cases/create-execution.ts";
 import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
+import { listRuns } from "./use-cases/list-runs.ts";
 import { runExecution } from "./use-cases/run-execution/run-execution.ts";
 
 export const executionsRouter = new Hono<{
@@ -59,6 +60,12 @@ executionsRouter.get("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   return getExecution(db, parseId(c.req.param("id")), headers);
+});
+
+executionsRouter.get("/:id/runs", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  return listRuns(db, parseId(c.req.param("id")), headers);
 });
 
 executionsRouter.delete("/:id", async (c) => {

@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "../../../components/ui/accordion.tsx";
-import { formatDuration } from "../lib/formatUsage.ts";
+import { formatDuration } from "@/lib/formatUsage";
 import type { Message, ThinkingRun } from "../types.ts";
 
 function matchThinkingRun(

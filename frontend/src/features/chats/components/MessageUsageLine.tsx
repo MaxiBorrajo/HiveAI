@@ -4,9 +4,9 @@ import {
   formatTokensPerSecond,
   hasTokens,
   NO_DATA,
-} from "../lib/formatUsage.ts";
+} from "@/lib/formatUsage";
 import type { MessageUsage } from "../types.ts";
-import { UsageLocationIcon } from "./UsageLocationIcon.tsx";
+import { UsageLocationIcon } from "@/components/UsageLocationIcon";
 
 // Consumption of one response, summed over every model call made for it.
 // `usage` null means nothing was recorded (an older message): dashes, not zeros.

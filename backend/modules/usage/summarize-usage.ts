@@ -9,12 +9,12 @@ import type {
 } from "./types.ts";
 
 // The call's own start, derived from when it was recorded (at its end).
-function startedAt(call: UsageRecord): number {
+export function startedAt(call: UsageRecord): number {
   return call.createdAt - call.durationMs;
 }
 
 // Sum of the reported values, or null when none was reported.
-function sumReported(values: (number | null)[]): number | null {
+export function sumReported(values: (number | null)[]): number | null {
   let total: number | null = null;
   for (const value of values) {
     if (value !== null) total = (total ?? 0) + value;
@@ -22,7 +22,7 @@ function sumReported(values: (number | null)[]): number | null {
   return total;
 }
 
-function tokenTotals(calls: UsageRecord[]): TokenTotals {
+export function tokenTotals(calls: UsageRecord[]): TokenTotals {
   const ok = calls.filter((c) => c.status === "ok");
   return {
     inputTokens: sumReported(calls.map((c) => c.inputTokens)),
@@ -39,7 +39,7 @@ function tokenTotals(calls: UsageRecord[]): TokenTotals {
 // Output tokens per second of generation. Only calls that reported both their
 // output tokens and when the first token arrived can say how long generating
 // took; the rest are left out instead of guessed.
-function tokensPerSecond(calls: UsageRecord[]): number | null {
+export function tokensPerSecond(calls: UsageRecord[]): number | null {
   let tokens = 0;
   let generationMs = 0;
   for (const call of calls) {

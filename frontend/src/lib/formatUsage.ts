@@ -24,3 +24,17 @@ export function formatDuration(ms: number | null): string {
 export function hasTokens(tokens: number | null): tokens is number {
   return tokens !== null && tokens > 0;
 }
+
+export function formatShare(share: number | null): string {
+  if (share === null) return NO_DATA;
+  return `${Math.round(share * 100)}%`;
+}
+
+// Input + output the providers reported; null when they reported neither.
+export function pairTokens(pair: {
+  inputTokens: number | null;
+  outputTokens: number | null;
+}): number | null {
+  if (pair.inputTokens === null && pair.outputTokens === null) return null;
+  return (pair.inputTokens ?? 0) + (pair.outputTokens ?? 0);
+}

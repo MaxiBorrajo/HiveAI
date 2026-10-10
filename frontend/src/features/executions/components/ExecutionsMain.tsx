@@ -19,6 +19,7 @@ import { EditModeBar } from "./edit/EditModeBar";
 import { StateCard } from "./edit/StateCard";
 import { ValidateGraphModal } from "./edit/ValidateGraphModal";
 import { NodeDetailsPanel } from "./node-details/NodeDetailsPanel";
+import { ExecutionHistoryPanel } from "./history/ExecutionHistoryPanel";
 
 export function ExecutionsMain() {
   const {
@@ -39,6 +40,7 @@ export function ExecutionsMain() {
 
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
   const [isStateOpen, setIsStateOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const {
     isThinking,
@@ -183,6 +185,7 @@ export function ExecutionsMain() {
               onRun={runControls.runClick}
               onOpenRunModal={runControls.openRunModal}
               onShowResult={() => setIsResultSidebarOpen(true)}
+              onShowHistory={() => setIsHistoryOpen(true)}
               onEdit={editor.startEditing}
             />
           )}
@@ -241,6 +244,13 @@ export function ExecutionsMain() {
         runInputs={runControls.runInputs}
         setRunInputs={runControls.setRunInputs}
         onRun={() => runControls.run()}
+      />
+
+      <ExecutionHistoryPanel
+        executionId={activeExecutionId}
+        open={isHistoryOpen}
+        onOpenChange={setIsHistoryOpen}
+        refreshKey={executionResult?.createdAt}
       />
 
       <ExecutionResultSidebar

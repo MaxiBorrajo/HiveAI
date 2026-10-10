@@ -21,13 +21,21 @@ import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { createPluginNodeRegistry } from "./plugin-node-executor.ts";
 import { finalizeExecutionResult } from "./result-normalizer.ts";
 import { withUsageContext } from "../../../../core/ai/usage/usage-context.ts";
+import { getCurrentModelRef } from "../../../../core/ai/providers/current-model.ts";
+import { ApiKeyRepository } from "../../../../infrastructure/db/repositories/api-key-repository.ts";
+import { resolveOrchestrator, snapshotNodes } from "./run-snapshot.ts";
+import type { RunInfo } from "../../../usage/run-info.ts";
 import { ModelUsageRepository } from "../../../../infrastructure/db/repositories/model-usage-repository.ts";
 
 type CompiledGraph = ReturnType<typeof compileGraph>;
 type FinalState = Record<string, any>;
 
 type LoadedGraph =
-  | { abstraction: LangGraphAbstraction; graphId: number }
+  | {
+    abstraction: LangGraphAbstraction;
+    graphId: number;
+    orchestrator: { provider: string; model: string; keyId?: string } | null;
+  }
   | { error: string };
 
 async function loadGraph(
@@ -48,7 +56,11 @@ async function loadGraph(
     edges: graph.edges,
     stateSchema: parseMaybeJson(record.state) as LangGraphAbstraction["stateSchema"],
   };
-  return { abstraction, graphId: record.id };
+  return {
+    abstraction,
+    graphId: record.id,
+    orchestrator: record.orchestrator ?? null,
+  };
 }
 
 function compileExecutionGraph(
@@ -102,13 +114,14 @@ async function saveRun(
   executionId: number,
   graphId: number,
   finalState: FinalState,
+  run: RunInfo,
 ) {
   const iteration = (await repo.countHistories(executionId)) + 1;
 
   const history = await repo.createHistory({
     executionId,
     iteration,
-    result: JSON.stringify({ result: finalState.result, finalState }),
+    result: JSON.stringify({ result: finalState.result, finalState, run }),
     version: graphId,
     createdAt: Date.now(),
   });
@@ -152,7 +165,7 @@ export async function runExecution(
       });
     }
 
-    const { abstraction, graphId } = loaded;
+    const { abstraction, graphId, orchestrator: recordedOrchestrator } = loaded;
     applyDefaultModel(abstraction, hive);
     const problems = await checkGraphModels(abstraction, defaultModelCheckDeps());
     if (problems.length > 0) {
@@ -164,12 +177,27 @@ export async function runExecution(
     }
     const app = compileExecutionGraph(hive, abstraction);
 
+    // Frozen now, while "Default model" nodes have just been resolved and the
+    // keys are as the run will use them.
+    const keys = new ApiKeyRepository(db);
+    const findKeyAlias = async (keyId: string) =>
+      (await keys.findById(keyId))?.alias;
+    const orchestrator = await resolveOrchestrator(
+      recordedOrchestrator,
+      getCurrentModelRef(hive.getConfig()),
+      findKeyAlias,
+    );
+    const nodes = await snapshotNodes(abstraction, findKeyAlias);
+
     return createSseResponse(headers, (send) =>
       executionContextStorage.run({ autoApprove }, () =>
         withUsageContext(
+          // Every node of a run is delegated work, whatever model runs it.
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {
+            const startedAt = Date.now();
             const finalState = await streamRun(app, inputState, send);
+            const endedAt = Date.now();
             finalizeExecutionResult(finalState, abstraction.nodes);
 
             const { historyId, iteration } = await saveRun(
@@ -177,6 +205,13 @@ export async function runExecution(
               id,
               graphId,
               finalState,
+              {
+                startedAt,
+                endedAt,
+                durationMs: endedAt - startedAt,
+                orchestrator,
+                nodes,
+              },
             );
             await linkUsageToRun(db, usageGroupId, historyId);
             send("done", {
