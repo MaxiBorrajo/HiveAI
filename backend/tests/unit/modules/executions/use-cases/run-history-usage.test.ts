@@ -184,7 +184,12 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
 
   const response = await listRuns(s.db, execution.id, {});
   const { data } = await response.json();
-  const runs = data.runs as { historyId: number; iteration: number; usage: any }[];
+  const runs = data.runs as {
+    historyId: number;
+    iteration: number;
+    input: Record<string, unknown> | null;
+    usage: any;
+  }[];
 
   // Newest first.
   assertEquals(runs.map((r) => r.iteration), [2, 1]);
@@ -196,6 +201,10 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
   assertEquals(fresh.usage.cloud.inputTokens, 900);
   assertEquals(fresh.usage.cloud.models[0].keyAliases, ["work"]);
   assertEquals(typeof fresh.usage.latencyMs, "number");
+
+  // The input the run was started with is kept; older runs have none.
+  assertEquals(fresh.input, { counter_name: "runs-list-counter", action: "get" });
+  assertEquals(previous.input, null);
 
   assertEquals(previous.historyId, old.id);
   assertEquals(previous.usage, null);

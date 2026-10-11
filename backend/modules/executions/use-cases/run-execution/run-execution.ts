@@ -215,6 +215,7 @@ export async function runExecution(
                 durationMs: endedAt - startedAt,
                 orchestrator,
                 nodes,
+                input: inputState ?? null,
               },
             );
             await linkUsageToRun(db, usageGroupId, historyId);

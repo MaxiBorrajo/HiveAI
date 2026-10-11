@@ -18,6 +18,7 @@ import { downloadBlob, stringifyContent } from "@/lib/download";
 import { normalizeResult } from "@/features/executions/lib/executionResult";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { useResizableSidebar } from "@/hooks/useResizableSidebar";
+import { useSlidePresence } from "@/hooks/useSlidePresence";
 import type {
   ExecutionFileArtifact,
   ExecutionResultData,
@@ -60,7 +61,9 @@ export function ExecutionResultSidebar({
     reservedViewportWidth: 300,
   });
 
-  if (!isOpen || !data) return null;
+  const { mounted, shown } = useSlidePresence(isOpen);
+
+  if (!mounted || !data) return null;
 
   const resObj = normalizeResult(data.result);
   const typeTheme = getResultTheme(resObj.type);
@@ -108,10 +111,16 @@ export function ExecutionResultSidebar({
 
   return (
     <div
-      style={{ width: `${sidebarWidth}px`, maxWidth: "calc(100vw - 280px)" }}
+      // Slides by animating `right`, not a transform: the desktop webview
+      // flickers on composited (transform / opacity) animations of big layers.
+      style={{
+        width: `${sidebarWidth}px`,
+        maxWidth: "calc(100vw - 280px)",
+        right: shown ? 0 : `-${sidebarWidth}px`,
+      }}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 bg-card/95 border-l border-border shadow-2xl backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-200",
-        isResizing && "select-none duration-0",
+        "fixed inset-y-0 z-50 bg-card border-l border-border shadow-2xl flex flex-col transition-[right] duration-200 ease-out",
+        isResizing && "select-none",
       )}
     >
       {/* Drag handle */}

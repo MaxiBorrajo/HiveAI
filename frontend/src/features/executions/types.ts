@@ -138,5 +138,7 @@ export interface RunSummary {
   createdAt: number;
   graphId: number;
   result: unknown;
+  // What the run was started with; null for runs that predate recording it.
+  input: Record<string, unknown> | null;
   usage: RunUsage | null;
 }

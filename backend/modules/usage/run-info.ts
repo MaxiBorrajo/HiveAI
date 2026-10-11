@@ -29,4 +29,6 @@ export interface RunInfo {
   durationMs: number;
   orchestrator: RunOrchestrator | null;
   nodes: RunNodeSnapshot[];
+  // What the run was started with. Absent for runs saved before it was kept.
+  input?: Record<string, unknown> | null;
 }

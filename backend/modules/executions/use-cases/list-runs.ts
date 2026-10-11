@@ -17,6 +17,9 @@ export interface RunSummary {
   // The version of the graph the run used.
   graphId: number;
   result: unknown;
+  // What the run was started with, so two runs can be told apart by input.
+  // null for runs that predate recording it.
+  input: Record<string, unknown> | null;
   // null: nothing about consumption was recorded (run predates the feature).
   usage: RunUsage | null;
 }
@@ -49,6 +52,7 @@ export async function listRuns(
         createdAt: history.createdAt,
         graphId: history.version,
         result: record.result,
+        input: record.run?.input ?? null,
         usage: summarizeRunUsage(
           callsByRun.get(history.id) ?? [],
           record.run,
