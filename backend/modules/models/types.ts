@@ -1,4 +1,5 @@
 import type { ModelProvider } from "../../core/ai/providers/types.ts";
+import type { ToolSupport } from "../../core/ai/providers/tool-support.ts";
 
 export interface ModelInfo {
   name: string;
@@ -47,4 +48,5 @@ export interface CurrentModels {
   model: string;
   provider: ModelProvider;
   keyId: string;
+  toolSupport?: ToolSupport;
 }

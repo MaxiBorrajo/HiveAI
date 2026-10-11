@@ -16,6 +16,8 @@ export function ModelsManager() {
     openKeys,
     closeKeys,
     refreshModels,
+    deleteLocalModel,
+    embeddingModelStatus,
   } = useModels();
 
   return (
@@ -32,8 +34,11 @@ export function ModelsManager() {
         isOpen={isManageOpen}
         onOpenChange={(open) => (open ? openManage() : closeManage())}
         models={models}
+        groups={optionGroups}
         current={current}
         onChangeModel={changeModel}
+        onDeleteModel={deleteLocalModel}
+        protectedModel={embeddingModelStatus?.model}
       />
       <ApiKeysModal
         isOpen={isKeysOpen}

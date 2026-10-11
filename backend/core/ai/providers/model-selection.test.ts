@@ -59,3 +59,23 @@ Deno.test("describeCatalog - includes location, size and context when known", ()
   });
   assertEquals(text, "- ollama:qwen3:8b — local, free, 8.2B local, ctx 41k [tools]");
 });
+
+Deno.test("describeCatalog - flags models whose tool support is unverified", () => {
+  const text = describeCatalog({
+    ...selection,
+    catalog: [
+      { id: "google:gemini-flash", ref: { provider: "google", model: "gemini-flash", keyId: "k" }, label: "", capabilities: [], toolSupport: { status: "unknown" } },
+    ],
+  });
+  assertEquals(text.includes("[tools: unverified]"), true);
+});
+
+Deno.test("normalizeProviderError - a tools rejection becomes a clear tools_unsupported error", async () => {
+  const { normalizeProviderError } = await import("./errors.ts");
+  const e = normalizeProviderError(
+    new Error("registry.ollama.ai/library/gemma3:latest does not support tools"),
+    "ollama",
+  );
+  assertEquals(e.kind, "tools_unsupported");
+  assertEquals(e.message.includes("does not support tool calling"), true);
+});

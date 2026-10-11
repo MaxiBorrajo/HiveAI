@@ -7,6 +7,7 @@ export interface RunExecutionStreamHandlers {
     finalState?: Record<string, any>;
   }) => void;
   onError?: (message: string) => void;
+  onWarning?: (messages: string[]) => void;
   onNodeStart?: (nodeName: string) => void;
   onToolStart?: (toolName: string | null) => void;
   onToolEnd?: (toolName: string | null) => void;
@@ -24,6 +25,14 @@ export async function runExecutionStream(
         result: data.result,
         finalState: data.finalState,
       });
+      return;
+    }
+
+    if (eventName === "warning") {
+      const list = Array.isArray(data.warnings) ? data.warnings : [];
+      handlers.onWarning?.(
+        list.map((w: { reason?: string }) => w.reason).filter(Boolean),
+      );
       return;
     }
 

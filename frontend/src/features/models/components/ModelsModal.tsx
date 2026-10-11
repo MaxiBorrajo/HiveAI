@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import type { CurrentModels, ModelInfo } from "@/features/models/types";
+import type {
+  CurrentModels,
+  ModelInfo,
+  ModelOptionGroup,
+} from "@/features/models/types";
+import type { ModelChoice } from "@/features/models/lib/modelChoices";
 import { ModelListView } from "./ModelListView";
 import { ModelDetailsView } from "./ModelDetailsView";
 
@@ -8,16 +13,23 @@ interface ModelsModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   models: ModelInfo[];
+  groups: ModelOptionGroup[];
   current: CurrentModels;
-  onChangeModel: (name: string) => void;
+  onChangeModel: (choice: ModelChoice) => void;
+  onDeleteModel: (name: string) => void;
+  // Needed by the app itself (embeddings); listed but never deletable.
+  protectedModel?: string;
 }
 
 export function ModelsModal({
   isOpen,
   onOpenChange,
   models,
+  groups,
   current,
   onChangeModel,
+  onDeleteModel,
+  protectedModel,
 }: ModelsModalProps) {
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null);
 
@@ -41,9 +53,12 @@ export function ModelsModal({
         ) : (
           <ModelListView
             models={models}
+            groups={groups}
             current={current}
             onChangeModel={onChangeModel}
             onSelectModel={setSelectedModel}
+            onDeleteModel={onDeleteModel}
+            protectedModel={protectedModel}
           />
         )}
       </DialogContent>

@@ -121,6 +121,7 @@ Decide in this order:
 3. Only fall back to a light cloud model when no local model qualifies (missing [tools], context too small for the data flowing in, or the node must coordinate a long chain of dependent tool calls where a mistake would break the flow). Say so by choosing it; do not choose it just because it is familiar or "safer".
 - Tool outputs accumulate in an agent's context for the whole loop: reading one web page costs about 5k tokens, a file or shell output up to a few thousand. Add them up for the node (pages to read x 5k + the notes it writes) and compare with the model's context; local models run with at most 16k. An agent that must read many pages or large outputs does not fit a local model, so use a cloud model for it or keep the local model for nodes with small inputs.
 - Very small local models (under ~7B) only for nodes without tools that do a single simple operation; for anything bigger use the largest local model that has the capabilities.
+- A model marked [tools: unverified] has not been confirmed to support tool calling. For a node with plugins, choose a model with [tools] when one fits; pick an unverified one only when no verified model does.
 Workflow nodes, for relative comparison:
 ${flow}
 Available models:

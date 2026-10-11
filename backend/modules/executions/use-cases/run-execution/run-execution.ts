@@ -167,7 +167,10 @@ export async function runExecution(
 
     const { abstraction, graphId, orchestrator: recordedOrchestrator } = loaded;
     applyDefaultModel(abstraction, hive);
-    const problems = await checkGraphModels(abstraction, defaultModelCheckDeps());
+    const { problems, warnings } = await checkGraphModels(
+      abstraction,
+      defaultModelCheckDeps(),
+    );
     if (problems.length > 0) {
       return ResponseBuilder.error(
         problems.map((p) => p.reason),
@@ -195,6 +198,7 @@ export async function runExecution(
           // Every node of a run is delegated work, whatever model runs it.
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {
+            if (warnings.length > 0) send("warning", { warnings });
             const startedAt = Date.now();
             const finalState = await streamRun(app, inputState, send);
             const endedAt = Date.now();

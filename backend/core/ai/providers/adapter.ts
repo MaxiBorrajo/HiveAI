@@ -1,11 +1,13 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { ChatModelOptions } from "./create-chat-model.ts";
 import type { CloudProvider } from "./types.ts";
+import { type ToolSupport } from "./tool-support.ts";
 
 export interface CloudModel {
   name: string;
   label?: string;
   capabilities: string[];
+  toolSupport: ToolSupport;
 }
 
 
@@ -34,6 +36,16 @@ export async function getJson(
   return await res.json();
 }
 
-export function toCloudModel(name: string, label?: string): CloudModel {
-  return { name, label, capabilities: ["tools"] };
+// `capabilities` only ever lists what the provider confirmed for the model.
+export function toCloudModel(
+  name: string,
+  label: string | undefined,
+  toolSupport: ToolSupport,
+): CloudModel {
+  return {
+    name,
+    label,
+    capabilities: toolSupport.status === "supported" ? ["tools"] : [],
+    toolSupport,
+  };
 }

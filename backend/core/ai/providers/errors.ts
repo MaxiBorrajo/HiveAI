@@ -3,6 +3,7 @@ export type ProviderErrorKind =
   | "rate_limit"
   | "network"
   | "model_unavailable"
+  | "tools_unsupported"
   | "unknown";
 
 export class ProviderError extends Error {
@@ -43,6 +44,11 @@ function providerDetail(raw: string): string {
   return ` Provider said: ${detail.length > 300 ? `${detail.slice(0, 300)}…` : detail}`;
 }
 
+// What providers answer when tools are sent to a model that cannot take them,
+// e.g. Ollama's "registry.ollama.ai/library/gemma3 does not support tools".
+const TOOLS_REJECTION =
+  /(does not|doesn'?t) support tools|tools? (is|are) not supported|tool use is not supported|function calling is (not enabled|not supported|unsupported)|(does not|doesn'?t) support function calling/i;
+
 export function normalizeProviderError(
   error: unknown,
   provider?: string,
@@ -65,6 +71,14 @@ export function normalizeProviderError(
     return new ProviderError(
       "rate_limit",
       `The provider${name} rate limit or quota was reached. Try again later.${providerDetail(raw)}`,
+      provider,
+    );
+  }
+
+  if (TOOLS_REJECTION.test(raw)) {
+    return new ProviderError(
+      "tools_unsupported",
+      `The model${name} does not support tool calling, so it cannot be used here. Choose a model that supports tools.`,
       provider,
     );
   }

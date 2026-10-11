@@ -11,25 +11,41 @@ import {
 const json = (body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 
-Deno.test("listCloudModels - anthropic ids and names", async () => {
+Deno.test("listCloudModels - anthropic: a described model supports tools, an undescribed one is unknown", async () => {
   const models = await listCloudModels("anthropic", "k", () =>
-    json({ data: [{ id: "claude-sonnet-5-5", display_name: "Claude Sonnet 5.5" }] }),
+    json({
+      data: [
+        { id: "claude-sonnet-5-5", display_name: "Claude Sonnet 5.5", capabilities: { thinking: { supported: true } } },
+        { id: "claude-mystery", display_name: "Mystery", capabilities: null },
+      ],
+    }),
   );
-  assertEquals(models, [
-    { name: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", capabilities: ["tools"] },
-  ]);
+  assertEquals(models[0], {
+    name: "claude-sonnet-5-5",
+    label: "Claude Sonnet 5.5",
+    capabilities: ["tools"],
+    toolSupport: { status: "supported" },
+  });
+  assertEquals(models[1].capabilities, []);
+  assertEquals(models[1].toolSupport.status, "unknown");
 });
 
-Deno.test("listCloudModels - google keeps only generateContent models and strips the prefix", async () => {
+Deno.test("listCloudModels - google keeps non-chat models but marks them unsupported", async () => {
   const models = await listCloudModels("google", "k", () =>
     json({
       models: [
         { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
         { name: "models/embedding-001", supportedGenerationMethods: ["embedContent"] },
+        { name: "models/gemini-2.5-flash-preview-tts", supportedGenerationMethods: ["generateContent"] },
       ],
     }),
   );
-  assertEquals(models.map((m) => m.name), ["gemini-2.5-flash"]);
+  assertEquals(models.map((m) => [m.name, m.toolSupport.status]), [
+    ["gemini-2.5-flash", "unknown"],
+    ["embedding-001", "unsupported"],
+    ["gemini-2.5-flash-preview-tts", "unsupported"],
+  ]);
+  assertEquals(models[0].capabilities, []);
 });
 
 Deno.test("createChatModel - anthropic requests adaptive thinking when think is on", async () => {

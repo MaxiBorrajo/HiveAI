@@ -5,6 +5,11 @@ import { z } from "zod";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { getJson, type ProviderAdapter, toCloudModel } from "../adapter.ts";
 import { validateWithGet } from "./validate.ts";
+import {
+  TOOLS_SUPPORTED,
+  toolsUnknown,
+  type ToolSupport,
+} from "../tool-support.ts";
 
 const headers = (apiKey: string) => ({
   "x-api-key": apiKey,
@@ -57,6 +62,15 @@ const useAutoToolStructuredOutput = (llm: any) => {
   return llm;
 };
 
+// The models endpoint has no "tools" flag. A model described with a
+// capabilities block is a Messages API model, where tool use is part of the
+// API itself; a model without one is not described, so it stays unknown.
+function anthropicToolSupport(m: { capabilities?: unknown }): ToolSupport {
+  return m.capabilities && typeof m.capabilities === "object"
+    ? TOOLS_SUPPORTED
+    : toolsUnknown("Anthropic did not describe this model's capabilities.");
+}
+
 export const anthropicAdapter: ProviderAdapter = {
   id: "anthropic",
   label: "Anthropic",
@@ -75,9 +89,13 @@ export const anthropicAdapter: ProviderAdapter = {
       headers(apiKey),
       fetchFn,
     );
-    return ((json.data ?? []) as { id: string; display_name?: string }[]).map(
-      (m) => toCloudModel(m.id, m.display_name),
-    );
+    return (
+      (json.data ?? []) as {
+        id: string;
+        display_name?: string;
+        capabilities?: unknown;
+      }[]
+    ).map((m) => toCloudModel(m.id, m.display_name, anthropicToolSupport(m)));
   },
 
   createModel(model, apiKey, { temperature, maxTokens, think }) {

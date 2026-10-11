@@ -1,4 +1,11 @@
-import { BrainCircuit, Check, Cloud, KeyRound, Settings } from "lucide-react";
+import {
+  BrainCircuit,
+  Check,
+  Cloud,
+  KeyRound,
+  Settings,
+  TriangleAlert,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -17,6 +24,7 @@ import {
   sameChoice,
   buildProviderTree,
   type ModelChoice,
+  type ProviderModel,
 } from "@/features/models/lib/modelChoices";
 
 interface ModelMenuProps {
@@ -26,6 +34,12 @@ interface ModelMenuProps {
   onOpenManage: () => void;
   onOpenKeys: () => void;
   onOpen?: () => void;
+}
+
+function unverifiedTitle(m: ProviderModel): string | undefined {
+  return m.toolSupport?.status === "unknown"
+    ? `${m.model} — tool support could not be verified. ${m.toolSupport.reason ?? ""}`.trim()
+    : undefined;
 }
 
 export function ModelMenu({
@@ -123,12 +137,15 @@ export function ModelMenu({
                     <DropdownMenuItem
                       key={m.model}
                       onClick={() => onChangeModel(choiceFor(m.keys[0]?.keyId ?? ""))}
-                      title={m.model}
+                      title={unverifiedTitle(m) ?? m.model}
                     >
                       <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
                         <span className="text-sm font-mono truncate max-w-48">
                           {m.model}
                         </span>
+                        {m.toolSupport?.status === "unknown" && (
+                          <TriangleAlert className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
                         {isActive && <Check className="size-4 shrink-0" />}
                       </div>
                     </DropdownMenuItem>
@@ -137,11 +154,14 @@ export function ModelMenu({
 
                 return (
                   <DropdownMenuSub key={m.model}>
-                    <DropdownMenuSubTrigger title={m.model}>
+                    <DropdownMenuSubTrigger title={unverifiedTitle(m) ?? m.model}>
                       <div className="flex flex-1 items-center justify-between gap-2 min-w-0 px-2">
                         <span className="text-sm font-mono truncate max-w-40">
                           {m.model}
                         </span>
+                        {m.toolSupport?.status === "unknown" && (
+                          <TriangleAlert className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
                         {isActive && <Check className="size-4 shrink-0" />}
                       </div>
                     </DropdownMenuSubTrigger>

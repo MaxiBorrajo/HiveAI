@@ -47,3 +47,28 @@ Deno.test("selectCatalog - a group that failed to list contributes nothing", () 
   const { catalog } = selectCatalog([failed], { provider: "ollama", model: "" });
   assertEquals(catalog, []);
 });
+
+Deno.test("selectCatalog - models that cannot take tools never reach the generator", () => {
+  const no = { status: "unsupported", reason: "no tools" } as const;
+  const unknown = { status: "unknown", reason: "not reported" } as const;
+  const groups: ModelOptionGroup[] = [
+    {
+      id: "local",
+      label: "local",
+      options: [
+        { ...opt({ provider: "ollama", model: "gemma3" }), toolSupport: no },
+        { ...opt({ provider: "ollama", model: "qwen3:8b" }), toolSupport: { status: "supported" } },
+      ],
+    },
+    {
+      id: "k1",
+      label: "k1",
+      options: [
+        { ...opt({ provider: "google", model: "embedding-001", keyId: "k1" }), toolSupport: no },
+        { ...opt({ provider: "google", model: "gemini-flash", keyId: "k1" }), toolSupport: unknown },
+      ],
+    },
+  ];
+  const { catalog } = selectCatalog(groups, { provider: "ollama", model: "qwen3:8b" });
+  assertEquals(catalog.map((o) => o.id), ["ollama:qwen3:8b", "google:gemini-flash"]);
+});

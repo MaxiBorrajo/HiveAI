@@ -2,11 +2,14 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { Loader2 } from "lucide-react";
 import { getModels } from "@/features/models/api/getModels";
+import { deleteModel } from "@/features/models/api/deleteModel";
+import { reportWarning } from "@/lib/toastManager";
 import { getModelOptions } from "@/features/models/api/getModelOptions";
 import { getCurrentModels } from "@/features/models/api/getCurrentModels";
 import { setModels as setModelsRequest } from "@/features/models/api/setModels";
@@ -36,6 +39,7 @@ interface ModelsContextValue {
   closeManage: () => void;
   refreshModels: () => void;
   changeModel: (choice: string | ModelChoice) => Promise<void>;
+  deleteLocalModel: (name: string) => Promise<void>;
   modeResetSignal: number;
   runBusy: <T>(message: string, task: () => Promise<T>) => Promise<T>;
 }
@@ -69,13 +73,31 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Tell about a saved model that no longer qualifies once per session, not on
+  // every refresh.
+  const warnedRef = useRef<string | null>(null);
+
+  function warnIfUnusable(model: CurrentModels) {
+    if (model.toolSupport?.status !== "unsupported") return;
+    const key = `${model.provider}:${model.model}`;
+    if (warnedRef.current === key) return;
+    warnedRef.current = key;
+    reportWarning(
+      `The active model '${model.model}' no longer supports tools`,
+      `${model.toolSupport.reason ?? ""} Choose another model from the model menu.`.trim(),
+    );
+  }
+
   function refreshModels() {
     getModels().then(({ data }) => setModels(data ?? []));
     getModelOptions()
       .then(({ data }) => setOptionGroups(data ?? []))
       .catch(() => setOptionGroups([]));
     getCurrentModels().then(({ data }) => {
-      if (data) setCurrent(data);
+      if (data) {
+        setCurrent(data);
+        warnIfUnusable(data);
+      }
     });
     getEmbeddingModelStatus().then(({ data }) => {
       if (data) setEmbeddingModelStatus(data);
@@ -99,12 +121,31 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
           provider: target.provider,
           keyId: target.keyId,
         });
-        if (data) setCurrent(data);
+        if (data) {
+          setCurrent(data);
+          if (data.toolSupport?.status === "unknown") {
+            reportWarning(
+              `Tool support of '${data.model}' could not be verified`,
+              data.toolSupport.reason,
+            );
+          }
+        }
         setModeResetSignal((n) => n + 1);
       } catch {
         setCurrent(previous);
       }
     });
+  }
+
+  async function deleteLocalModel(name: string) {
+    await runBusy(`Deleting ${name}...`, async () => {
+      try {
+        await deleteModel(name);
+      } catch {
+        // The request interceptor already reported the reason.
+      }
+    });
+    refreshModels();
   }
 
   const value: ModelsContextValue = {
@@ -122,6 +163,7 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     closeManage: () => setIsManageOpen(false),
     refreshModels,
     changeModel,
+    deleteLocalModel,
     modeResetSignal,
     runBusy,
   };

@@ -1,6 +1,7 @@
 import { useModels } from "@/features/models/ModelsContext";
 import {
   buildProviderTree,
+  canUse,
   isCloud,
   type ModelChoice,
 } from "@/features/models/lib/modelChoices";
@@ -42,12 +43,23 @@ export function LlmNodeForm({
   plugins,
 }: NodeFormProps) {
   const { optionGroups } = useModels();
-  const tree = buildProviderTree(optionGroups);
+  // Looked up with every model so a saved node whose model stopped qualifying
+  // is explained; only usable models (and the one already set) are offered.
+  const fullTree = buildProviderTree(optionGroups, { includeUnsupported: true });
+  const tree = fullTree
+    .map((e) => ({
+      ...e,
+      models: e.models.filter(
+        (m) => canUse(m.toolSupport) || m.model === config.model,
+      ),
+    }))
+    .filter((e) => e.models.length > 0);
   const provider: ModelProvider | "" = config.model
     ? (config.provider ?? "ollama")
     : "";
   const entry = tree.find((e) => e.provider === provider);
   const modelEntry = entry?.models.find((m) => m.model === config.model);
+  const support = modelEntry?.toolSupport;
   const keyId: string = config.keyId ?? "";
   const modelKnown =
     !config.model ||
@@ -72,7 +84,7 @@ export function LlmNodeForm({
   };
   const pickProvider = (value: string) => {
     const next = tree.find((e) => e.provider === value);
-    const first = next?.models[0];
+    const first = next?.models.find((m) => canUse(m.toolSupport));
     applyChoice(
       next && first
         ? {
@@ -153,6 +165,11 @@ export function LlmNodeForm({
               {entry?.models.map((m) => (
                 <option key={m.model} value={m.model}>
                   {m.model}
+                  {m.toolSupport?.status === "unsupported"
+                    ? " (no tool support)"
+                    : m.toolSupport?.status === "unknown"
+                      ? " (tools unverified)"
+                      : ""}
                 </option>
               ))}
             </select>
@@ -174,6 +191,18 @@ export function LlmNodeForm({
             </select>
           )}
         </div>
+        {modelKnown && support?.status === "unsupported" && (
+          <p className="mt-1 text-[11px] text-destructive">
+            This model cannot be used: {support.reason ?? "it does not support tool calling."}{" "}
+            The execution will not start until you pick another one.
+          </p>
+        )}
+        {modelKnown && support?.status === "unknown" && (
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Tool support of this model could not be verified.{" "}
+            {support.reason}
+          </p>
+        )}
         {!modelKnown && (
           <p className="mt-1 text-[11px] text-destructive">
             This model or its API key no longer exists. The execution will not

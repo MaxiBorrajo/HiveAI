@@ -12,6 +12,10 @@ export function reportError(errors: string[]) {
   });
 }
 
+export function reportWarning(title: string, description?: string) {
+  toastManager.add({ type: "warning", title, description });
+}
+
 export function reportSuccess(title: string, description?: string) {
   toastManager.add({
     type: "success",

@@ -6,6 +6,7 @@ import {
 import { type ModelProvider, PROVIDER_LABELS } from "../../../core/ai/providers/types.ts";
 import { fetchAvailableModels } from "./get-models.ts";
 import { fetchCloudModelGroups } from "./get-cloud-models.ts";
+import { ollamaToolSupport } from "../../../core/ai/providers/tool-support.ts";
 
 export interface ModelOptionGroup {
   id: string;
@@ -32,6 +33,7 @@ export async function buildModelOptionGroups(): Promise<ModelOptionGroup[]> {
           ref,
           label: m.parameterSize ? `${m.parameterSize} local` : "local",
           capabilities: m.capabilities,
+          toolSupport: ollamaToolSupport(m.capabilities),
           location: "local" as const,
           ...(m.contextLength ? { contextLength: m.contextLength } : {}),
         };
@@ -53,6 +55,7 @@ export async function buildModelOptionGroups(): Promise<ModelOptionGroup[]> {
           ref,
           label: m.label ?? "cloud",
           capabilities: m.capabilities,
+          toolSupport: m.toolSupport,
           location: "cloud" as const,
         };
       }),

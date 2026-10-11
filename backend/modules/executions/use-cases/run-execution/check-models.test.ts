@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import type { ToolSupport } from "../../../../core/ai/providers/tool-support.ts";
 import { HiveMicrokernel } from "../../../../core/microkernel/hive-microkernel.ts";
 import type { LangGraphAbstraction } from "../../../../core/ai/visual-builder/types.ts";
 import {
@@ -9,7 +10,15 @@ import {
 
 const deps: ModelCheckDeps = {
   findKeyAlias: (id) => Promise.resolve(id === "live" ? "Claude – personal" : undefined),
-  listLocalModels: () => Promise.resolve(new Set(["qwen3:8b"])),
+  listLocalModels: () => Promise.resolve(new Set(["qwen3:8b", "gemma3:4b"])),
+  toolSupport: ({ model }) =>
+    Promise.resolve(SUPPORT[model] ?? { status: "supported" }),
+};
+
+const SUPPORT: Record<string, ToolSupport> = {
+  "gemma3:4b": { status: "unsupported", reason: "This model does not support tool calling." },
+  "gemini-flash": { status: "unknown", reason: "Google does not report it." },
+  "embedding-001": { status: "unsupported", reason: "Not a chat model." },
 };
 
 function graph(...configs: Record<string, unknown>[]): LangGraphAbstraction {
@@ -26,7 +35,7 @@ function graph(...configs: Record<string, unknown>[]): LangGraphAbstraction {
 }
 
 Deno.test("checkGraphModels - cloud + local mix with live key passes", async () => {
-  const problems = await checkGraphModels(
+  const { problems, warnings } = await checkGraphModels(
     graph(
       { model: "claude-sonnet-5-5", provider: "anthropic", keyId: "live" },
       { model: "qwen3:8b" },
@@ -34,10 +43,11 @@ Deno.test("checkGraphModels - cloud + local mix with live key passes", async () 
     deps,
   );
   assertEquals(problems, []);
+  assertEquals(warnings, []);
 });
 
 Deno.test("checkGraphModels - deleted key explains the reason and the node", async () => {
-  const [p] = await checkGraphModels(
+  const { problems: [p] } = await checkGraphModels(
     graph({ model: "gemini-2.5-flash", provider: "google", keyId: "gone" }),
     deps,
   );
@@ -46,7 +56,7 @@ Deno.test("checkGraphModels - deleted key explains the reason and the node", asy
 });
 
 Deno.test("checkGraphModels - missing key, missing local model, no model", async () => {
-  const problems = await checkGraphModels(
+  const { problems } = await checkGraphModels(
     graph(
       { model: "gemini-2.5-pro", provider: "google" },
       { model: "not-installed:1b" },
@@ -58,11 +68,32 @@ Deno.test("checkGraphModels - missing key, missing local model, no model", async
 });
 
 Deno.test("checkGraphModels - skips the local check when Ollama can't be queried", async () => {
-  const problems = await checkGraphModels(graph({ model: "x" }), {
+  const { problems } = await checkGraphModels(graph({ model: "x" }), {
     ...deps,
     listLocalModels: () => Promise.resolve(null),
   });
   assertEquals(problems, []);
+});
+
+Deno.test("checkGraphModels - a local model without tools and a non-chat cloud model block the node", async () => {
+  const { problems } = await checkGraphModels(
+    graph(
+      { model: "gemma3:4b" },
+      { model: "embedding-001", provider: "google", keyId: "live" },
+    ),
+    deps,
+  );
+  assertEquals(problems.map((p) => p.nodeId), ["n0", "n1"]);
+  assertEquals(problems[0].reason.includes("does not support tool calling"), true);
+});
+
+Deno.test("checkGraphModels - unknown tool support warns without blocking", async () => {
+  const { problems, warnings } = await checkGraphModels(
+    graph({ model: "gemini-flash", provider: "google", keyId: "live" }),
+    deps,
+  );
+  assertEquals(problems, []);
+  assertEquals(warnings.map((w) => w.nodeId), ["n0"]);
 });
 
 Deno.test("applyDefaultModel - fills nodes without a model with the chat model", () => {

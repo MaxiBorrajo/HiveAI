@@ -228,6 +228,12 @@ export function useExecutionWorkspace({
             currentKey,
           );
         },
+        onWarning: (messages) => {
+          logs.set(
+            (prev) => [...prev, ...messages.map((m) => `⚠️ ${m}`)],
+            currentKey,
+          );
+        },
         onError: (message) => {
           logs.set((prev) => [...prev, `❌ Execution error: ${message}`], currentKey);
         },

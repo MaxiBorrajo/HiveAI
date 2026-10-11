@@ -3,6 +3,7 @@ import type {
   ModelOption,
   ModelOptionGroup,
   ModelProvider,
+  ToolSupport,
 } from "@/features/models/types";
 
 export interface ModelChoice {
@@ -64,6 +65,12 @@ export interface KeyRef {
 export interface ProviderModel {
   model: string;
   keys: KeyRef[];
+  toolSupport?: ToolSupport;
+}
+
+// Only a confirmed "no" blocks a model; unknown is allowed with a warning.
+export function canUse(support: ToolSupport | undefined) {
+  return support?.status !== "unsupported";
 }
 
 export interface ProviderEntry {
@@ -73,7 +80,10 @@ export interface ProviderEntry {
   keyErrors: { alias: string; error: string }[];
 }
 
-export function buildProviderTree(groups: ModelOptionGroup[]): ProviderEntry[] {
+export function buildProviderTree(
+  groups: ModelOptionGroup[],
+  { includeUnsupported = false }: { includeUnsupported?: boolean } = {},
+): ProviderEntry[] {
   const byProvider = new Map<ModelProvider, ProviderEntry>();
 
   for (const group of groups) {
@@ -101,7 +111,11 @@ export function buildProviderTree(groups: ModelOptionGroup[]): ProviderEntry[] {
       const keyId = option.ref.keyId ?? "";
       let model = entry.models.find((m) => m.model === option.ref.model);
       if (!model) {
-        model = { model: option.ref.model, keys: [] };
+        model = {
+          model: option.ref.model,
+          keys: [],
+          toolSupport: option.toolSupport,
+        };
         entry.models.push(model);
       }
       if (keyId && !model.keys.some((k) => k.keyId === keyId)) {
@@ -110,5 +124,12 @@ export function buildProviderTree(groups: ModelOptionGroup[]): ProviderEntry[] {
     }
   }
 
-  return [...byProvider.values()];
+  const entries = [...byProvider.values()];
+  if (includeUnsupported) return entries;
+
+  // Models that cannot take tools are not offered where one gets chosen.
+  for (const entry of entries) {
+    entry.models = entry.models.filter((m) => canUse(m.toolSupport));
+  }
+  return entries.filter((e) => e.models.length > 0 || e.keyErrors.length > 0);
 }

@@ -1,10 +1,12 @@
 import { type ModelRef, PROVIDER_LABELS } from "./types.ts";
+import type { ToolSupport } from "./tool-support.ts";
 
 export interface ModelOption {
   id: string;
   ref: ModelRef;
   label: string;
   capabilities: string[];
+  toolSupport?: ToolSupport;
   location?: "local" | "cloud";
   contextLength?: number;
 }
@@ -33,8 +35,12 @@ export function describeCatalog(selection: ModelSelection): string {
         o.label,
         o.contextLength ? `ctx ${formatContext(o.contextLength)}` : "",
       ].filter(Boolean);
-      const caps = o.capabilities.length ? ` [${o.capabilities.join(", ")}]` : "";
-      return `- ${o.id} — ${details.join(", ")}${caps}`;
+      const caps = [
+        ...o.capabilities,
+        ...(o.toolSupport?.status === "unknown" ? ["tools: unverified"] : []),
+      ];
+      const capsText = caps.length ? ` [${caps.join(", ")}]` : "";
+      return `- ${o.id} — ${details.join(", ")}${capsText}`;
     })
     .join("\n");
 }

@@ -5,6 +5,7 @@ import { getCurrentModels } from "./use-cases/get-current-models.ts";
 import { setModels } from "./use-cases/set-models.ts";
 import { getEmbeddingModelStatus } from "./use-cases/get-embedding-model-status.ts";
 import { handlePullEmbeddingModel } from "./use-cases/pull-embedding-model.ts";
+import { deleteModel } from "./use-cases/delete-model.ts";
 import { getModelOptions } from "./use-cases/build-model-options.ts";
 import { ModelFilters } from "./types.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
@@ -51,6 +52,14 @@ modelsRouter.get("/", (c) => {
   };
 
   return getModels(filters, { "content-type": "application/json" });
+});
+
+// Query param, not a path segment: model names can contain slashes
+// (hf.co/user/model:tag).
+modelsRouter.delete("/", (c) => {
+  return deleteModel(c.get("hive"), c.req.query("name"), {
+    "content-type": "application/json",
+  });
 });
 
 modelsRouter.get("/:name", (c) => {

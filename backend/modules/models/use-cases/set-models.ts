@@ -2,7 +2,9 @@ import { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../../core/api/response.ts";
 import { parseJsonBody } from "../../../core/api/request.ts";
 import { fetchAvailableModels } from "./get-models.ts";
-import { fetchCurrentModels } from "./get-current-models.ts";
+import { fetchCurrentModelsWithSupport } from "./get-current-models.ts";
+import { resolveToolSupport } from "./resolve-tool-support.ts";
+import { ollamaToolSupport } from "../../../core/ai/providers/tool-support.ts";
 import { setCurrentMode } from "../../modes/use-cases/set-current-mode.ts";
 import {
   clearKvCacheOverride,
@@ -25,6 +27,10 @@ export class InvalidModelsError extends Error {
   constructor(public errors: string[]) {
     super(errors.join(", "));
   }
+}
+
+function unsupportedMessage(model: string, reason?: string): string {
+  return `Model '${model}' cannot be used: ${reason ?? "it does not support tool calling."}`;
 }
 
 export async function updateModels(
@@ -51,16 +57,29 @@ export async function updateModels(
         `Select a valid ${provider} API key for model '${model}'`,
       ]);
     }
+    const support = await resolveToolSupport({
+      provider,
+      model,
+      keyId: key.id,
+    });
+    if (support.status === "unsupported") {
+      throw new InvalidModelsError([unsupportedMessage(model, support.reason)]);
+    }
     hive.configure({ model, modelProvider: provider, modelKeyId: key.id });
-    return fetchCurrentModels(hive);
+    return fetchCurrentModelsWithSupport(hive);
   }
 
   const availableModels = await fetchAvailableModels();
-  const availableNames = new Set(availableModels.map((m) => m.name));
+  const installed = availableModels.find((m) => m.name === model);
 
   const errors: string[] = [];
-  if (!availableNames.has(model)) {
+  if (!installed) {
     errors.push(`Model '${model}' is not available`);
+  } else {
+    const support = ollamaToolSupport(installed.capabilities);
+    if (support.status === "unsupported") {
+      errors.push(unsupportedMessage(model, support.reason));
+    }
   }
 
   if (errors.length > 0) {
@@ -71,7 +90,7 @@ export async function updateModels(
   await clearKvCacheOverride(hive);
   setCurrentMode(hive, DEFAULT_MODE);
 
-  return fetchCurrentModels(hive);
+  return fetchCurrentModelsWithSupport(hive);
 }
 
 export async function setModels(
