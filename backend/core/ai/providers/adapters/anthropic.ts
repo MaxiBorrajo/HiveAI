@@ -16,17 +16,14 @@ const headers = (apiKey: string) => ({
   "anthropic-version": "2023-06-01",
 });
 
-// Claude 5+ models reject any non-default temperature.
 const rejectsTemperature = (model: string) =>
   /^claude-[a-z]+-([5-9]|\d{2,})(-|$)/.test(model);
 
-/*Este metodo es para que modelos +5 de anthropic puedan devolver structured output con tipos no estrictos como any o unknown. Lo que haces es tomar el llm actual de anthropic, definirle una tool de extract que es lo que permite el structured output, y luego manda el input del usuario. Luego revisa que llame a esta tool hasta 3 veces, si no lo hace, falla. */
 // deno-lint-ignore no-explicit-any
 const useAutoToolStructuredOutput = (llm: any) => {
   // deno-lint-ignore no-explicit-any
   llm.withStructuredOutput = (schema: any, config?: any) => {
     const name = config?.name ?? "extract";
-    // Anthropic tool inputs must be objects: wrap primitive schemas (number/boolean/string).
     const wrapped = (toJsonSchema(schema) as { type?: string }).type !== "object";
     const toolSchema = wrapped ? z.object({ value: schema }) : schema;
     const bound = llm.bindTools(
@@ -62,9 +59,6 @@ const useAutoToolStructuredOutput = (llm: any) => {
   return llm;
 };
 
-// The models endpoint has no "tools" flag. A model described with a
-// capabilities block is a Messages API model, where tool use is part of the
-// API itself; a model without one is not described, so it stays unknown.
 function anthropicToolSupport(m: { capabilities?: unknown }): ToolSupport {
   return m.capabilities && typeof m.capabilities === "object"
     ? TOOLS_SUPPORTED

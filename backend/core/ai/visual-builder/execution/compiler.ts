@@ -126,11 +126,9 @@ function partitionEdges(abstraction: LangGraphAbstraction): {
 
   return { normalEdges, conditionalEdgesBySource, conditionNodesMap };
 }
-// A condition may send the flow back at most this many times before it is forced forward,
-// so a review loop that never converges cannot burn tokens until the recursion limit.
+
 export const MAX_LOOP_BACKS = 3;
 
-/** Edges whose target can reach their own source, i.e. edges that close a cycle. */
 export function findLoopBackEdgeIds(abstraction: LangGraphAbstraction): Set<string> {
   const outgoing = new Map<string, string[]>();
   for (const e of abstraction.edges) {

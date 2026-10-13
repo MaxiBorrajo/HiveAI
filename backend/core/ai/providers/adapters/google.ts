@@ -10,11 +10,8 @@ import {
 const headers = (apiKey: string) => ({ "x-goog-api-key": apiKey });
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-// Models that accept generateContent but only produce audio or images.
 const NON_CHAT_NAME = /(^|-)(tts|image|imagen|embedding|aqa)(-|$)/i;
 
-// The Gemini models endpoint lists generation methods but no "tools" flag:
-// non-chat models are told apart, chat models stay unknown.
 function googleToolSupport(
   name: string,
   methods: string[] | undefined,

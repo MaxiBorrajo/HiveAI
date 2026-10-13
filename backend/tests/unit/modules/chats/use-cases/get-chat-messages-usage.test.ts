@@ -86,7 +86,6 @@ Deno.test("getChatMessages - responses carry their usage and old ones carry null
   assertEquals(reply.calls, 2);
   assertEquals(reply.models[0].location, "local");
 
-  // The conversation counts every call, linked or not, per location.
   assertEquals(data.usage.local.inputTokens, 150);
   assertEquals(data.usage.cloud.inputTokens, 900);
   assertEquals(data.usage.cloud.models[0].keyAliases, ["work"]);

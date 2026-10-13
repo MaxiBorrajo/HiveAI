@@ -9,10 +9,6 @@ import type {
 } from "@/lib/usage";
 import type { RunSummary } from "../types";
 
-// Pure comparison of two runs of one execution. There is deliberately no
-// combined figure: local and cloud stay apart, and tokens are only set against
-// each other when the same model ran in both runs. Tokens are not prices.
-
 export type NodeRowState = "same" | "modelChanged" | "onlyInA" | "onlyInB";
 
 export interface NodeSide {
@@ -21,8 +17,6 @@ export interface NodeSide {
   nodeType: string | null;
   model: RunModel | null;
   tokens: TokenPair;
-  // Sum of the node's model calls; null when it made none (plugins, conditions
-  // and the like are not timed).
   latencyMs: number | null;
   calls: number;
   failedCalls: number;
@@ -30,7 +24,6 @@ export interface NodeSide {
 
 export interface NodeRow {
   state: NodeRowState;
-  // How the two sides were paired; null for nodes without a counterpart.
   matchedBy: "id" | "name" | null;
   a: NodeSide | null;
   b: NodeSide | null;
@@ -47,9 +40,7 @@ export interface ModelRow {
   model: string;
   a: RunModelTotals | null;
   b: RunModelTotals | null;
-  // Present only when the model ran in both runs.
   delta: TokenDelta | null;
-  // True when a side did not report every call, so its sums are lower bounds.
   approximate: boolean;
 }
 
@@ -81,8 +72,6 @@ export interface RunWarning {
 export interface RunComparison {
   a: HeadlineSide | null;
   b: HeadlineSide | null;
-  // Set when both runs used the same orchestrator model, so its tokens can be
-  // set against each other.
   orchestratorDelta: TokenDelta | null;
   nodes: NodeRow[];
   nodeCounts: { matched: number; onlyInA: number; onlyInB: number };
@@ -128,10 +117,6 @@ function sameModel(a: RunModel | null, b: RunModel | null): boolean {
   );
 }
 
-// Pairs the nodes of two runs, each node used once:
-//  1. same id and same type (every node, when both used the same graph),
-//  2. what is left, by name and type, in order of appearance.
-// Whatever stays unpaired is reported as present in only one run.
 export function alignNodes(
   nodesA: RunNodeUsage[],
   nodesB: RunNodeUsage[],
@@ -230,7 +215,6 @@ function modelRows(a: RunUsage, b: RunUsage): ModelRow[] {
       model: ref.model,
       a: ma,
       b: mb,
-      // Only the same model on both sides is set against each other.
       delta: ma && mb ? tokenDelta(ma, mb) : null,
       approximate: !!ma && !!mb && (!ma.tokensComplete || !mb.tokensComplete),
     };
@@ -305,7 +289,6 @@ export function compareRuns(a: RunSummary, b: RunSummary): RunComparison {
   const ub = b.usage;
   const bothUsage = ua !== null && ub !== null;
 
-  // Without usage on both sides the nodes cannot be paired meaningfully.
   const nodes = bothUsage ? alignNodes(ua.nodes, ub.nodes) : [];
   const nodeCounts = {
     matched: nodes.filter((n) => n.a && n.b).length,

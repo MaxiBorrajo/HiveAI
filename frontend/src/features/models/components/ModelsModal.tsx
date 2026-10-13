@@ -17,7 +17,6 @@ interface ModelsModalProps {
   current: CurrentModels;
   onChangeModel: (choice: ModelChoice) => void;
   onDeleteModel: (name: string) => void;
-  // Needed by the app itself (embeddings); listed but never deletable.
   protectedModel?: string;
 }
 
@@ -33,8 +32,6 @@ export function ModelsModal({
 }: ModelsModalProps) {
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null);
 
-  // Reset on open, not on close, so the view doesn't swap while the dialog
-  // is fading out.
   useEffect(() => {
     if (isOpen) setSelectedModel(null);
   }, [isOpen]);

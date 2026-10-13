@@ -20,12 +20,6 @@ export async function handleEditPlugin(
     );
   }
 
-  // getDraftsDir() never creates the directory it points to — make sure it
-  // exists before detaching the plugin, since detach unregisters it from the
-  // microkernel and forgets its persisted record regardless of whether the
-  // rename below succeeds. Detaching isn't easily reversible (it already
-  // stopped the subprocess), so the safest order is to remove the one
-  // preventable cause of the rename failing first.
   await mkdir(getDraftsDir(hive), { recursive: true });
 
   const sourceDir = await hive.detachExternalPluginForEdit(name);

@@ -83,11 +83,10 @@ Deno.test("matchesFilters combines multiple filters with AND semantics", () => {
     }),
   );
 
-  // Any single mismatching filter should reject the model.
   assertFalse(
     matchesFilters(model, {
       family: "qwen3",
-      parameterSize: "70B", // mismatches
+      parameterSize: "70B",
       capabilities: ["tools"],
     }),
   );

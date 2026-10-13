@@ -10,8 +10,6 @@ import {
 } from "../../../../../../core/ai/visual-builder/execution/llm-executor.ts";
 import { LlmConfig, ToolProvider } from "../../../../../../core/ai/visual-builder/types.ts";
 
-// --- coerceLlmBooleanReply ---
-
 Deno.test("coerceLlmBooleanReply - exact 'true'/'false' strings", () => {
   assertEquals(coerceLlmBooleanReply("true"), true);
   assertEquals(coerceLlmBooleanReply("false"), false);
@@ -36,8 +34,6 @@ Deno.test("coerceLlmBooleanReply - explicit negations like 'not true' are recogn
 Deno.test("coerceLlmBooleanReply - plain 'false' with no 'true' substring is false", () => {
   assertEquals(coerceLlmBooleanReply("false, condition not met"), false);
 });
-
-// --- buildPromptMessages ---
 
 Deno.test("buildPromptMessages - includes systemPrompt as a SystemMessage when set", () => {
   const messages = buildPromptMessages({}, { systemPrompt: "You are a helper." });
@@ -85,7 +81,6 @@ Deno.test("buildPromptMessages - without inputMapping, dumps the whole state as 
   );
   const combined = messages.map((m) => String(m.content)).join("\n");
   assertEquals(combined.includes("included-value"), true);
-  // "model" is a reserved key and must not leak into the CONTEXT dump
   assertEquals(combined.includes("CONTEXT [model]"), false);
   assertEquals(combined.includes("qwen3:8b"), false);
 });
@@ -179,8 +174,6 @@ Deno.test("mapResponseToState - carries forward attempts counter when present in
   assertEquals(state.attempts, 1);
 });
 
-// --- handleLlmError ---
-
 Deno.test("handleLlmError - a model failure throws instead of producing fake output", () => {
   assertThrows(() => handleLlmError(new Error("connection refused"), "n1", {}), Error, "connection refused");
 });
@@ -197,18 +190,11 @@ Deno.test("handleLlmError - non-Error thrown values are stringified", () => {
   assertThrows(() => handleLlmError("plain string failure", "n1", {}), Error, "plain string failure");
 });
 
-// --- executeLlmNode (error paths that don't require a live Ollama instance) ---
-
 Deno.test("executeLlmNode - plugins requested without a ToolProvider fails the node", async () => {
   const config: LlmConfig = { model: "qwen3:8b", plugins: ["web-search"] };
   await assertRejects(() => executeLlmNode("n1", config, {}), Error, "no ToolProvider was provided");
 });
 
-// --- executeLlmNode ReAct loop (deterministic, via injected llmFactory) ---
-
-// Builds a fake chat model whose .invoke() replies are taken one-by-one from
-// `scriptedReplies` (an AIMessage per call). bindTools()/withStructuredOutput()
-// just return `this` so the same scripted sequence keeps driving .invoke().
 function fakeLlm(scriptedReplies: AIMessage[]) {
   let callIndex = 0;
   const model = {
@@ -268,9 +254,7 @@ Deno.test("executeLlmNode - ReAct loop executes a requested tool call and feeds 
 });
 
 Deno.test("executeLlmNode - a requested plugin missing from the ToolProvider is skipped entirely (never bound, falls back to the no-tools path)", async () => {
-  // When every requested plugin resolves to `undefined` in the provider,
-  // toolsToBind stays empty, so the ReAct loop never starts at all — the
-  // node silently falls back to a single plain LLM invocation (Case 1).
+
   const reply = new AIMessage("No tools were available, answering directly.");
   const provider = fakeToolProvider({});
 
@@ -334,10 +318,7 @@ Deno.test("executeLlmNode - the loop stops at maxIterations (8) if the model kee
     () => model,
   );
 
-  // Must terminate after exactly 8 model invocations, not hang forever
   assertEquals(invokeCount, 8);
-  // With no non-tool-call final reply, it falls back to the last conversation entry
-  // (a ToolMessage), so `summary` is populated from whatever that message's content is.
   assertEquals("summary" in result, true);
 });
 
@@ -351,8 +332,6 @@ Deno.test("executeLlmNode - a thrown error from the LLM factory fails the node",
     "ollama connection refused",
   );
 });
-
-// --- provider-aware model construction ---
 
 Deno.test("executeLlmNode - passes provider + keyId to the factory and drops ollama options for cloud nodes", async () => {
   let seen: Record<string, unknown> = {};

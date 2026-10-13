@@ -21,7 +21,6 @@ async function makeRepo() {
   return new ExecutionRepository(db);
 }
 
-// A minimal single-plugin-node graph: start -> count_step (counter plugin) -> end
 function counterGraph(counterName: string): LangGraphAbstraction {
   return {
     nodes: [
@@ -126,11 +125,9 @@ Deno.test("runExecution - runs a single plugin node end to end and persists hist
   assertExists(done.historyId);
   assertEquals(done.iteration, 1);
 
-  // The counter plugin's confirmation message should show up somewhere in the final result
   const resultStr = JSON.stringify(done.result);
   assertEquals(resultStr.includes("run-execution-test-counter"), true);
 
-  // History must actually be persisted
   assertEquals(await repo.countHistories(execution.id), 1);
   const updatedExecution = await repo.findById(execution.id);
   assertEquals(updatedExecution?.lastResultId, done.historyId);
@@ -211,10 +208,6 @@ Deno.test("runExecution - a plugin node referencing an unregistered tool fails f
   });
   await repo.update(execution.id, { lastGraphId: graph.id });
 
-  // NOTE: unlike a plugin failing mid-run (which streams an "error" SSE event),
-  // an unregistered tool is caught synchronously by compileGraph's toolProvider
-  // before the ReadableStream even starts, so it surfaces as a plain 500 JSON
-  // response instead of an SSE stream.
   const res = await runExecution(db, hive, execution.id, {}, {});
   assertEquals(res.status, 500);
 });

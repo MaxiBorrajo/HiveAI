@@ -14,7 +14,6 @@ function edge(overrides: Partial<GraphEdge>): GraphEdge {
   return { id: "e", source: "a", target: "b", isConditional: false, ...overrides };
 }
 
-// A minimal, fully valid graph: start -> plugin step -> end
 function validGraph(): LangGraphAbstraction {
   return {
     nodes: [
@@ -41,8 +40,6 @@ function validGraph(): LangGraphAbstraction {
 }
 
 const plugins: PluginParameterInfo[] = [{ name: "web-search", parameterKeys: ["query"] }];
-
-// --- validateGraphStructure ---
 
 Deno.test("validateGraphStructure - a well-formed graph has no structural violations", () => {
   assertEquals(validateGraphStructure(validGraph()), []);
@@ -83,8 +80,6 @@ Deno.test("validateGraphStructure - an edge pointing to a non-existent node is f
   assertEquals(violations.some((v) => v.kind === "dangling_edge" && v.field === "target"), true);
 });
 
-// --- validateGraph (structural short-circuit) ---
-
 Deno.test("validateGraph - a fully valid graph produces no violations", () => {
   assertEquals(validateGraph(validGraph(), plugins), []);
 });
@@ -93,15 +88,10 @@ Deno.test("validateGraph - structural violations short-circuit and skip deeper (
   const g = validGraph();
   g.nodes = g.nodes.filter((n) => n.type !== "end");
   const violations = validateGraph(g, plugins);
-  // Removing the end node leaves a dangling edge too, but both are still
-  // structural (validateGraphStructure) violations — deeper checks like
-  // reachability or node-config validation must never run alongside them.
   const structuralKinds = new Set(["invalid_start_end_count", "dangling_edge"]);
   assertEquals(violations.every((v) => structuralKinds.has(v.kind)), true);
   assertEquals(violations.some((v) => v.kind === "invalid_start_end_count"), true);
 });
-
-// --- edge rules ---
 
 Deno.test("validateGraph - a self-loop edge is flagged as invalid_edge", () => {
   const g = validGraph();
@@ -135,14 +125,12 @@ Deno.test("validateGraph - an edge from a condition node missing a true/false pa
   g.nodes.splice(1, 0, node({ id: "cond", name: "Cond", type: "condition", config: { condition: { field: "input", operator: "equals", value: "x" } } }));
   g.edges = [
     edge({ id: "e1", source: "start", target: "cond" }),
-    edge({ id: "e2", source: "cond", target: "step" }), // no path
+    edge({ id: "e2", source: "cond", target: "step" }),
     edge({ id: "e3", source: "step", target: "end" }),
   ];
   const violations = validateGraph(g, plugins);
   assertEquals(violations.some((v) => v.kind === "condition_edge_missing_path"), true);
 });
-
-// --- reachability ---
 
 Deno.test("validateGraph - a node disconnected from the flow is flagged as unreachable and unable to reach end", () => {
   const g = validGraph();
@@ -151,8 +139,6 @@ Deno.test("validateGraph - a node disconnected from the flow is flagged as unrea
   assertEquals(violations.some((v) => v.kind === "unreachable_node" && v.nodeId === "orphan"), true);
   assertEquals(violations.some((v) => v.kind === "cannot_reach_end" && v.nodeId === "orphan"), true);
 });
-
-// --- node config validation ---
 
 Deno.test("validateGraph - a plugin node without an outputKey is flagged", () => {
   const g = validGraph();
@@ -256,8 +242,6 @@ Deno.test("validateGraph - a condition node with an invalid operator is flagged"
   assertEquals(violations.some((v) => v.kind === "invalid_node_config" && v.field === "condition.operator"), true);
 });
 
-// --- condition branch structural checks (delegated to graph-sanitizer) ---
-
 Deno.test("validateGraph - a condition node missing its true/false branches is flagged via findMissingConditionBranches", () => {
   const g = validGraph();
   g.nodes.splice(1, 0, node({
@@ -292,8 +276,6 @@ Deno.test("validateGraph - a condition node whose true/false branches converge i
   const violations = validateGraph(g, plugins);
   assertEquals(violations.some((v) => v.kind === "condition_branches_converge"), true);
 });
-
-// --- validateGraphInputMappings (thin aggregator) ---
 
 Deno.test("validateGraphInputMappings - aggregates violations from the underlying grammar/reference/plugin/tool checks", () => {
   const g = validGraph();

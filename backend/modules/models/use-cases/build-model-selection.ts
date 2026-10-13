@@ -37,7 +37,6 @@ export function selectCatalog(
     }
   }
 
-  // The generator may only hand a node a model that can take its tools.
   for (const g of groups) {
     const ref = g.options[0]?.ref;
     if (!ref) continue;
@@ -51,7 +50,6 @@ export function selectCatalog(
 
   const orchestratorId = modelOptionId(orchestrator);
   if (orchestrator.model && !catalog.some((o) => o.id === orchestratorId)) {
-    // Keep what is known about the chat model instead of an empty entry.
     const known = groups
       .flatMap((g) => g.options)
       .find((o) => o.id === orchestratorId && o.ref.keyId === orchestrator.keyId);

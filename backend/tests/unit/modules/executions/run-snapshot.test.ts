@@ -23,7 +23,6 @@ const graph: LangGraphAbstraction = {
       type: "llm",
       config: { model: "claude-x", provider: "anthropic", keyId: "k2" },
     },
-    // What applyDefaultModel leaves behind once "Default model" is resolved.
     {
       id: "c",
       name: "Resolved default",

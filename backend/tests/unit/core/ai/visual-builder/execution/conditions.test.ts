@@ -1,8 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { evaluateCondition, getFieldByPath } from "../../../../../../core/ai/visual-builder/execution/conditions.ts";
 
-// --- getFieldByPath ---
-
 Deno.test("getFieldByPath - resolves nested dotted paths", () => {
   const source = { a: { b: { c: 42 } } };
   assertEquals(getFieldByPath(source, "a.b.c"), 42);
@@ -16,8 +14,6 @@ Deno.test("getFieldByPath - returns undefined for missing intermediate keys", ()
 Deno.test("getFieldByPath - single-level path", () => {
   assertEquals(getFieldByPath({ x: 1 }, "x"), 1);
 });
-
-// --- evaluateCondition ---
 
 Deno.test("evaluateCondition - boolean equals/not_equals, coerces string 'true'", () => {
   assertEquals(evaluateCondition("true", "equals", true), true);

@@ -1,12 +1,8 @@
 export interface GeneratorEvalCase {
   name: string;
-  /** User objective passed verbatim to generateIncrementalGraph. */
   prompt: string;
-  /** Plugin names that must be registered/active for this case. */
   activePlugins: string[];
-  /** Node types expected to appear at least once in the generated graph (besides start/end). */
   expectedNodeTypes?: Array<"llm" | "plugin" | "condition">;
-  /** Minimum number of intermediate (non start/end) nodes expected. */
   minIntermediateNodes?: number;
 }
 

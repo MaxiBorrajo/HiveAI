@@ -31,7 +31,6 @@ interface UsageMetadata {
   output_token_details?: { reasoning?: unknown };
 }
 
-// A figure the provider did not report stays null; it is never completed with 0.
 function reported(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -61,12 +60,8 @@ function linkFor(context: UsageContext | undefined, nodeId: string | null): Usag
   }
 }
 
-// Attached to every chat model by the factory: one row per model call, written
-// when the call ends (ok or error), identical for local and cloud models.
 export class UsageCallbackHandler extends BaseCallbackHandler {
   name = "hiveai_usage";
-  // The row must exist before the call returns, so a message can be linked to
-  // its calls right after the stream ends.
   override awaitHandlers = true;
 
   private pending = new Map<string, PendingCall>();
@@ -188,7 +183,6 @@ export class UsageCallbackHandler extends BaseCallbackHandler {
         link: linkFor(context, call.nodeId),
       });
     } catch (error) {
-      // Telemetry must never break the model call it describes.
       console.error("[Usage] Could not record the model call:", error);
     }
   }

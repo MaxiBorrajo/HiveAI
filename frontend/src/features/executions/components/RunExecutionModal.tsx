@@ -19,12 +19,6 @@ export interface RunExecutionModalProps {
   onRun: () => void;
 }
 
-/**
- * The "Start Execution" input-collection dialog, extracted out of
- * ExecutionsMain (which used to build this Dialog/DialogContent/DialogFooter
- * tree inline, unlike RenameDialog/DeleteConfirmationDialog which already
- * live as their own reusable components).
- */
 export function RunExecutionModal({
   open,
   onOpenChange,

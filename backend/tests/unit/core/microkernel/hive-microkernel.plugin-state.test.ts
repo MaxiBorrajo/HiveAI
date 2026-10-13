@@ -44,11 +44,8 @@ Deno.test("restorePersistedActiveStates() re-activates a plugin that was persist
     "restart-reactivate",
   );
 
-  // Simulate: user activated the plugin in a previous run.
   await repository.setActive(pluginName, true);
-
-  // Simulate a backend restart: brand new HiveMicrokernel instance, plugin
-  // registered fresh (defaults to inactive), same underlying repository/DB.
+  
   const restarted = new HiveMicrokernel();
   restarted.configure({ dataDir: tempDir });
   restarted.setPluginStateRepository(repository);
@@ -66,15 +63,10 @@ Deno.test("restorePersistedActiveStates() deactivates a plugin that was persiste
     "restart-deactivate",
   );
 
-  // Internal plugins default to active on startup.
   await hive.activate(pluginName);
-  // User explicitly deactivated it.
+  
   await hive.deactivate(pluginName);
 
-  // Simulate a backend restart. Startup (main.ts) must consult the
-  // persisted state before defaulting internal plugins to active, otherwise
-  // it would overwrite the persisted `false` with `true` before
-  // restorePersistedActiveStates() ever runs.
   const restarted = new HiveMicrokernel();
   restarted.configure({ dataDir: tempDir });
   restarted.setPluginStateRepository(repository);
@@ -84,7 +76,7 @@ Deno.test("restorePersistedActiveStates() deactivates a plugin that was persiste
 
   const persisted = await restarted.getPersistedActiveState(pluginName);
   if (persisted !== false) {
-    await restarted.activate(pluginName); // default startup behavior
+    await restarted.activate(pluginName);
   }
 
   assertFalse(restarted.isActive(pluginName));
@@ -97,7 +89,6 @@ Deno.test("startup default-activation does not clobber a persisted 'false' befor
     "startup-guard",
   );
 
-  // User previously deactivated the plugin; persisted state says inactive.
   await repository.setActive(pluginName, false);
 
   const restarted = new HiveMicrokernel();
@@ -107,8 +98,6 @@ Deno.test("startup default-activation does not clobber a persisted 'false' befor
   plugin.name = pluginName;
   await restarted.register(plugin);
 
-  // Mirrors main.ts's loadPlugins(): consult persisted state before
-  // defaulting to active.
   const persisted = await restarted.getPersistedActiveState(pluginName);
   if (persisted !== false) {
     await restarted.activate(pluginName);

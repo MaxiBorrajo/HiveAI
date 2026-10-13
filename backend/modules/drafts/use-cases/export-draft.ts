@@ -5,9 +5,6 @@ import { zipTsFolder } from "../../../core/files/zip-folder.ts";
 import { getDraftRepository } from "../lib/draft-context.ts";
 import { ResponseBuilder } from "../../../core/api/response.ts";
 
-// Writes the zip to disk instead of streaming it as a download response —
-// see the same note in modules/plugins/use-cases/export-plugin.ts:
-// the embedded webview doesn't reliably support <a download> + blob URLs.
 export async function handleExportDraft(
   hive: HiveMicrokernel,
   name: string,

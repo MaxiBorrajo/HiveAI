@@ -111,8 +111,6 @@ export function ExecutionResultSidebar({
 
   return (
     <div
-      // Slides by animating `right`, not a transform: the desktop webview
-      // flickers on composited (transform / opacity) animations of big layers.
       style={{
         width: `${sidebarWidth}px`,
         maxWidth: "calc(100vw - 280px)",
@@ -123,15 +121,12 @@ export function ExecutionResultSidebar({
         isResizing && "select-none",
       )}
     >
-      {/* Drag handle */}
       <div
         onMouseDown={startResizing}
         className="absolute left-0 inset-y-0 w-1.5 -translate-x-1/2 cursor-ew-resize hover:bg-emerald-500/50 transition-colors z-50 group"
       >
         <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-1 h-8 rounded-full bg-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
-
-      {/* Top Header */}
       <div className="p-4 border-b border-border/80 bg-card/80 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="size-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
@@ -154,8 +149,6 @@ export function ExecutionResultSidebar({
             </div>
           </div>
         </div>
-
-        {/* Header Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
@@ -248,8 +241,6 @@ export function ExecutionResultSidebar({
           <StateVariablesPanel variables={otherStateVariables} />
         )}
       </div>
-
-      {/* Footer */}
       <div className="p-3.5 border-t border-border/80 bg-muted/50 flex items-center justify-between gap-2">
         <div className="text-[11px] text-muted-foreground font-mono">
           Type: <span className="text-muted-foreground">{resObj.type}</span>

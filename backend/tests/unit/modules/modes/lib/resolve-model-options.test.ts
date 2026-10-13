@@ -77,7 +77,6 @@ Deno.test("mapModeToOllamaOptions - unknown parameter names are ignored, not pas
 });
 
 Deno.test("mapModeToOllamaOptions - wrong-typed currentValue is dropped, not coerced", () => {
-  // n_ctx expects a number; a string value should be treated as absent.
   const options = mapModeToOllamaOptions([
     param({ name: "n_ctx", currentValue: "not-a-number" as unknown as number }),
   ]);

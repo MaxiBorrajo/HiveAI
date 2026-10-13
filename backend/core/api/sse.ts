@@ -23,13 +23,11 @@ export function createSseResponse(
         try {
           send("error", { message: detail });
         } catch {
-          // stream already closed by the client
         }
       } finally {
         try {
           controller.close();
         } catch {
-          // stream already closed or cancelled
         }
       }
     },

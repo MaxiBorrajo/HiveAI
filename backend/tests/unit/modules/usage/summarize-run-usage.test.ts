@@ -158,15 +158,12 @@ Deno.test("summarizeRunUsage - two keys of the same provider stay distinguishabl
   )!;
   assertEquals(usage.cloud.models.length, 1);
   assertEquals(usage.cloud.models[0].keyAliases, ["work", "personal"]);
-  // Each call keeps its own alias, so a key can be added up against the
-  // provider's console.
   const aliases = usage.nodes.find((n) => n.nodeId === "n2")!.calls.map((c) =>
     c.keyAlias
   );
   assertEquals(aliases, ["work", "personal"]);
 });
 
-// What designing the graph cost: a generation call, made by the orchestrator.
 function design(overrides: Partial<UsageRecord> = {}): UsageRecord {
   return call(
     {
@@ -195,8 +192,6 @@ Deno.test("summarizeRunUsage - the same model on two nodes is one row, whatever 
 });
 
 Deno.test("summarizeRunUsage - every node of a run is delegated, against what the orchestrator spent designing it", () => {
-  // The orchestrator designed the graph: 1,000 tokens. The run's nodes
-  // consumed 3,000 (on a local model) and 1,000 (on a cloud model).
   const usage = summarizeRunUsage(
     [
       call({ inputTokens: 2_000, outputTokens: 1_000 }),
@@ -210,9 +205,7 @@ Deno.test("summarizeRunUsage - every node of a run is delegated, against what th
   assertEquals(d.orchestratorCalls, 1);
   assertEquals(d.delegated, { inputTokens: 2_800, outputTokens: 1_200 });
   assertEquals(d.local, { inputTokens: 2_000, outputTokens: 1_000 });
-  // 4,000 delegated against 1,000 spent by the orchestrator.
   assertEquals(d.delegatedShare, 0.8);
-  // Of the delegated work, 3,000 of 4,000 ran locally.
   assertEquals(d.localShare, 0.75);
 });
 
@@ -237,7 +230,6 @@ Deno.test("summarizeRunUsage - without recorded design calls there is no share, 
   });
   assertEquals(usage.delegation.orchestratorCalls, 0);
   assertEquals(usage.delegation.delegatedShare, null);
-  // Local vs cloud inside the delegated work does not need the orchestrator.
   assertEquals(usage.delegation.localShare, 1);
 });
 
@@ -267,11 +259,9 @@ Deno.test("summarizeRunUsage - per node: graph order, resolved model, model node
     usage.nodes.map((n) => n.nodeName),
     ["Summarize", "Review"],
   );
-  // The node that made no call still shows the model it was resolved to.
   const summarize = usage.nodes[0];
   assertEquals(summarize.calls.length, 0);
   assertEquals(summarize.configuredModel?.model, "llama3");
-  // "Save file" is a plugin node with no calls: not listed.
 });
 
 Deno.test("summarizeRunUsage - calls with no node go to their own group", () => {

@@ -22,7 +22,6 @@ export interface ModelProblem {
 
 export interface ModelCheckResult {
   problems: ModelProblem[];
-  // Allowed, but worth showing: the provider does not say if tools work.
   warnings: ModelProblem[];
 }
 

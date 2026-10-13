@@ -64,8 +64,6 @@ interface JoinedRow {
   generationExecutionId: number | null;
 }
 
-// A left-joined table that did not match comes back as nulls, so the link a
-// call belongs to is the one whose usage id is present.
 function contextOf(row: JoinedRow): UsageRecordContext {
   if (row.chatUsageId != null) {
     return {
@@ -131,8 +129,6 @@ export class ModelUsageRepository implements UsageRecorder {
       .where(eq(modelUsage.groupId, groupId));
   }
 
-  // The assistant message only exists after the stream ends, so the calls made
-  // for it are linked afterwards through their group.
   async attachMessage(groupId: string, messageId: number): Promise<void> {
     await this.db
       .update(chatUsage)
@@ -157,13 +153,10 @@ export class ModelUsageRepository implements UsageRecorder {
       );
   }
 
-  // Every call of a chat, unpaginated: the conversation totals need them all.
   listByChat(chatId: number): Promise<UsageRecord[]> {
     return this.query([eq(chatUsage.chatId, chatId)]);
   }
 
-  // Every call of an execution, unpaginated: those of its runs and those that
-  // generated its graph.
   listByExecution(executionId: number): Promise<UsageRecord[]> {
     return this.query([
       or(
@@ -210,10 +203,6 @@ export class ModelUsageRepository implements UsageRecorder {
     conditions: SQL[],
     page?: { limit: number; offset: number },
   ): Promise<UsageRecord[]> {
-    // The sqlite proxy turns each row into an object before positional
-    // mapping, so two selected columns with the same name would collapse into
-    // one. The columns the link tables share (usage_id, execution_id) are
-    // aliased to stay distinct.
     const base = this.db
       .select({
         usage: modelUsage,

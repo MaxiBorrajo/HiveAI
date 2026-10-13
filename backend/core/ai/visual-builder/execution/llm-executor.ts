@@ -242,14 +242,6 @@ export function buildPromptMessages(
   return messagesToSend;
 }
 
-/**
- * Executes an LLM node. If plugins are assigned, it executes an autonomous ReAct
- * tool loop (up to maxTurns turns), invoking the tools and feeding back the results
- * so the agent can read multiple URLs, compute, or search iteratively.
- *
- * `llmFactory` is test-only: pass it to substitute a fake chat model instead of
- * a real ChatOllama instance (e.g. to unit-test the ReAct loop deterministically).
- */
 type ToolLike = {
   name: string;
   invoke(args: unknown): Promise<unknown>;
@@ -445,7 +437,6 @@ export function mapResponseToState(
   if (config.structuredOutput) {
     resultValue = response;
   } else {
-    // Claude may return content blocks (thinking + text fragments); keep only the text.
     const content = (response as AIMessage).content;
     resultValue = Array.isArray(content) ? splitContent(content).text : content;
   }
@@ -498,7 +489,6 @@ export function mapResponseToState(
   return stateUpdate;
 }
 
-/** A failed model call fails the node: continuing with made-up output would corrupt later nodes. */
 export function handleLlmError(
   error: unknown,
   nodeId: string,

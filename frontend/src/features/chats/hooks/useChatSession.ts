@@ -21,8 +21,6 @@ import {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
-  // True from send until the response ends, including while tokens stream
-  // (isThinking is already false by then).
   isBusy: boolean;
 }
 

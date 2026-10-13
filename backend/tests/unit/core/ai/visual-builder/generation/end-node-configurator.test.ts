@@ -55,7 +55,7 @@ Deno.test("buildEndNodeConfigSchema - files is optional and, when provided, each
   const withInvalidFiles = schema.safeParse({
     ...validBase(),
     type: "file",
-    files: [{ name: "report.md" }], // missing required "path"
+    files: [{ name: "report.md" }],
   });
   assertEquals(withInvalidFiles.success, false);
 });

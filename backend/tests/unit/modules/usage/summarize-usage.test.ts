@@ -8,7 +8,6 @@ import {
 
 let nextId = 1;
 
-// A call that ENDED at `end`, so it started at end - durationMs.
 function call(overrides: Partial<UsageRecord> = {}): UsageRecord {
   return {
     id: nextId++,
@@ -80,9 +79,7 @@ Deno.test("summarizeMessageUsage - a call that did not report tokens makes the s
 });
 
 Deno.test("summarizeMessageUsage - tokens per second uses generation time only", () => {
-  // Two calls of 2s, each with 0.5s to first token: 1.5s generating each.
-  // 60 + 90 tokens over 3s of generation = 50 tok/s. The 10s gap between them
-  // (a tool running) is not part of it.
+
   const usage = summarizeMessageUsage([
     call({ outputTokens: 60, durationMs: 2_000, ttftMs: 500, createdAt: 10_000 }),
     call({ outputTokens: 90, durationMs: 2_000, ttftMs: 500, createdAt: 22_000 }),
@@ -114,7 +111,6 @@ Deno.test("summarizeMessageUsage - first token time is the first call's", () => 
 });
 
 Deno.test("summarizeMessageUsage - latency is wall clock, tool waits included", () => {
-  // First call starts at 8_000, the last ends at 22_000.
   const usage = summarizeMessageUsage([
     call({ durationMs: 2_000, createdAt: 10_000 }),
     call({ durationMs: 2_000, createdAt: 22_000 }),

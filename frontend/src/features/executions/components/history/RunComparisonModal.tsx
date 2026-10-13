@@ -341,7 +341,6 @@ export function RunComparisonModal({
   open,
   onOpenChange,
 }: {
-  // Exactly the two runs being compared; null while none is selected.
   runs: [RunSummary, RunSummary] | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;

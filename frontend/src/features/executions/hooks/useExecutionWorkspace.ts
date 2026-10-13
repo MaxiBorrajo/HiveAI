@@ -14,15 +14,6 @@ export interface ExecutionWorkspaceOptions {
   onExecutionCreated: (id: string) => void;
 }
 
-/**
- * Owns all per-execution UI state that used to live as 10 parallel
- * `Record<string, T>` maps directly inside ExecutionsMain (isThinking,
- * isRunning, graph, activeNodeId, planningThought, logs, executionResult,
- * activeToolName — each keyed by execution id / new-execution token so
- * switching between executions doesn't lose in-flight state), plus the two
- * business-logic flows built on top of it: generating a graph (SSE) and
- * running an execution (SSE). ExecutionsMain is left to just render.
- */
 export function useExecutionWorkspace({
   key,
   activeExecutionId,

@@ -36,7 +36,6 @@ export async function getJson(
   return await res.json();
 }
 
-// `capabilities` only ever lists what the provider confirmed for the model.
 export function toCloudModel(
   name: string,
   label: string | undefined,

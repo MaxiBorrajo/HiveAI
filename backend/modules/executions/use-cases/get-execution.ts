@@ -21,7 +21,6 @@ export async function getExecution(
     if (execution.lastGraphId) {
       const dbGraph = await repo.findGraphById(execution.lastGraphId);
       if (dbGraph) {
-        // Compatibility for old executions that were doubly stringified
         if (typeof dbGraph.graph === "string") {
           try {
             dbGraph.graph = JSON.parse(dbGraph.graph);

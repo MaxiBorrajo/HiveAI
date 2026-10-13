@@ -8,8 +8,6 @@ import { ApiKeyRepository } from "../../../../../infrastructure/db/repositories/
 import type { UsageEntry } from "../../../../../core/ai/usage/usage-recorder.ts";
 import type { UsageFilters } from "../../../../../infrastructure/db/repositories/model-usage-repository.ts";
 
-// initORM keeps one db per process: use unique group ids / models and only
-// assert on the rows each test created.
 async function setup() {
   const db = await initORM(await Deno.makeTempDir());
   return {

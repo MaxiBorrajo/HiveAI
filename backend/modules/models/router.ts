@@ -54,8 +54,6 @@ modelsRouter.get("/", (c) => {
   return getModels(filters, { "content-type": "application/json" });
 });
 
-// Query param, not a path segment: model names can contain slashes
-// (hf.co/user/model:tag).
 modelsRouter.delete("/", (c) => {
   return deleteModel(c.get("hive"), c.req.query("name"), {
     "content-type": "application/json",

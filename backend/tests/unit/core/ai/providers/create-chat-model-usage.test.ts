@@ -8,8 +8,6 @@ import {
 import { setUsageRecorder } from "../../../../../core/ai/usage/usage-recorder.ts";
 import { withUsageContext } from "../../../../../core/ai/usage/usage-context.ts";
 
-// Fake provider endpoints: the real ChatOllama / ChatAnthropic classes talk to
-// them, so what is recorded is what the real clients report.
 function ollamaReply(): Response {
   const lines = [
     { model: "llama3", message: { role: "assistant", content: "hi" }, done: false },
@@ -75,8 +73,6 @@ function capture(): UsageEntry[] {
 
 Deno.test("factory usage - a local model call is recorded as local with no key", async () => {
   const entries = capture();
-  // The ollama client keeps the fetch it finds when it is built and has no
-  // base-url hook in the factory, so swap fetch for that moment only.
   const realFetch = globalThis.fetch;
   globalThis.fetch = (() => Promise.resolve(ollamaReply())) as typeof fetch;
   let model;

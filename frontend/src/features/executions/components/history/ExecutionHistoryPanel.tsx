@@ -31,10 +31,8 @@ function RunRow({
   run: RunSummary;
   expanded: boolean;
   onToggle: () => void;
-  // The checkbox only exists while the user is choosing runs to compare.
   selecting: boolean;
   selected: boolean;
-  // Two runs are already picked and this is not one of them.
   selectDisabled: boolean;
   onSelect: () => void;
 }) {
@@ -110,11 +108,8 @@ export function ExecutionHistoryPanel({
   executionId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Changes when a run finishes, so an open panel reloads.
   refreshKey: unknown;
 }) {
-  // Tagged with the execution they belong to, so another execution never
-  // shows the previous one's runs while its own are loading.
   const [loaded, setLoaded] = useState<{
     executionId: string;
     runs: RunSummary[];
@@ -140,7 +135,6 @@ export function ExecutionHistoryPanel({
   const runs = loaded?.executionId === executionId ? loaded.runs : null;
   const selectedIds =
     selected?.executionId === executionId ? selected.historyIds : [];
-  // Older run first, so "left" and "right" read in the order they happened.
   const compared =
     runs && selectedIds.length === MAX_COMPARED
       ? (runs
@@ -195,8 +189,6 @@ export function ExecutionHistoryPanel({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/40" />
         <DialogPrimitive.Popup
-          // `right` is animated instead of a transform: the desktop webview
-          // flickers on composited animations of big layers.
           style={{ right: shown ? 0 : "-32rem" }}
           className="fixed top-0 z-50 flex h-screen w-full max-w-lg flex-col gap-4 border-l border-border bg-popover p-4 text-popover-foreground shadow-xl outline-none transition-[right] duration-200 ease-out"
         >

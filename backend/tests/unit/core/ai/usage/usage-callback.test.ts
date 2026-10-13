@@ -122,7 +122,6 @@ Deno.test("usage callback - figures the provider did not report stay null, never
 
   const [partial, none] = entries.map((e) => e.usage);
   assertEquals(partial.inputTokens, 7);
-  // A reported 0 is a real figure; absent ones are null.
   assertEquals(partial.outputTokens, 0);
   assertEquals(partial.cacheReadTokens, null);
   assertEquals(partial.cacheWriteTokens, null);

@@ -10,11 +10,6 @@ const MAX_CONDITION_RETRIES = 1;
 
 type ConditionCandidate = { field: string; operator: ConditionOperator; value: unknown };
 
-// Checks the LLM's chosen field/operator/value against what we actually know
-// about the graph, instead of silently rewriting a wrong answer. Any
-// violation found here is sent back to the LLM as feedback for a retry — the
-// deterministic rewrite is only applied as a true last resort, once retries
-// are exhausted (see configureConditionNode).
 function validateConditionCandidate(
   candidate: ConditionCandidate,
   incomingNode: GraphNode | undefined,

@@ -7,12 +7,6 @@ export interface PluginActiveChange {
   active: boolean;
 }
 
-/**
- * Applies all changes or none. If any plugin fails to activate/deactivate,
- * every change already applied in this batch is rolled back to its
- * pre-batch state before returning, so the reported state never reflects
- * a partial failure.
- */
 export async function setPluginsActive(
   hive: HiveMicrokernel,
   changes: PluginActiveChange[],

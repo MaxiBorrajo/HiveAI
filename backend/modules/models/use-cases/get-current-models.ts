@@ -14,8 +14,6 @@ export function fetchCurrentModels(hive: HiveMicrokernel): CurrentModels {
   };
 }
 
-// The saved model is re-checked on every read: a provider may have changed what
-// it supports since the model was chosen.
 export async function fetchCurrentModelsWithSupport(
   hive: HiveMicrokernel,
 ): Promise<CurrentModels> {

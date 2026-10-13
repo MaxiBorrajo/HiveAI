@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 
 export interface ResizableSidebarOptions {
-  /** localStorage key used to persist the chosen width across sessions. */
   storageKey: string;
-  /** Minimum sidebar width in px. */
   minWidth: number;
-  /** Default width used when there's no persisted value, and the floor for `maxWidth`. */
   defaultWidth: number;
-  /** How much viewport width to always leave visible on the opposite side. */
   reservedViewportWidth: number;
 }
 
@@ -19,12 +15,6 @@ export interface ResizableSidebar {
   toggleMaximize: () => void;
 }
 
-/**
- * Generic "drag the left edge to resize, persist width in localStorage"
- * mechanic behind a right-docked sidebar. Extracted from
- * ExecutionResultSidebar, which had no dependency on execution-specific
- * state for this — any future slide-over panel can reuse it.
- */
 export function useResizableSidebar({
   storageKey,
   minWidth,

@@ -164,7 +164,6 @@ export function ConditionNode({
         )}
       </div>
       <div className="relative z-10 px-3.5 pt-2.5 pb-4.5 flex flex-col pointer-events-none">
-        {/* Title and ID block */}
         <div className="text-left">
           <h4
             className="font-semibold text-xs text-foreground tracking-tight leading-snug wrap-break-word"

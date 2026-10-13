@@ -85,7 +85,6 @@ async function persistAssistantMessage(
   return messageId;
 }
 
-// The calls were recorded before the message existed; link them by group.
 async function linkUsageToMessage(
   db: AppDatabase,
   groupId: string,
@@ -142,9 +141,6 @@ export function appendThinkingDelta(
   }
 }
 
-// The response's consumption and the conversation totals, sent with `done` so
-// the screen does not have to reload. Reading metrics must never cost the user
-// the response they already got.
 async function usageForDone(
   db: AppDatabase,
   chatId: number,
@@ -172,8 +168,6 @@ export async function consumeStream(
   streamIterable: AsyncIterable<unknown>,
   finalNodeName: string,
   send: (event: string, data: unknown) => void,
-  // Filled in place so the caller still has the partial result if the stream
-  // is aborted (the promise rejects and returns nothing).
   progress: StreamResult = { fullContent: "", steps: [], thinkingRuns: [] },
 ): Promise<StreamResult> {
   const { steps, thinkingRuns } = progress;
@@ -251,7 +245,6 @@ export async function sendMessage(
 
     const chatRepo = new ChatRepository(db);
 
-    // Resolve or create chat
     let resolvedChatId: number;
     if (chatId !== null) {
       const existing = await chatRepo.findById(chatId);

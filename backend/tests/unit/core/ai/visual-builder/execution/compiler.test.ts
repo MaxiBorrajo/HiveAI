@@ -280,10 +280,6 @@ Deno.test("compileGraph - a condition node whose field is already present in sta
     visited: { type: "string", required: false },
   });
   const graph = compileGraph(abstraction, stateSchema, registry);
-
-  // is_valid is already set on the incoming state, so the condition node's
-  // own runnable short-circuits to {} instead of invoking an LLM fallback —
-  // only the conditional-edge routing (evaluateCondition) decides the branch.
   const result = await graph.invoke({ is_valid: true });
   assertEquals(result.visited, "true-branch");
 });
@@ -307,17 +303,12 @@ Deno.test("compileGraph - a condition node with no condition.field configured is
   };
   const stateSchema = buildStateSchema({ visited: { type: "string", required: false } });
   const graph = compileGraph(abstraction, stateSchema, registry);
-
-  // No condition.field: the condition node's runnable returns {} immediately,
-  // and the conditional-edge router (isMatch stays false) falls back to the
-  // only available edge since there's no explicit "false" edge here.
   const result = await graph.invoke({});
   assertEquals(result.visited, "true-branch");
 });
 
 Deno.test("compileGraph - a plugin node executor is resolved by node.type when no pluginId-keyed entry exists in the registry", async () => {
   const registry: NodeRegistry = {
-    // Keyed by node type ("plugin"), not by a specific pluginId.
     plugin: async () => ({ visited: true }),
   };
   const abstraction: LangGraphAbstraction = {

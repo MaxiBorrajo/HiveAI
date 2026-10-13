@@ -1,7 +1,5 @@
 import { Ollama } from "ollama";
 
-// Ollama silently truncates the prompt to a small default window (often 4k tokens).
-// Executions pass whole documents between nodes, so use the model's own window up to a cap.
 export const MAX_LOCAL_NUM_CTX = 16384;
 
 const cache = new Map<string, number | undefined>();
@@ -21,7 +19,6 @@ export async function resolveLocalNumCtx(model: string): Promise<number | undefi
   return ctx;
 }
 
-/** Adds numCtx to Ollama options unless the caller already set one. */
 export async function withLocalNumCtx(
   provider: string,
   model: string,

@@ -239,8 +239,6 @@ function NodeSection({ node }: { node: RunNodeUsage }) {
   );
 }
 
-// What one run consumed. `usage` null means nothing was recorded (the run
-// predates usage tracking): that is "no data", not zeros.
 export function RunUsageBreakdown({ usage }: { usage: RunUsage | null }) {
   if (!usage) {
     return (

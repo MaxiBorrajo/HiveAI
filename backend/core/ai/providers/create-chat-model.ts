@@ -31,8 +31,6 @@ export function setKeyAliasResolver(resolver: KeyAliasResolver): void {
   keyAliasResolver = resolver;
 }
 
-// The only place a chat model is built: every model gets the usage callback
-// here, so no call site has to record its own consumption.
 export async function createChatModel(
   ref: ModelRef,
   options: ChatModelOptions = {},

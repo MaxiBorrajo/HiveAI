@@ -8,8 +8,6 @@ import {
 import { START_NODE_ID, END_NODE_ID } from "../../../../../core/ai/visual-builder/constants.ts";
 import type { LangGraphAbstraction } from "../../../../../core/ai/visual-builder/types.ts";
 
-// --- createBaseStateSchema ---
-
 Deno.test("createBaseStateSchema - always includes input, cwd and os as optional string fields", () => {
   const schema = createBaseStateSchema();
   assertEquals(Object.keys(schema).sort(), ["cwd", "input", "os"]);
@@ -25,8 +23,6 @@ Deno.test("createBaseStateSchema - returns a fresh object each call (not a share
   a.input.type = "number" as any;
   assertEquals(b.input.type, "string");
 });
-
-// --- createEmptyGraph ---
 
 Deno.test("createEmptyGraph - has exactly a start and an end node, no edges", () => {
   const graph = createEmptyGraph();
@@ -51,8 +47,6 @@ Deno.test("createEmptyGraph - stateSchema matches createBaseStateSchema", () => 
   const graph = createEmptyGraph();
   assertEquals(graph.stateSchema, createBaseStateSchema());
 });
-
-// --- syncStateSchema ---
 
 Deno.test("syncStateSchema - merges in the base schema keys if missing", () => {
   const graph: LangGraphAbstraction = { nodes: [], edges: [], stateSchema: {} };
@@ -114,8 +108,6 @@ Deno.test("syncStateSchema - returns a new graph object, does not mutate the inp
   assertEquals(graph.stateSchema, {});
 });
 
-// --- createDraftGraph ---
-
 Deno.test("createDraftGraph - with no argument, returns an empty graph (no nodes/edges) with the base schema", () => {
   const draft = createDraftGraph();
   assertEquals(draft.nodes, []);
@@ -133,8 +125,7 @@ Deno.test("createDraftGraph - given a currentGraph, returns a deep clone of it",
   assertEquals(draft, current);
   assertEquals(draft === current, false);
   assertEquals(draft.nodes[0] === current.nodes[0], false);
-
-  // Mutating the clone must not affect the original (proves it's a deep clone).
+  
   (draft.nodes[0].config.nested as any).a = 999;
   assertEquals((current.nodes[0].config.nested as any).a, 1);
 });

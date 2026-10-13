@@ -37,7 +37,6 @@ Deno.test("isNewerVersion - differing segment counts are compared as if missing 
 
 Deno.test("isNewerVersion - non-numeric segments are treated as 0", () => {
   assertEquals(isNewerVersion("1.x.0", "1.0.0"), false);
-  // Both "x" segments parse to 0, so this reduces to comparing [1,0,0] vs [1,0,1]
   assertEquals(isNewerVersion("1.0.0", "1.x.1"), true);
 });
 

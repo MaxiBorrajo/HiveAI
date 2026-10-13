@@ -3,8 +3,6 @@ import { HiveMicrokernel } from "../../../../../../core/microkernel/hive-microke
 import CounterPlugin from "../../../../../../plugins/counter/index.ts";
 import { describeActivePlugins } from "../../../../../../modules/executions/use-cases/generate-execution/describe-plugins.ts";
 
-// describeActivePlugins reads from the HiveMicrokernel singleton, so each
-// test registers its own uniquely-named plugin and tears it down after.
 async function withRegisteredCounter(
   pluginName: string,
   fn: (hive: HiveMicrokernel) => Promise<void> | void,
@@ -33,7 +31,6 @@ Deno.test("describeActivePlugins - returns an empty array when no plugins are ac
   const plugin = new CounterPlugin();
   plugin.name = "describe-plugins-inactive";
   await hive.register(plugin);
-  // Deliberately not activated.
 
   try {
     const result = describeActivePlugins(hive).filter(
@@ -61,8 +58,6 @@ Deno.test("describeActivePlugins - extracts every schema field as a parameterKey
     const info = describeActivePlugins(hive).find(
       (p) => p.name === "describe-plugins-counter-2",
     );
-    // CounterPlugin's schema has: name (required), action (optional, has a
-    // default), amount (optional, has a default).
     assertEquals(new Set(info!.parameterKeys), new Set(["name", "action", "amount"]));
   });
 });

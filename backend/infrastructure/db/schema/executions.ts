@@ -23,12 +23,8 @@ export const executionGraphs = sqliteTable("execution_graphs", {
   executionId: integer("executionId")
     .notNull()
     .references((): AnySQLiteColumn => executions.id, { onDelete: "cascade" }),
-  // JSON representing LangGraphAbstraction (nodes and edges)
   graph: text("graph", { mode: "json" }).notNull(),
-  // JSON representing State Schema
   state: text("state", { mode: "json" }).notNull(),
-  // The model that orchestrated the generation of this graph. Null for graphs
-  // saved before it was recorded.
   orchestrator: text("orchestrator", { mode: "json" }).$type<
     { provider: string; model: string; keyId?: string } | null
   >(),
@@ -41,7 +37,6 @@ export const executionHistory = sqliteTable("execution_history", {
     .notNull()
     .references((): AnySQLiteColumn => executions.id, { onDelete: "cascade" }),
   iteration: integer("iteration").notNull(),
-  // JSON representing the actual execution state values at this iteration
   result: text("result", { mode: "json" }).notNull(),
   version: integer("version").notNull().default(1),
   createdAt: integer("createdAt").notNull(),

@@ -57,8 +57,6 @@ function fullExecutionSuite(): ExecutionTestCase<typeof schema>[] {
   ];
 }
 
-// --- validateSelectionTests ---
-
 Deno.test("validateSelectionTests - a suite meeting all minimums (3/3/3, 9 total) is valid", () => {
   const report = validateSelectionTests(fullSelectionSuite());
   assertEquals(report.valid, true);
@@ -101,8 +99,6 @@ Deno.test("validateSelectionTests - no default argument (undefined) behaves like
   assertEquals(report.total, 0);
 });
 
-// --- validateExecutionTests ---
-
 Deno.test("validateExecutionTests - a suite meeting all minimums (3/3/3, 9 total) with valid params is valid", () => {
   const report = validateExecutionTests(schema, fullExecutionSuite());
   assertEquals(report.valid, true);
@@ -142,8 +138,6 @@ Deno.test("validateExecutionTests - no default argument (undefined) behaves like
   assertEquals(report.total, 0);
 });
 
-// --- validatePlugin (combines both suites) ---
-
 function fakePlugin(
   overrides: Partial<Pick<BeePlugin, "selectionTests" | "executionTests">> = {},
 ): BeePlugin {
@@ -178,7 +172,7 @@ Deno.test("validatePlugin - invalid when only the execution suite fails", () => 
 
 Deno.test("validatePlugin - total and counts are the sum/merge of both suites", () => {
   const report = validatePlugin(fakePlugin());
-  assertEquals(report.total, 18); // 9 selection + 9 execution
+  assertEquals(report.total, 18);
   assertEquals(report.counts, {
     positive: 3,
     negative: 3,

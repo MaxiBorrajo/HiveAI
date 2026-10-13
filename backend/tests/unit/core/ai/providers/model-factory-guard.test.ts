@@ -4,15 +4,10 @@ import { dirname, fromFileUrl, relative, join } from "@std/path";
 
 const BACKEND = join(dirname(fromFileUrl(import.meta.url)), "../../../../..");
 
-// Chat models must be built by createChatModel: that is where the usage
-// callback is attached. Anything that builds one elsewhere is not recorded.
 const ALLOWED = [
-  // The factory itself and the provider adapters it delegates to.
   "core/ai/providers/create-chat-model.ts",
   "core/ai/providers/adapters/",
-  // Offline routing experiments, not part of the app.
   "experiments/",
-  // Tests may build real classes to assert on them.
   "tests/",
   "core/ai/providers/create-chat-model.test.ts",
   "core/ai/providers/list-cloud-models.test.ts",

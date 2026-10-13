@@ -34,8 +34,6 @@ const plugins: PluginInfo[] = [
   { name: "web-search", description: "search the web" } as PluginInfo,
 ];
 
-// --- basic node construction ---
-
 Deno.test("normalizeSkeletonToGraph - always injects a built-in start and end node", () => {
   const result = normalizeSkeletonToGraph(skeleton({ nodes: [skeletonNode({ id: "a" })] }), emptyGraph(), []);
   assertEquals(result.startNode.id, "start");
@@ -91,8 +89,6 @@ Deno.test("normalizeSkeletonToGraph - a plain 'llm' node with no plugins/pluginI
   assertEquals(result.intermediateNodes[0].config, {});
 });
 
-// --- id handling ---
-
 Deno.test("normalizeSkeletonToGraph - node descriptions are tracked per generated node id", () => {
   const result = normalizeSkeletonToGraph(
     skeleton({ nodes: [skeletonNode({ id: "step1", description: "the first step" })] }),
@@ -120,8 +116,6 @@ Deno.test("normalizeSkeletonToGraph - a node literally named 'start' or 'end' ge
     emptyGraph(),
     plugins,
   );
-  // Note: "end" as an id also matches the boundary-alias heuristic (isBoundaryAlias),
-  // so this node is actually treated as an end-alias and excluded from intermediateNodes.
   assertEquals(result.intermediateNodes.length, 0);
 });
 
@@ -142,8 +136,6 @@ Deno.test("normalizeSkeletonToGraph - modified flag is tracked by the generated 
   );
   assertEquals(result.modifiedIds.has("step1"), true);
 });
-
-// --- boundary aliases ---
 
 Deno.test("normalizeSkeletonToGraph - a node aliasing 'start' (by id/name) is excluded from intermediateNodes", () => {
   const result = normalizeSkeletonToGraph(
@@ -169,18 +161,14 @@ Deno.test("normalizeSkeletonToGraph - an edge targeting a start-alias is redirec
         skeletonNode({ id: "real_step" }),
       ],
       edges: [
-        // start_node's own outgoing edge is captured into bypassMap as its real target...
         { source: "start_node", target: "real_step" },
-        // ...so an edge TARGETING start_node gets redirected straight to real_step.
         { source: "start", target: "start_node" },
       ],
     }),
     emptyGraph(),
     plugins,
   );
-  // The "start_node -> real_step" edge itself is dropped (its source is bypassed).
   assertEquals(result.rawEdges.some((e) => e.source === "start_node"), false);
-  // But "start -> start_node" is rewritten to "start -> real_step"../../../../../../core/ai/visual-builder/generation/.
   assertEquals(result.rawEdges.some((e) => e.source ==="start" && e.target === "real_step"), true);
 });
 
@@ -201,8 +189,6 @@ Deno.test("normalizeSkeletonToGraph - an edge targeting an end-alias is redirect
     true,
   );
 });
-
-// --- edges ---
 
 Deno.test("normalizeSkeletonToGraph - builds a normal edge between two valid intermediate nodes", () => {
   const result = normalizeSkeletonToGraph(
@@ -297,8 +283,6 @@ Deno.test("normalizeSkeletonToGraph - edge ids are deterministic and unique per 
   assertEquals(ids.includes("edge_check_b_true"), true);
   assertEquals(ids.includes("edge_check_c_false"), true);
 });
-
-// --- mutation of the input graph ---
 
 Deno.test("normalizeSkeletonToGraph - pushes start, intermediate nodes, and end (in that order) onto the passed-in graph", () => {
   const graph = emptyGraph();

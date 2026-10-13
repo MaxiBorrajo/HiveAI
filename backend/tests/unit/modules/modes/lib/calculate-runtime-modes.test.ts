@@ -88,7 +88,6 @@ Deno.test("applyRuntimeHints - mmap is the inverse of mlockSafe", () => {
 
   applyRuntimeHints(m, hints({ mlockSafe: true }));
 
-  // mlock is safe -> prefer not to mmap
   assertEquals(m.parameters![0].defaultValue, false);
   assertEquals(m.parameters![0].currentValue, false);
 });

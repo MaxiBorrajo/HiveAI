@@ -39,7 +39,7 @@ export interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  path?: "true" | "false"; // Used if source is a condition node
+  path?: "true" | "false";
   isConditional: boolean;
   condition?: {
     field: string;
@@ -89,19 +89,15 @@ export interface ExecutionDetails {
 }
 
 export type ExecutionResultType =
-  // Documentos y Archivos
   | "file"
   | "markdown"
   | "text"
-  // Datos y Analítica
   | "table"
   | "chart"
   | "json"
-  // Multimedia y Web
   | "image"
   | "html"
   | "url"
-  // Operaciones y Lógica
   | "terminal"
   | "boolean"
   | "error";
@@ -128,17 +124,12 @@ export interface ExecutionResultData {
   historyId?: number;
   createdAt?: number;
 }
-
-
-// One past run of an execution, with what it consumed. `usage` is null for
-// runs that predate usage tracking.
 export interface RunSummary {
   historyId: number;
   iteration: number;
   createdAt: number;
   graphId: number;
   result: unknown;
-  // What the run was started with; null for runs that predate recording it.
   input: Record<string, unknown> | null;
   usage: RunUsage | null;
 }

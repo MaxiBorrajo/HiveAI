@@ -1,5 +1,3 @@
-// Every formatter takes null for "the provider did not report it" and shows
-// "—", never a zero.
 export const NO_DATA = "—";
 
 export function formatTokens(
@@ -20,7 +18,6 @@ export function formatDuration(ms: number | null): string {
   return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-// Cached tokens are only worth a mention when there are some.
 export function hasTokens(tokens: number | null): tokens is number {
   return tokens !== null && tokens > 0;
 }
@@ -30,7 +27,6 @@ export function formatShare(share: number | null): string {
   return `${Math.round(share * 100)}%`;
 }
 
-// Input + output the providers reported; null when they reported neither.
 export function pairTokens(pair: {
   inputTokens: number | null;
   outputTokens: number | null;

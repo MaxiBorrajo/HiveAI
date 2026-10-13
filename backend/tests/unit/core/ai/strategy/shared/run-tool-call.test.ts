@@ -4,9 +4,6 @@ import { HiveMicrokernel } from "../../../../../../core/microkernel/hive-microke
 import CounterPlugin from "../../../../../../plugins/counter/index.ts";
 import { runToolCall, summarize } from "../../../../../../core/ai/strategy/shared/run-tool-call.ts";
 
-// runToolCall reads from the HiveMicrokernel singleton (getInstance), so
-// each test registers its own uniquely-named plugin instance and tears it
-// down in `finally` to avoid leaking state across tests.
 async function withRegisteredCounter(
   pluginName: string,
   fn: (hive: HiveMicrokernel) => Promise<void>,
@@ -31,7 +28,6 @@ function toolCall(overrides: Partial<ToolCall>): ToolCall {
   return { name: "unused", args: {}, id: "call_1", type: "tool_call", ...overrides };
 }
 
-// --- summarize ---
 
 Deno.test("summarize - short text passes through unchanged", () => {
   assertEquals(summarize("short text"), "short text");
@@ -44,7 +40,7 @@ Deno.test("summarize - collapses internal whitespace/newlines into single spaces
 Deno.test("summarize - truncates with ellipsis beyond maxChars", () => {
   const long = "a".repeat(300);
   const result = summarize(long);
-  assertEquals(result.length, 203); // 200 chars + "..."
+  assertEquals(result.length, 203)
   assertEquals(result.endsWith("..."), true);
 });
 
@@ -52,8 +48,6 @@ Deno.test("summarize - respects a custom maxChars", () => {
   const result = summarize("abcdefghij", 5);
   assertEquals(result, "abcde...");
 });
-
-// --- runToolCall ---
 
 Deno.test("runToolCall - returns an error ToolMessage when the tool is not registered anywhere", async () => {
   const { message, steps, ok } = await runToolCall(
@@ -87,8 +81,6 @@ Deno.test("runToolCall - successfully invokes a registered microkernel plugin an
 
 Deno.test("runToolCall - a schema-rejecting tool call is caught and returned as an error ToolMessage, not thrown", async () => {
   await withRegisteredCounter("run-tool-call-counter-2", async () => {
-    // "not-a-real-action" fails the plugin's own Zod enum validation inside
-    // tool.invoke(), which throws — runToolCall must catch it, not propagate it.
     const { message, ok, steps } = await runToolCall(
       toolCall({
         name: "run-tool-call-counter-2",
