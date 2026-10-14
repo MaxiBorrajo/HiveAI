@@ -253,17 +253,26 @@
   },
   {
     "name": "custom",
-    "isCurrent": false,
+    "isCurrent": true,
     "description": "Full manual control over all inference and model parameters.",
     "parameters": [
       {
         "name": "kv_cache_type",
         "description": "Quantization type applied to both the Key and Value attention caches. Lower bit precision reduces VRAM and memory bandwidth usage at a cost to precision. Ollama applies a single quantization to K and V together — it cannot be set independently.",
         "type": "string",
-        "defaultValue": "q8_0",
-        "currentValue": "q4_0",
+        "defaultValue": "f16",
+        "currentValue": "f16",
         "options": ["f16", "q8_0", "q4_0"],
-        "note": "Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
+        "note": "Requires flash_attention to take effect. On CPU-only machines quantized caches (q8_0, q4_0) roughly halved prompt-processing speed in our benchmarks, so f16 is the default; quantize only to save memory. Set via the OLLAMA_KV_CACHE_TYPE environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
+        "requiresServiceRestart": true
+      },
+      {
+        "name": "flash_attention",
+        "description": "Enables flash attention, a faster and more memory-efficient attention implementation. Required for KV cache quantization to take effect.",
+        "type": "boolean",
+        "defaultValue": true,
+        "currentValue": true,
+        "note": "Set via the OLLAMA_FLASH_ATTENTION environment variable, global to the whole Ollama process — applying a change restarts the Ollama service and affects every model, not just the active one.",
         "requiresServiceRestart": true
       },
       {
@@ -313,7 +322,7 @@
         "description": "Enables memory-mapping to load the model file directly from disk, reducing startup time and allowing the OS to page weights dynamically.",
         "type": "boolean",
         "defaultValue": true,
-        "currentValue": false,
+        "currentValue": true,
         "note": "Calculated at runtime based on available RAM relative to the loaded model's size. Disabling mmap forces the full model into non-mapped process memory — on systems without enough free RAM to hold it, this causes heavy swapping and can collapse throughput by an order of magnitude.",
         "requiresServiceRestart": false
       },
@@ -322,7 +331,17 @@
         "description": "Locks model weights in physical RAM, preventing the operating system from paging them to the swap disk and ensuring consistent latency.",
         "type": "boolean",
         "defaultValue": false,
-        "currentValue": true,
+        "currentValue": false,
+        "requiresServiceRestart": false
+      },
+      {
+        "name": "keep_alive",
+        "description": "How long the model stays loaded in memory after the last request. Keeping it loaded avoids the cold-start cost of reloading it on the next message.",
+        "type": "string",
+        "defaultValue": "30m",
+        "currentValue": "30m",
+        "options": ["5m", "30m", "1h", "24h"],
+        "note": "Applied per request, no restart needed.",
         "requiresServiceRestart": false
       },
       {
@@ -378,7 +397,7 @@
   },
   {
     "name": "default",
-    "isCurrent": true,
+    "isCurrent": false,
     "description": "Balanced profile using Ollama's own defaults for context size and memory usage."
   }
 ]

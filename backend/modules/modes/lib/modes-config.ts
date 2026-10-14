@@ -10,12 +10,33 @@ function getConfigPath(): string {
   return join(configDir, CONFIG_FILE_NAME);
 }
 
+function addMissingParameters(modes: ChatMode[]): boolean {
+  const bundled = JSON.parse(defaultModesConfig) as ChatMode[];
+  let changed = false;
+
+  for (const mode of modes) {
+    const bundledParams = bundled.find((m) => m.name === mode.name)?.parameters;
+    if (!mode.parameters || !bundledParams) continue;
+
+    const known = new Set(mode.parameters.map((p) => p.name));
+    for (const parameter of bundledParams) {
+      if (known.has(parameter.name)) continue;
+      mode.parameters.push(parameter);
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 export async function readModesConfig(): Promise<ChatMode[]> {
   const path = getConfigPath();
 
   try {
     const raw = await Deno.readTextFile(path);
-    return JSON.parse(raw) as ChatMode[];
+    const modes = JSON.parse(raw) as ChatMode[];
+    if (addMissingParameters(modes)) await writeModesConfig(modes);
+    return modes;
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error;
     await Deno.writeTextFile(path, defaultModesConfig);

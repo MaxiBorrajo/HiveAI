@@ -156,18 +156,40 @@ export function ModesManager() {
                           <span>{mode.performanceNote}</span>
                         </div>
                       )}
-                      {mode.parameters.map((parameter) => (
-                        <div
-                          key={`${mode.name}-${parameter.name}`}
-                          className="px-1.5 py-1"
-                        >
-                          <ParameterOption
-                            parameter={parameter}
-                            mode={mode}
-                            onChange={onChange}
-                          />
-                        </div>
-                      ))}
+                      {[
+                        {
+                          title: "Per request",
+                          items: mode.parameters.filter(
+                            (p) => !p.requiresServiceRestart,
+                          ),
+                        },
+                        {
+                          title: "Ollama server (restarts Ollama)",
+                          items: mode.parameters.filter(
+                            (p) => p.requiresServiceRestart,
+                          ),
+                        },
+                      ]
+                        .filter((group) => group.items.length > 0)
+                        .map((group) => (
+                          <div key={`${mode.name}-${group.title}`}>
+                            <div className="px-1.5 pt-2 text-xs font-medium text-muted-foreground">
+                              {group.title}
+                            </div>
+                            {group.items.map((parameter) => (
+                              <div
+                                key={`${mode.name}-${parameter.name}`}
+                                className="px-1.5 py-1"
+                              >
+                                <ParameterOption
+                                  parameter={parameter}
+                                  mode={mode}
+                                  onChange={onChange}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ))}
                       <div className="flex flex-1 items-center justify-end gap-2 p-2">
                         <Button
                           onClick={reset(mode)}

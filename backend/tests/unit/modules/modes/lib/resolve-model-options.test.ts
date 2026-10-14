@@ -97,3 +97,19 @@ Deno.test("mapModeToOllamaOptions - zero and false are valid values, not strippe
   assertEquals(options.numGpu, 0);
   assertEquals(options.useMmap, false);
 });
+
+Deno.test("mapModeToOllamaOptions - keep_alive maps to keepAlive, blank is omitted", () => {
+  assertEquals(
+    mapModeToOllamaOptions([
+      param({ name: "keep_alive", type: "string", currentValue: " 30m " }),
+    ]).keepAlive,
+    "30m",
+  );
+  assertEquals(
+    "keepAlive" in
+      mapModeToOllamaOptions([
+        param({ name: "keep_alive", type: "string", currentValue: "" }),
+      ]),
+    false,
+  );
+});

@@ -14,6 +14,7 @@ export interface OllamaModelOptions {
   topP?: number;
   repeatPenalty?: number;
   numPredict?: number;
+  keepAlive?: string;
 }
 
 function resolveNumPredict(
@@ -36,6 +37,12 @@ function resolveNumGpu(
   const numGpu = toNumber(value);
   if (numGpu === -1) return undefined;
   return numGpu;
+}
+
+function toKeepAlive(
+  value: ChatModeParameter["currentValue"],
+): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function toBoolean(
@@ -61,6 +68,7 @@ export function mapModeToOllamaOptions(
     topP: toNumber(byName.get("top_p")),
     repeatPenalty: toNumber(byName.get("repeat_penalty")),
     numPredict: resolveNumPredict(parameters),
+    keepAlive: toKeepAlive(byName.get("keep_alive")),
   };
 
   for (const key of Object.keys(options)) {
