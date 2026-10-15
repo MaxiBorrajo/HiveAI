@@ -2,6 +2,7 @@ import ollama from "ollama";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
 import type { LangGraphAbstraction, PluginInfo } from "../../core/ai/visual-builder/types.ts";
+import type { ModelRef } from "../../core/ai/providers/types.ts";
 import WebSearchPlugin from "../../plugins/web-search/index.ts";
 import WebReadPlugin from "../../plugins/web-read/index.ts";
 import FileOpsPlugin from "../../plugins/file-ops/index.ts";
@@ -10,6 +11,9 @@ import CounterPlugin from "../../plugins/counter/index.ts";
 import { generatorEvalCases, type GeneratorEvalCase } from "./generatorCases.ts";
 import { generateIncrementalGraph } from "../../core/ai/visual-builder/generation/generate-graph.ts";
 import { validateGraphAgentToolMentions, validateGraphInterpolationGrammar, validateGraphPluginParameters, validateGraphVariableReferences } from "../../core/ai/visual-builder/generation/validation.ts";
+import { modelRefLabel } from "./model-ref.ts";
+import { captureUsage } from "./usage-capture.ts";
+import type { EvalVerdict } from "./metrics.ts";
 
 const ALL_PLUGINS = [WebSearchPlugin, WebReadPlugin, FileOpsPlugin, CurrentDatetimePlugin, CounterPlugin];
 const GENERATION_TIMEOUT_MS = 300_000;
@@ -56,31 +60,45 @@ function toPluginInfo(hive: HiveMicrokernel): PluginInfo[] {
 }
 
 async function runCase(
-  model: string,
+  executorRef: ModelRef,
   availablePlugins: PluginInfo[],
   testCase: GeneratorEvalCase,
-): Promise<CaseOutcome> {
+): Promise<CaseOutcome & { inputTokens: number; outputTokens: number; durationMs: number }> {
   const details: string[] = [];
   const scopedPlugins = availablePlugins.filter((p) => testCase.activePlugins.includes(p.name));
-
-  const generator = generateIncrementalGraph(testCase.prompt, model, scopedPlugins);
 
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`generation exceeded ${GENERATION_TIMEOUT_MS}ms`)), GENERATION_TIMEOUT_MS),
   );
 
   let graph: LangGraphAbstraction;
+  let usage: { inputTokens: number; outputTokens: number; durationMs: number };
   try {
-    let result = await Promise.race([generator.next(), timeout]);
-    while (!result.done) {
-      result = await Promise.race([generator.next(), timeout]);
-    }
-    graph = result.value as LangGraphAbstraction;
+    const captured = await captureUsage(async () => {
+      const generator = generateIncrementalGraph(
+        testCase.prompt,
+        executorRef.model,
+        scopedPlugins,
+        undefined,
+        undefined,
+        { orchestrator: executorRef, catalog: [] },
+      );
+      let result = await Promise.race([generator.next(), timeout]);
+      while (!result.done) {
+        result = await Promise.race([generator.next(), timeout]);
+      }
+      return result.value as LangGraphAbstraction;
+    });
+    graph = captured.result;
+    usage = captured.usage;
   } catch (err) {
     return {
       case: testCase,
       pass: false,
       details: [`generation threw/timed out: ${err instanceof Error ? err.message : String(err)}`],
+      inputTokens: 0,
+      outputTokens: 0,
+      durationMs: 0,
     };
   }
 
@@ -115,25 +133,28 @@ async function runCase(
     }
   }
 
-  return { case: testCase, pass: details.length === 0, details, graph };
+  return { case: testCase, pass: details.length === 0, details, graph, ...usage };
 }
 
-async function main() {
-  const model = Deno.args[0] ?? "qwen3:8b";
-
-  const available = await ensureModelAvailable(model);
-  if (!available) {
-    console.log(
-      `SKIPPED: model '${model}' is not available in Ollama. Run 'ollama pull ${model}' or pass a different model as the first argument.`,
-    );
-    return;
+export async function runGeneratorSuite(
+  executorRef: ModelRef,
+  runId: string,
+): Promise<EvalVerdict[]> {
+  if (executorRef.provider === "ollama") {
+    const available = await ensureModelAvailable(executorRef.model);
+    if (!available) {
+      console.log(
+        `SKIPPED (generation): Ollama model '${executorRef.model}' is not available. Run 'ollama pull ${executorRef.model}'.`,
+      );
+      return [];
+    }
   }
 
   const tempDir = await Deno.makeTempDir();
   await initORM(tempDir);
 
   const hive = HiveMicrokernel.getInstance();
-  hive.configure({ dataDir: tempDir, model });
+  hive.configure({ dataDir: tempDir, model: executorRef.model });
   for (const PluginClass of ALL_PLUGINS) {
     await hive.register(new PluginClass());
   }
@@ -142,12 +163,12 @@ async function main() {
   }
 
   const availablePlugins = toPluginInfo(hive);
+  const label = modelRefLabel(executorRef);
 
-  const outcomes: CaseOutcome[] = [];
+  const verdicts: EvalVerdict[] = [];
   for (const testCase of generatorEvalCases) {
     console.log(`\nRunning: ${testCase.name}`);
-    const outcome = await runCase(model, availablePlugins, testCase);
-    outcomes.push(outcome);
+    const outcome = await runCase(executorRef, availablePlugins, testCase);
     console.log(`  ${outcome.pass ? "PASS" : "FAIL"}`);
     if (!outcome.pass) {
       for (const d of outcome.details) console.log(`    - ${d}`);
@@ -157,13 +178,36 @@ async function main() {
         `  graph: ${outcome.graph.nodes.length} nodes, ${outcome.graph.edges.length} edges -> [${outcome.graph.nodes.map((n) => `${n.id}:${n.type}`).join(", ")}]`,
       );
     }
+    verdicts.push({
+      case_id: testCase.name,
+      category: "generation",
+      executor_model: label,
+      judge_model: label,
+      provider: executorRef.provider,
+      pass: outcome.pass,
+      judged_by: "exact",
+      detail: outcome.pass ? "matched expectation" : outcome.details.join(" | "),
+      input_tokens: outcome.inputTokens,
+      output_tokens: outcome.outputTokens,
+      duration_ms: outcome.durationMs,
+      run_id: runId,
+    });
   }
 
-  const totalPassed = outcomes.filter((o) => o.pass).length;
-  console.log(`\n--- Summary ---`);
-  console.log(`Total: ${totalPassed}/${outcomes.length}`);
-
   await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+  return verdicts;
+}
+
+async function main() {
+  const { parseModelArg } = await import("./model-ref.ts");
+  const { installInMemoryUsageRecorder } = await import("./usage-capture.ts");
+  const { writeReport } = await import("./metrics.ts");
+
+  installInMemoryUsageRecorder();
+  const executorRef = parseModelArg(Deno.args[0] ?? "qwen3:8b");
+  const runId = `standalone-${Date.now()}`;
+  const verdicts = await runGeneratorSuite(executorRef, runId);
+  if (verdicts.length > 0) await writeReport(verdicts);
 }
 
 if (import.meta.main) {

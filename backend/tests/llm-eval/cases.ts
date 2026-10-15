@@ -1,7 +1,13 @@
 export type EvalCategory =
   | "routing"
   | "abstention"
-  | "param-extraction";
+  | "param-extraction"
+  | "multi-turn";
+
+export interface PriorTurn {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export interface EvalCase {
   name: string;
@@ -10,6 +16,8 @@ export interface EvalCase {
   activePlugins: string[];
   expectedTool: string | null;
   expectedParams?: Record<string, unknown>;
+  /** Prior messages in the conversation, for multi-turn cases. */
+  priorTurns?: PriorTurn[];
 }
 
 export const evalCases: EvalCase[] = [
@@ -85,5 +93,68 @@ export const evalCases: EvalCase[] = [
     activePlugins: ["counter", "current_datetime"],
     expectedTool: "current_datetime",
     expectedParams: { format: "date" },
+  },
+  {
+    name: "routing: pick file_read over web_search for a local file question",
+    category: "routing",
+    query: "what's inside my README.md file?",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "file_read",
+  },
+  {
+    name: "routing: pick web_search over file_read for a current-events question",
+    category: "routing",
+    query: "what's the latest news on the JavaScript ecosystem?",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "web_search",
+  },
+  {
+    name: "abstention: timeless knowledge question with web_search active should not trigger a search",
+    category: "abstention",
+    query: "what's the capital of France?",
+    activePlugins: ["web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: file_read not active should never be selected for a file question",
+    category: "abstention",
+    query: "read the contents of config.json for me",
+    activePlugins: ["web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "multi-turn: a follow-up pronoun ('it') resolves to the counter named earlier",
+    category: "multi-turn",
+    query: "now increment it by 5",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "create a counter called pushups" },
+      { role: "assistant", content: "Done — I created a counter named 'pushups'." },
+    ],
+    expectedTool: "counter",
+    expectedParams: { name: "pushups", action: "increment", amount: 5 },
+  },
+  {
+    name: "multi-turn: after an unrelated exchange, a direct datetime question still routes correctly",
+    category: "multi-turn",
+    query: "and what time is it now?",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "hey, how's it going?" },
+      { role: "assistant", content: "Doing well, how can I help?" },
+    ],
+    expectedTool: "current_datetime",
+  },
+  {
+    name: "multi-turn: correction in a later turn changes the target counter",
+    category: "multi-turn",
+    query: "actually, make that the water counter instead",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "add one to my coffee counter" },
+      { role: "assistant", content: "Added one to 'coffee'. It's now at 1." },
+    ],
+    expectedTool: "counter",
+    expectedParams: { name: "water", action: "increment" },
   },
 ];
