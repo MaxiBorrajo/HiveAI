@@ -1,3 +1,4 @@
+import { executionContextStorage } from "../../../../core/microkernel/human-interaction.ts";
 import { buildModelSelection } from "../../../models/use-cases/build-model-selection.ts";
 import { createSseResponse } from "../../../../core/api/sse.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
@@ -107,7 +108,11 @@ export async function generateExecution(
   executionId: number | undefined,
   targetNodeId: string | undefined,
   headers: Record<string, string>,
-  options: { currentGraph?: LangGraphAbstraction; dryRun?: boolean } = {},
+  options: {
+    currentGraph?: LangGraphAbstraction;
+    dryRun?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<Response> {
   const { dryRun = false } = options;
   return createSseResponse(headers, async (send) => {
@@ -147,7 +152,9 @@ export async function generateExecution(
       modelSelection,
     );
 
-    const finalGraph: LangGraphAbstraction | null = await withUsageContext(
+    const finalGraph: LangGraphAbstraction | null = await executionContextStorage.run(
+      { autoApprove: false, signal: options.signal, interactive: true },
+      () => withUsageContext(
       {
         kind: "graph_generation",
         role: "orchestrator",
@@ -162,6 +169,7 @@ export async function generateExecution(
         }
         return result.value ?? null;
       },
+      ),
     );
     if (!finalGraph) return;
 

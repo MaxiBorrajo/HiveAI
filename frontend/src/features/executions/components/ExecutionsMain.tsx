@@ -55,6 +55,7 @@ export function ExecutionsMain() {
     activeNodeId,
     planningThought,
     logs,
+    activity,
     executionResult,
     activeToolName,
     handleGenerate,
@@ -211,6 +212,8 @@ export function ExecutionsMain() {
               isThinking={isThinking}
               isEmpty={isEmpty}
               isEditing={isEditing}
+              activity={activity}
+              onSelectNode={setSelectedNodeId}
               selectedNode={selectedNode}
               selectedEdge={selectedEdge}
               onSend={handleGenerateClick}

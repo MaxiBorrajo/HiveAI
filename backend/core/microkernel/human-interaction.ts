@@ -33,6 +33,7 @@ interface PendingEntry extends PendingInteraction {
 export const executionContextStorage = new AsyncLocalStorage<{
   autoApprove: boolean;
   signal?: AbortSignal;
+  interactive?: boolean;
 }>();
 
 class HumanInteractionQueue {
