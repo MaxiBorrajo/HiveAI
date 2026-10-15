@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
-import { sendMessage } from "../api/sendMessage.ts";
+import { sendMessage, type LiveToolCall } from "../api/sendMessage.ts";
 import { getChatMessages } from "../api/getChatMessages.ts";
 import { reportError } from "../../../lib/toastManager.ts";
 import { getErrorMessage } from "../../../lib/errors.ts";
 import { useKeyedState } from "../../../hooks/useKeyedState.ts";
 import type {
+  ChatStep,
   ConversationUsage,
   Message,
   StoredMessage,
@@ -21,6 +22,9 @@ import {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
+  phase: "processing" | "loading_model";
+  liveSteps: ChatStep[];
+  liveTools: LiveToolCall[];
   isBusy: boolean;
 }
 
@@ -28,6 +32,9 @@ const NO_MESSAGES: Message[] = [];
 const IDLE_THINKING: ThinkingState = {
   isThinking: false,
   thinkingText: "",
+  phase: "processing",
+  liveSteps: [],
+  liveTools: [],
   isBusy: false,
 };
 
@@ -143,7 +150,14 @@ export function useChatSession() {
       timestamp: Date.now(),
     });
     thinkingState.set(
-      { isThinking: true, thinkingText: "", isBusy: true },
+      {
+        isThinking: true,
+        thinkingText: "",
+        phase: "processing",
+        liveSteps: [],
+        liveTools: [],
+        isBusy: true,
+      },
       key,
     );
     if (activeChatId) touchChat(activeChatId);
@@ -165,6 +179,23 @@ export function useChatSession() {
             onChatCreated(chatId);
           },
           onThinking: () => {},
+          onStep: (step) => {
+            thinkingState.set(
+              (prev) => ({
+                ...prev,
+                thinkingText: "",
+                liveSteps: [...prev.liveSteps, step],
+                liveTools: [],
+              }),
+              key,
+            );
+          },
+          onToolCalls: (calls) => {
+            thinkingState.set((prev) => ({ ...prev, liveTools: calls }), key);
+          },
+          onStatus: (phase) => {
+            thinkingState.set((prev) => ({ ...prev, phase }), key);
+          },
           onThinkingDelta: (delta, node) => {
             thinkingRuns = appendThinkingDelta(thinkingRuns, delta, node);
             thinkingState.set(
@@ -263,6 +294,9 @@ export function useChatSession() {
     isThinking: thinkingState.value.isThinking,
     isBusy: thinkingState.value.isBusy,
     thinkingText: thinkingState.value.thinkingText,
+    phase: thinkingState.value.phase,
+    liveSteps: thinkingState.value.liveSteps,
+    liveTools: thinkingState.value.liveTools,
     conversationUsage: usageState.value,
     send,
     stop: () => abortControllerRef.current?.abort(),

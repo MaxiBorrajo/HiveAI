@@ -8,6 +8,8 @@ import {
 import { ChatRepository } from "../../../infrastructure/db/repositories/chat-repository.ts";
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
 import { type ThinkingRun } from "../../../core/memory/types.ts";
+import { executionContextStorage } from "../../../core/microkernel/human-interaction.ts";
+import { watchModelLoad } from "../../../core/ollama/model-load.ts";
 import { resolveModelOptions } from "../../model-settings/lib/resolve-model-options.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { embedText } from "../../../core/memory/embeddings.ts";
@@ -171,6 +173,7 @@ export async function consumeStream(
   progress: StreamResult = { fullContent: "", steps: [], thinkingRuns: [] },
 ): Promise<StreamResult> {
   const { steps, thinkingRuns } = progress;
+  let seenMessages = 0;
 
   for await (const chunk of streamIterable) {
     const [mode, payload] = chunk as
@@ -184,7 +187,7 @@ export async function consumeStream(
             { langgraph_node?: string },
           ],
         ]
-      | ["values", { steps: ChatStep[] }];
+      | ["values", { steps: ChatStep[]; messages?: unknown[] }];
 
     if (mode === "messages") {
       const [message, metadata] = payload;
@@ -215,8 +218,23 @@ export async function consumeStream(
       continue;
     }
 
+    const alreadySent = steps.length;
     steps.length = 0;
     steps.push(...payload.steps);
+    for (const step of payload.steps.slice(alreadySent)) send("step", step);
+
+    const messages = payload.messages ?? [];
+    if (messages.length > seenMessages) {
+      seenMessages = messages.length;
+      const last = messages[messages.length - 1] as {
+        tool_calls?: { name: string; args: Record<string, unknown> }[];
+      };
+      if (last?.tool_calls?.length) {
+        send("tool_calls", {
+          calls: last.tool_calls.map(({ name, args }) => ({ name, args })),
+        });
+      }
+    }
   }
 
   return progress;
@@ -294,6 +312,10 @@ export async function sendMessage(
     };
     const usageGroupId = crypto.randomUUID();
     let streamResult: StreamResult;
+    const stopWatchingModelLoad =
+      modelProvider === "ollama"
+        ? await watchModelLoad(model, (phase) => send("status", { phase }))
+        : () => {};
     try {
       streamResult = await withUsageContext(
         {
@@ -303,18 +325,28 @@ export async function sendMessage(
           groupId: usageGroupId,
         },
         async () => {
-          const streamIterable = await Scout.stream(
-            {
-              messages: contextMessages,
-              chatId: resolvedChatId.toString(),
-              model,
-              modelProvider,
-              modelKeyId: config.get("modelKeyId"),
-              modelOptions: modelProvider === "ollama" ? modelOptions : {},
+          return await executionContextStorage.run(
+            { autoApprove: false, signal: req.signal },
+            async () => {
+              const streamIterable = await Scout.stream(
+                {
+                  messages: contextMessages,
+                  chatId: resolvedChatId.toString(),
+                  model,
+                  modelProvider,
+                  modelKeyId: config.get("modelKeyId"),
+                  modelOptions: modelProvider === "ollama" ? modelOptions : {},
+                },
+                { streamMode: ["messages", "values"], signal: req.signal },
+              );
+              return await consumeStream(
+                streamIterable,
+                "Agent",
+                send,
+                progress,
+              );
             },
-            { streamMode: ["messages", "values"], signal: req.signal },
           );
-          return await consumeStream(streamIterable, "Agent", send, progress);
         },
       );
     } catch (error) {
@@ -323,6 +355,8 @@ export async function sendMessage(
         throw error;
       }
       throw normalizeProviderError(error, modelProvider);
+    } finally {
+      stopWatchingModelLoad();
     }
     const { fullContent, steps, thinkingRuns } = streamResult;
 
