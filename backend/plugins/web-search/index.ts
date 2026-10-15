@@ -9,7 +9,6 @@ import type {
 const FETCH_TIMEOUT_MS = 10_000;
 const DEFAULT_SEARCH_LIMIT = 5;
 const MAX_SEARCH_LIMIT = 10;
-const SEARXNG_INSTANCE_URL = Deno.env.get("SEARXNG_INSTANCE_URL");
 
 const MAX_SEARCH_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 800;
@@ -251,6 +250,14 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
   returnDescription =
     "Returns a plain-text list of search results. Each result contains: Title, URL, and Snippet (a short excerpt of a few sentences from the page). Does NOT include the full content of any page — only surface-level metadata and brief excerpts.";
 
+  configFields = [
+    {
+      key: "SEARXNG_INSTANCE_URL",
+      label: "SearXNG instance URL",
+      secret: false,
+    },
+  ];
+
   selectionTests: SelectionTestCase<WebSearchSchema>[] = [
     {
       query: "who won the super bowl this year?",
@@ -372,10 +379,14 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
 
     const { query, limit = DEFAULT_SEARCH_LIMIT } = parsed.data;
 
+    const searxngInstanceUrl = await this.context?.getConfig(
+      "SEARXNG_INSTANCE_URL",
+    );
+
     let outcome: SearchResult[] | string;
-    if (SEARXNG_INSTANCE_URL) {
+    if (searxngInstanceUrl) {
       this.context?.reportStep(`Searching '${query}' via SearXNG`);
-      outcome = await searchSearxng(SEARXNG_INSTANCE_URL, query, limit);
+      outcome = await searchSearxng(searxngInstanceUrl, query, limit);
     } else {
       this.context?.reportStep(`Searching '${query}' via DuckDuckGo`);
       outcome = await searchDuckDuckGo(query, limit);

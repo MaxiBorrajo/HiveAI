@@ -10,6 +10,7 @@ import type { Plugin } from "@/features/plugins/types";
 import { useModels } from "@/features/models/ModelsContext";
 import { PluginsMenu } from "./PluginsMenu";
 import { PluginsModal } from "./PluginsModal";
+import { PluginConfigDialog } from "./PluginConfigDialog";
 import { useDraftEditor } from "../../drafts/DraftEditorContext";
 
 export function PluginsManager() {
@@ -17,6 +18,9 @@ export function PluginsManager() {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [configuringPlugin, setConfiguringPlugin] = useState<string | null>(
+    null,
+  );
   const { openDraft, pluginsVersion } = useDraftEditor();
 
   function refreshPlugins() {
@@ -115,11 +119,16 @@ export function PluginsManager() {
         onImportPlugin={handleImportPlugin}
         onRemovePlugin={handleRemovePlugin}
         onEditPlugin={handleEditPlugin}
+        onConfigurePlugin={(plugin) => setConfiguringPlugin(plugin.name)}
         isImporting={isImporting}
         onOpenDraft={(name) => {
           setIsModalOpen(false);
           openDraft(name);
         }}
+      />
+      <PluginConfigDialog
+        pluginName={configuringPlugin}
+        onOpenChange={(open) => !open && setConfiguringPlugin(null)}
       />
     </>
   );

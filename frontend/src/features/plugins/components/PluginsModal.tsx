@@ -14,6 +14,7 @@ interface PluginsModalProps {
   onImportPlugin: (files: FileList) => void;
   onRemovePlugin: (plugin: Plugin) => void;
   onEditPlugin: (plugin: Plugin) => void;
+  onConfigurePlugin: (plugin: Plugin) => void;
   isImporting: boolean;
   onOpenDraft: (name: string) => void;
 }
@@ -28,6 +29,7 @@ export function PluginsModal({
   onImportPlugin,
   onRemovePlugin,
   onEditPlugin,
+  onConfigurePlugin,
   isImporting,
   onOpenDraft,
 }: PluginsModalProps) {
@@ -59,6 +61,7 @@ export function PluginsModal({
             onImportPlugin={onImportPlugin}
             onRemovePlugin={onRemovePlugin}
             onEditPlugin={onEditPlugin}
+            onConfigurePlugin={onConfigurePlugin}
             isImporting={isImporting}
             onOpenDraft={onOpenDraft}
           />

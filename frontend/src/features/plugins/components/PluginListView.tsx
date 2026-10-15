@@ -12,6 +12,7 @@ import {
   Trash2,
   Download,
   Pencil,
+  Settings,
   Loader2,
 } from "lucide-react";
 import type { Plugin } from "@/features/plugins/types";
@@ -35,6 +36,7 @@ interface PluginListViewProps {
   onImportPlugin: (files: FileList) => void;
   onRemovePlugin: (plugin: Plugin) => void;
   onEditPlugin: (plugin: Plugin) => void;
+  onConfigurePlugin: (plugin: Plugin) => void;
   isImporting: boolean;
   onOpenDraft: (name: string) => void;
 }
@@ -48,6 +50,7 @@ export function PluginListView({
   onImportPlugin,
   onRemovePlugin,
   onEditPlugin,
+  onConfigurePlugin,
   isImporting,
   onOpenDraft,
 }: PluginListViewProps) {
@@ -203,6 +206,17 @@ export function PluginListView({
                     >
                       <TestTube size={12} />
                       <span>Tests</span>
+                    </Button>
+                  )}
+                  {(plugin.configFields?.length ?? 0) > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onConfigurePlugin(plugin)}
+                      className="h-8 gap-1 px-3"
+                      title="Configure"
+                    >
+                      <Settings size={12} />
                     </Button>
                   )}
                   {plugin.isExternal && (

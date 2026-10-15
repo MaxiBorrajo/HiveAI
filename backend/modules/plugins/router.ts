@@ -11,6 +11,11 @@ import { handleEditPlugin } from "./use-cases/edit-plugin.ts";
 import { handleSaveTestResults } from "./use-cases/save-test-results.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { requireModelsConfigured } from "../../core/api/guards.ts";
+import {
+  handleGetPluginConfig,
+  handleSetPluginConfig,
+  handleDeletePluginConfig,
+} from "../plugin-config/router-handlers.ts";
 
 export const pluginsRouter = new Hono<{
   Variables: { hive: HiveMicrokernel };
@@ -56,6 +61,29 @@ pluginsRouter.get("/:name/export", (c) => {
 pluginsRouter.post("/:name/edit", (c) => {
   const name = c.req.param("name");
   return handleEditPlugin(c.get("hive"), name, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.get("/:name/config", (c) => {
+  const name = c.req.param("name");
+  return handleGetPluginConfig(c.get("hive"), name, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.put("/:name/config/:key", (c) => {
+  const name = c.req.param("name");
+  const key = c.req.param("key");
+  return handleSetPluginConfig(c.get("hive"), name, key, c.req.raw, {
+    "content-type": "application/json",
+  });
+});
+
+pluginsRouter.delete("/:name/config/:key", (c) => {
+  const name = c.req.param("name");
+  const key = c.req.param("key");
+  return handleDeletePluginConfig(c.get("hive"), name, key, {
     "content-type": "application/json",
   });
 });

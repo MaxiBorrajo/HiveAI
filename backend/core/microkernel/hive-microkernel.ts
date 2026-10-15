@@ -17,6 +17,7 @@ import {
   type TestSuiteQualityReport,
 } from "./plugin-quality-validator.ts";
 import type { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
+import { getSecretStore } from "../secrets/index.ts";
 
 export type { TestSuiteQualityReport };
 
@@ -122,6 +123,7 @@ export class HiveMicrokernel {
         return wait;
       },
       reportStep: (label) => reportPluginStep(label),
+      getConfig: (key) => getSecretStore().get(`${pluginName}:${key}`),
     };
   }
 

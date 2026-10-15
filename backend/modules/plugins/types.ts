@@ -1,5 +1,6 @@
 import type {
   ExecutionTestCase,
+  PluginConfigField,
   SelectionTestCase,
 } from "../../core/microkernel/bee-plugin.ts";
 
@@ -17,4 +18,5 @@ export interface PluginDto {
   executionTests?: ExecutionTestCase[];
   isExternal?: boolean;
   parameters?: PluginParameterDto[];
+  configFields?: PluginConfigField[];
 }
