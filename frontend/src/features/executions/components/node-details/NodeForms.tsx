@@ -43,8 +43,6 @@ export function LlmNodeForm({
   plugins,
 }: NodeFormProps) {
   const { optionGroups } = useModels();
-  // Looked up with every model so a saved node whose model stopped qualifying
-  // is explained; only usable models (and the one already set) are offered.
   const fullTree = buildProviderTree(optionGroups, { includeUnsupported: true });
   const tree = fullTree
     .map((e) => ({

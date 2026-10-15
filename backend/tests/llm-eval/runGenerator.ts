@@ -86,13 +86,11 @@ async function runCase(
 
   const intermediateNodes = graph.nodes.filter((n) => n.type !== "start" && n.type !== "end");
 
-  // 1. Structural sanity: exactly one start/one end, and no orphan/dead-end nodes.
   const startCount = graph.nodes.filter((n) => n.type === "start").length;
   const endCount = graph.nodes.filter((n) => n.type === "end").length;
   if (startCount !== 1) details.push(`expected exactly 1 start node, got ${startCount}`);
   if (endCount !== 1) details.push(`expected exactly 1 end node, got ${endCount}`);
 
-  // 2. Semantic validation (same checks the generator itself self-corrects against).
   const violations = [
     ...validateGraphInterpolationGrammar(graph),
     ...validateGraphVariableReferences(graph),
@@ -103,14 +101,12 @@ async function runCase(
     details.push(`${violations.length} validation violation(s): ${violations.map((v) => v.reason).join(" | ")}`);
   }
 
-  // 3. Minimum node count.
   if (testCase.minIntermediateNodes && intermediateNodes.length < testCase.minIntermediateNodes) {
     details.push(
       `expected at least ${testCase.minIntermediateNodes} intermediate nodes, got ${intermediateNodes.length}`,
     );
   }
 
-  // 4. Expected node type coverage.
   if (testCase.expectedNodeTypes) {
     const presentTypes = new Set(intermediateNodes.map((n) => n.type));
     const missingTypes = testCase.expectedNodeTypes.filter((t) => !presentTypes.has(t));

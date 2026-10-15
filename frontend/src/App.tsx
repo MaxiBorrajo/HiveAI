@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
 import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain";
+import { ServerOptimizationDialog } from "@/features/model-settings/components/ServerOptimizationDialog";
 import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/features/models/ModelsContext";
@@ -125,6 +126,7 @@ function AppContent() {
   return (
     <div className="flex h-screen relative">
       <UpdateBanner />
+      <ServerOptimizationDialog />
       <AppSidebar
         {...sidebarProps}
         actions={

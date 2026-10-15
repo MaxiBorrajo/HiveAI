@@ -96,7 +96,6 @@ Deno.test("a run keeps the orchestrator the graph was generated with, with the k
 
   const { historyId } = await runOnce(s, execution.id, "run-info-counter");
 
-  // The key is renamed and deleted afterwards: the run does not change.
   await s.keys.update(key.id, { alias: "renamed" });
   await s.keys.delete(key.id);
 
@@ -127,8 +126,6 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
     createdAt: Date.now(),
   });
   await s.executions.update(execution.id, { lastGraphId: graph.id });
-
-  // A run saved the way it was before this feature: no `run`, no usage rows.
   const old = await s.executions.createHistory({
     executionId: execution.id,
     iteration: 1,
@@ -137,7 +134,6 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
     createdAt: 1_000,
   });
 
-  // A new run, with a local call and a cloud call linked to it.
   const { historyId } = await runOnce(s, execution.id, "runs-list-counter");
   const group = crypto.randomUUID();
   const base = {
@@ -191,7 +187,6 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
     usage: any;
   }[];
 
-  // Newest first.
   assertEquals(runs.map((r) => r.iteration), [2, 1]);
 
   const [fresh, previous] = runs;
@@ -202,7 +197,6 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
   assertEquals(fresh.usage.cloud.models[0].keyAliases, ["work"]);
   assertEquals(typeof fresh.usage.latencyMs, "number");
 
-  // The input the run was started with is kept; older runs have none.
   assertEquals(fresh.input, { counter_name: "runs-list-counter", action: "get" });
   assertEquals(previous.input, null);
 
@@ -232,7 +226,6 @@ Deno.test("editing a graph by hand keeps the model that orchestrated it", async 
   });
   await s.executions.update(execution.id, { lastGraphId: first.id });
 
-  // A graph the validator accepts: the end node declares its output type.
   const edited = counterGraph();
   edited.nodes[2].config = { output: { type: "text", contentKey: "count_result" } };
 
@@ -270,7 +263,6 @@ Deno.test("listRuns - what generating the graph cost counts as the orchestrator'
   });
   await s.executions.update(execution.id, { lastGraphId: graph.id });
 
-  // The orchestrator designed the graph, before the run.
   await s.usage.record({
     usage: {
       groupId: crypto.randomUUID(),
@@ -327,7 +319,6 @@ Deno.test("listRuns - what generating the graph cost counts as the orchestrator'
   assertEquals(d.orchestratorCalls, 1);
   assertEquals(d.orchestrator, { inputTokens: 600, outputTokens: 400 });
   assertEquals(d.delegated, { inputTokens: 3_000, outputTokens: 1_000 });
-  // 4,000 delegated against 1,000 spent designing the graph.
   assertEquals(d.delegatedShare, 0.8);
   assertEquals(d.localShare, 1);
 });

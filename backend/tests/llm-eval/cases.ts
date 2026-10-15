@@ -1,17 +1,14 @@
 export type EvalCategory =
-  | "routing" // picks the right plugin among several active ones
-  | "abstention" // correctly calls no plugin when none applies
-  | "param-extraction"; // picks the right plugin AND extracts correct params
+  | "routing"
+  | "abstention"
+  | "param-extraction";
 
 export interface EvalCase {
   name: string;
   category: EvalCategory;
   query: string;
-  /** Plugin names that should be active for this case. */
   activePlugins: string[];
-  /** Expected tool name, or null if no tool should be called. */
   expectedTool: string | null;
-  /** Subset of expected params, checked only for param-extraction cases. */
   expectedParams?: Record<string, unknown>;
 }
 
@@ -62,7 +59,7 @@ export const evalCases: EvalCase[] = [
     name: "abstention: plugin not active should never be selected",
     category: "abstention",
     query: "add a coffee to the counter",
-    activePlugins: ["current_datetime"], // counter intentionally NOT active
+    activePlugins: ["current_datetime"],
     expectedTool: null,
   },
   {

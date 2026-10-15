@@ -1,7 +1,6 @@
 import { BrainCircuitIcon, CloudIcon } from "lucide-react";
 import type { UsageLocation } from "@/lib/usage";
 
-// Same icons the model menu uses, so local vs cloud reads the same everywhere.
 export function UsageLocationIcon({
   location,
   className = "size-3 shrink-0",

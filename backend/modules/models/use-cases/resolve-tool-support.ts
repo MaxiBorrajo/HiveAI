@@ -31,8 +31,6 @@ export const defaultToolSupportLookup: ToolSupportLookup = {
   },
 };
 
-// Single place that answers "can this model take tools?" for the chat, the
-// nodes and the saved model, always from what the provider reports.
 export async function resolveToolSupport(
   ref: ModelRef,
   lookup: ToolSupportLookup = defaultToolSupportLookup,

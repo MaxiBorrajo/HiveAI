@@ -15,8 +15,7 @@ export async function deleteModel(
       status: 400,
     });
   }
-
-  // Conversation memory cannot work without it.
+  
   if (name.startsWith(EMBEDDING_MODEL)) {
     return ResponseBuilder.error(
       [`'${name}' is the embedding model used for conversation memory and cannot be deleted.`],

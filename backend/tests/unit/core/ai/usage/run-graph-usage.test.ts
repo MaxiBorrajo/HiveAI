@@ -11,9 +11,6 @@ import { initORM } from "../../../../../infrastructure/db/orm.ts";
 import { ModelUsageRepository } from "../../../../../infrastructure/db/repositories/model-usage-repository.ts";
 import { ExecutionRepository } from "../../../../../infrastructure/db/repositories/execution-repository.ts";
 
-// A graph run through the real compiler, the real llm node and the real
-// factory, against fake provider endpoints: what lands in the table is what
-// the run actually did.
 function fakeProviders(): typeof fetch {
   return ((input: Request | string | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -153,11 +150,9 @@ Deno.test("running a graph records each node's call, local and cloud, in one gro
     assertEquals(cloud.keyAlias, "work");
     assertEquals(cloud.outputTokens, 9);
     assertEquals(cloud.status, "ok");
-    // streamEvents makes the model stream, so the first token is timed.
     assertEquals(typeof cloud.ttftMs, "number");
     assertEquals(cloud.context.kind, "execution");
 
-    // Both runs of the same execution can be told apart or read together.
     const all = await usage.list({
       limit: 50,
       offset: 0,

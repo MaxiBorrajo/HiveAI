@@ -11,8 +11,6 @@ function makeStore(dir: string, key = "items") {
   return new JsonManifestStore<Item>(dir, key);
 }
 
-// --- read ---
-
 Deno.test("read - returns an empty array when the manifest file does not exist yet", async () => {
   const tempDir = await Deno.makeTempDir();
   const store = makeStore(tempDir);
@@ -35,8 +33,6 @@ Deno.test("read - returns an empty array if the manifest exists but lacks the co
   const store = makeStore(tempDir, "items");
   assertEquals(await store.read(), []);
 });
-
-// --- write ---
 
 Deno.test("write - creates the directory if it does not exist yet", async () => {
   const tempDir = await Deno.makeTempDir();
@@ -73,8 +69,6 @@ Deno.test("write - overwrites the full item list on each call (not appending)", 
   assertEquals(await store.read(), [{ name: "c" }]);
 });
 
-// --- upsert ---
-
 Deno.test("upsert - adds a new item to an empty store", async () => {
   const tempDir = await Deno.makeTempDir();
   const store = makeStore(tempDir);
@@ -98,8 +92,6 @@ Deno.test("upsert - appends a differently-named item alongside existing ones", a
   assertEquals(await store.read(), [{ name: "a" }, { name: "b" }]);
 });
 
-// --- delete ---
-
 Deno.test("delete - removes the item and returns it when found", async () => {
   const tempDir = await Deno.makeTempDir();
   const store = makeStore(tempDir);
@@ -118,17 +110,11 @@ Deno.test("delete - returns undefined and leaves the store untouched when the it
   assertEquals(await store.read(), [{ name: "a" }]);
 });
 
-// --- multiple keys sharing one manifest file ---
-
 Deno.test("multiple keys can coexist in the same manifest.json without clobbering each other", async () => {
   const tempDir = await Deno.makeTempDir();
   const pluginsStore = makeStore(tempDir, "plugins");
   await pluginsStore.write([{ name: "plugin-a" }]);
 
-  // A second store instance pointed at the same dir but a different key
-  // overwrites the whole manifest.json (write() serializes only its own
-  // key), so after this, the "plugins" key is gone — this documents that
-  // real behavior rather than assuming namespacing that doesn't exist.
   const draftsStore = makeStore(tempDir, "drafts");
   await draftsStore.write([{ name: "draft-a" }]);
 

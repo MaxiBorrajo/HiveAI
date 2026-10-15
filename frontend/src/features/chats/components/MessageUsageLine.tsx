@@ -8,8 +8,6 @@ import {
 import type { MessageUsage } from "../types.ts";
 import { UsageLocationIcon } from "@/components/UsageLocationIcon";
 
-// Consumption of one response, summed over every model call made for it.
-// `usage` null means nothing was recorded (an older message): dashes, not zeros.
 export function MessageUsageLine({ usage }: { usage: MessageUsage | null }) {
   const complete = usage?.tokensComplete ?? true;
 

@@ -36,16 +36,12 @@ function statusOf(error: unknown): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-// The provider's own text says which limit was hit (per minute, per day,
-// tokens...), so keep it, trimmed, instead of replacing it with a generic line.
 function providerDetail(raw: string): string {
   const detail = raw.replace(/\s+/g, " ").trim();
   if (!detail) return "";
   return ` Provider said: ${detail.length > 300 ? `${detail.slice(0, 300)}…` : detail}`;
 }
 
-// What providers answer when tools are sent to a model that cannot take them,
-// e.g. Ollama's "registry.ollama.ai/library/gemma3 does not support tools".
 const TOOLS_REJECTION =
   /(does not|doesn'?t) support tools|tools? (is|are) not supported|tool use is not supported|function calling is (not enabled|not supported|unsupported)|(does not|doesn'?t) support function calling/i;
 

@@ -17,12 +17,9 @@ export const toolsUnknown = (reason: string): ToolSupport => ({
   reason,
 });
 
-// Unknown is allowed (with a warning); only a confirmed "no" blocks.
 export const isSelectable = (support: ToolSupport | undefined): boolean =>
   support?.status !== "unsupported";
 
-// Ollama reports what each model can do; an empty list means the daemon is
-// too old to say, which is not the same as "cannot".
 export function ollamaToolSupport(capabilities: string[]): ToolSupport {
   const caps = capabilities.map((c) => c.toLowerCase());
   if (caps.length === 0) {

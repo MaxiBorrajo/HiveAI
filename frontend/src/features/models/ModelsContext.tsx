@@ -40,7 +40,6 @@ interface ModelsContextValue {
   refreshModels: () => void;
   changeModel: (choice: string | ModelChoice) => Promise<void>;
   deleteLocalModel: (name: string) => Promise<void>;
-  modeResetSignal: number;
   runBusy: <T>(message: string, task: () => Promise<T>) => Promise<T>;
 }
 
@@ -56,7 +55,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     keyId: "",
   });
   const [isManageOpen, setIsManageOpen] = useState(false);
-  const [modeResetSignal, setModeResetSignal] = useState(0);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [embeddingModelStatus, setEmbeddingModelStatus] =
     useState<EmbeddingModelStatus | null>(null);
@@ -73,8 +71,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Tell about a saved model that no longer qualifies once per session, not on
-  // every refresh.
   const warnedRef = useRef<string | null>(null);
 
   function warnIfUnusable(model: CurrentModels) {
@@ -130,7 +126,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
             );
           }
         }
-        setModeResetSignal((n) => n + 1);
       } catch {
         setCurrent(previous);
       }
@@ -142,7 +137,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
       try {
         await deleteModel(name);
       } catch {
-        // The request interceptor already reported the reason.
       }
     });
     refreshModels();
@@ -164,7 +158,6 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     refreshModels,
     changeModel,
     deleteLocalModel,
-    modeResetSignal,
     runBusy,
   };
 

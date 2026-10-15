@@ -184,8 +184,6 @@ export function ApiKeysModal({
   }, []);
 
   useEffect(() => {
-    // Reset on open, not on close, so the content doesn't change while the
-    // dialog is fading out.
     if (isOpen) {
       setError(null);
       setEditing(null);

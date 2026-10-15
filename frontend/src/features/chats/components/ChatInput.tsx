@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2Icon, SquareIcon, TriangleAlertIcon } from "lucide-react";
 import { PluginsManager } from "../../plugins/components/PluginsManager.tsx";
-import { ModesManager } from "../../modes/components/ModesManager.tsx";
+import { ThinkingToggle } from "../../model-settings/components/ThinkingToggle.tsx";
+import { ModelSettingsMenu } from "../../model-settings/components/ModelSettingsMenu.tsx";
 import { ModelsManager } from "../../models/components/ModelsManager.tsx";
 import { useModels } from "@/features/models/ModelsContext";
 import { isCloud } from "@/features/models/lib/modelChoices";
@@ -184,10 +185,11 @@ export function ChatInput({
             {!hidePluginsAndModes && (
               <>
                 <PluginsManager />
-                {!isCloud(current.provider) && <ModesManager />}
+                {!isCloud(current.provider) && <ModelSettingsMenu />}
               </>
             )}
             <ModelsManager />
+            {!hidePluginsAndModes && <ThinkingToggle />}
           </div>
           {isThinking ? (
             <Button variant="secondary" onClick={handleStop} title="Stop">

@@ -104,7 +104,6 @@ export function useGraphEditor({
   const deleteNodes = (ids: string[]) => mutate((g) => removeNodes(g, ids));
   const deleteEdges = (ids: string[]) => mutate((g) => removeEdges(g, ids));
 
-  /** Validates (server side) and persists the draft. Returns true when saved. */
   const save = async (): Promise<boolean> => {
     if (!executionId || !draftGraph) return false;
     clearViolations();

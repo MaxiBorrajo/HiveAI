@@ -143,6 +143,17 @@ export type IncrementalEvent =
       node: GraphNode;
       stateProperties?: Record<string, any>;
     }
+  | {
+      type: "waiting_for_user";
+      kind: "clarify" | "plan_review";
+      question: string;
+    }
+  | {
+      type: "user_answered";
+      kind: "clarify" | "plan_review";
+      question: string;
+      answer: string;
+    }
   | { type: "edge_added"; edge: GraphEdge }
   | { type: "node_deleted"; nodeId: string }
   | {

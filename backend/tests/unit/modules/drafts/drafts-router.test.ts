@@ -121,7 +121,7 @@ Deno.test("PUT /api/drafts/:name/files rejects a file outside the editable white
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        file: "bee-plugin.ts", // not in EDITABLE_FILES
+        file: "bee-plugin.ts",
         content: "// should not be allowed",
       }),
     });
@@ -161,8 +161,6 @@ Deno.test("POST /api/drafts/:name/validate reports quality issues for a freshly 
 
     const body = await res.json();
     assert(body.success);
-    // A freshly scaffolded draft has no selection/execution tests yet, so
-    // it must NOT pass quality validation.
     assertFalse(body.data.valid);
   } finally {
     await Deno.remove(tempDir, { recursive: true });

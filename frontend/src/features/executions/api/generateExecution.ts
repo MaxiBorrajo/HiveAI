@@ -31,6 +31,16 @@ export interface GenerateStreamHandlers {
     node: GraphNode;
     stateProperties?: Record<string, StatePropertyDefinition>;
   }) => void;
+  onWaitingForUser?: (data: {
+    kind: "clarify" | "plan_review";
+    question: string;
+  }) => void;
+  onUserAnswered?: (data: {
+    kind: "clarify" | "plan_review";
+    question: string;
+    answer: string;
+  }) => void;
+  onValidationError?: (data: { attempt: number; violations: unknown[] }) => void;
   onNodeDeleted?: (data: { nodeId: string }) => void;
   onEdgeAdded?: (data: {
     edge: GraphEdge;
@@ -67,6 +77,15 @@ export async function generateExecutionStream(
         break;
       case "node_deleted":
         handlers.onNodeDeleted?.(data);
+        break;
+      case "waiting_for_user":
+        handlers.onWaitingForUser?.(data);
+        break;
+      case "user_answered":
+        handlers.onUserAnswered?.(data);
+        break;
+      case "validation_error":
+        handlers.onValidationError?.(data);
         break;
       case "edge_added":
         handlers.onEdgeAdded?.(data);

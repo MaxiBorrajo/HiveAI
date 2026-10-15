@@ -24,10 +24,10 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   console.log(`[SADER - Responder] state.modelOptions:`, state.modelOptions);
   const responderOptions = {
     model: state.model,
-    think: false,
     temperature: 0.0,
     numPredict: 1024,
     ...state.modelOptions,
+    think: false,
   };
   const responder = await createChatModel(
     { provider: "ollama", model: state.model },

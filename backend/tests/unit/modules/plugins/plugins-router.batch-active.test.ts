@@ -70,11 +70,8 @@ Deno.test("POST /api/plugins/batch-active rolls back and returns 409 with consis
     const body = await res.json();
     assertFalse(body.success);
 
-    // Server-side state was rolled back: 'counter' must not be active.
     assertFalse(hive.isActive("counter"));
 
-    // The response's reported plugin list must match the actual server state
-    // (no partial-failure state leaked to the client).
     const counterEntry = body.data.find(
       (p: { name: string }) => p.name === "counter",
     );

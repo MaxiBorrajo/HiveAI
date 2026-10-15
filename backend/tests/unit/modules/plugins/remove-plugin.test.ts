@@ -23,7 +23,6 @@ async function makeTestApp() {
 Deno.test("DELETE /api/plugins/:name returns 404 for an internal (non-external) plugin", async () => {
   const { app, tempDir } = await makeTestApp();
   try {
-    // 'counter' is an internal plugin, not imported/external — must be rejected.
     const res = await app.request("/api/plugins/counter", {
       method: "DELETE",
     });

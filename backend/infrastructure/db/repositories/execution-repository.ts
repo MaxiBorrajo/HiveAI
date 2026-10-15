@@ -15,7 +15,6 @@ import {
 export class ExecutionRepository {
   constructor(private db: AppDatabase) {}
 
-  // Executions
   async findAll(): Promise<Execution[]> {
     return await this.db.select().from(executions).orderBy(desc(executions.updatedAt));
   }
@@ -57,7 +56,6 @@ export class ExecutionRepository {
     return result;
   }
 
-  // Execution Graphs
   async findGraphById(id: number): Promise<ExecutionGraph | undefined> {
     const [graph] = await this.db.select().from(executionGraphs).where(eq(executionGraphs.id, id));
     return graph;
@@ -71,7 +69,6 @@ export class ExecutionRepository {
     return result;
   }
 
-  // Execution History
   async createHistory(history: NewExecutionHistory): Promise<ExecutionHistory> {
     const [result] = await this.db
       .insert(executionHistory)
@@ -87,8 +84,7 @@ export class ExecutionRepository {
       .where(eq(executionHistory.executionId, executionId));
     return row?.total ?? 0;
   }
-
-  // Newest run first.
+  
   async findHistoriesByExecutionId(
     executionId: number,
   ): Promise<ExecutionHistory[]> {

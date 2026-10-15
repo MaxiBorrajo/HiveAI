@@ -135,7 +135,6 @@ export function StandardNode({
       className={`relative min-w-60 max-w-70 rounded-xl overflow-hidden border ${borderColor} bg-card/95 transition-all duration-200 text-left select-none`}
       style={{ boxShadow }}
     >
-      {/* Target handle (Left socket) */}
       {data.type !== "start" && (
         <Handle
           type="target"

@@ -16,8 +16,6 @@ function graph(nodes: GraphNode[]): LangGraphAbstraction {
   return { nodes, edges: [], stateSchema: {} };
 }
 
-// --- validateInterpolationValue ---
-
 Deno.test("validateInterpolationValue - non-string or no template markers returns null", () => {
   assertEquals(validateInterpolationValue(42), null);
   assertEquals(validateInterpolationValue("plain text"), null);
@@ -38,8 +36,6 @@ Deno.test("validateInterpolationValue - invalid identifier characters are reject
   assertEquals(typeof result, "string");
 });
 
-// --- validateGraphInterpolationGrammar ---
-
 Deno.test("validateGraphInterpolationGrammar - flags bad interpolation syntax in inputMapping", () => {
   const g = graph([
     node({ config: { inputMapping: { query: "${a.b}" } } }),
@@ -54,8 +50,6 @@ Deno.test("validateGraphInterpolationGrammar - no inputMapping produces no viola
   const g = graph([node({ config: {} })]);
   assertEquals(validateGraphInterpolationGrammar(g).length, 0);
 });
-
-// --- validateGraphVariableReferences ---
 
 Deno.test("validateGraphVariableReferences - undefined variable reference is flagged", () => {
   const g = graph([
@@ -89,8 +83,6 @@ Deno.test("validateGraphVariableReferences - llm nodes use bare values, not ${} 
   assertEquals(violations.length, 1);
   assertEquals(violations[0].invalidValue, "undefinedVar");
 });
-
-// --- validateGraphPluginParameters ---
 
 Deno.test("validateGraphPluginParameters - unknown plugin id is flagged", () => {
   const g = graph([node({ type: "plugin", config: { pluginId: "does-not-exist" } })]);
@@ -137,8 +129,6 @@ Deno.test("validateGraphPluginParameters - plugin with no declared parameterKeys
   const violations = validateGraphPluginParameters(g, [{ name: "custom" }]);
   assertEquals(violations.length, 0);
 });
-
-// --- validateGraphAgentToolMentions ---
 
 Deno.test("validateGraphAgentToolMentions - flags mentioning an unequipped tool in systemPrompt", () => {
   const g = graph([

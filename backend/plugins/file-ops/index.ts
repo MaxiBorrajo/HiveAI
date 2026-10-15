@@ -215,9 +215,6 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
     path = expandHome(path);
     if (destination) destination = expandHome(destination);
 
-    // If the path points directly to root filesystem (e.g. "/notes.txt" or "/system_health.md"),
-    // models often emit leading slashes intending project-root/workspace-relative paths.
-    // Divert root writes to current working directory to avoid OS permission errors.
     if (path.startsWith("/") && dirname(path) === "/" && !["/tmp", "/var"].includes(path)) {
       path = join(Deno.cwd(), path.slice(1));
     }

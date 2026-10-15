@@ -16,11 +16,6 @@ function reachableFrom(graph: LangGraphAbstraction, startId: string): Set<string
   return seen;
 }
 
-/**
- * A critique node on a condition's retry path writes the issues to fix, but the nodes it
- * sends the flow back to only see it if it is in their inputMapping. Wire it into every
- * LLM node of the retry cycle (except the judge itself). Returns the nodes that changed.
- */
 export function wireLoopFeedback(graph: LangGraphAbstraction): GraphNode[] {
   const loopBackIds = findLoopBackEdgeIds(graph);
   const conditionIds = new Set(

@@ -130,8 +130,6 @@ async function saveRun(
   return { historyId: history.id, iteration };
 }
 
-// The calls were recorded while the run was in progress; the run row only
-// exists now, so link them by group.
 async function linkUsageToRun(
   db: AppDatabase,
   groupId: string,
@@ -144,7 +142,6 @@ async function linkUsageToRun(
   }
 }
 
-// LangGraph counts one step per node run; the default (25) cuts review loops after ~2 cycles.
 const EXECUTION_RECURSION_LIMIT = 60;
 
 export async function runExecution(
@@ -179,9 +176,6 @@ export async function runExecution(
       );
     }
     const app = compileExecutionGraph(hive, abstraction);
-
-    // Frozen now, while "Default model" nodes have just been resolved and the
-    // keys are as the run will use them.
     const keys = new ApiKeyRepository(db);
     const findKeyAlias = async (keyId: string) =>
       (await keys.findById(keyId))?.alias;
@@ -195,7 +189,6 @@ export async function runExecution(
     return createSseResponse(headers, (send) =>
       executionContextStorage.run({ autoApprove }, () =>
         withUsageContext(
-          // Every node of a run is delegated work, whatever model runs it.
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {
             if (warnings.length > 0) send("warning", { warnings });

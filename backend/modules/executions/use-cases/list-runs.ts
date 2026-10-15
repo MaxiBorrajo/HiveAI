@@ -14,13 +14,9 @@ export interface RunSummary {
   historyId: number;
   iteration: number;
   createdAt: number;
-  // The version of the graph the run used.
   graphId: number;
   result: unknown;
-  // What the run was started with, so two runs can be told apart by input.
-  // null for runs that predate recording it.
   input: Record<string, unknown> | null;
-  // null: nothing about consumption was recorded (run predates the feature).
   usage: RunUsage | null;
 }
 

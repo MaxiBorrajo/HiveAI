@@ -68,7 +68,6 @@ export interface ProviderModel {
   toolSupport?: ToolSupport;
 }
 
-// Only a confirmed "no" blocks a model; unknown is allowed with a warning.
 export function canUse(support: ToolSupport | undefined) {
   return support?.status !== "unsupported";
 }
@@ -127,7 +126,6 @@ export function buildProviderTree(
   const entries = [...byProvider.values()];
   if (includeUnsupported) return entries;
 
-  // Models that cannot take tools are not offered where one gets chosen.
   for (const entry of entries) {
     entry.models = entry.models.filter((m) => canUse(m.toolSupport));
   }

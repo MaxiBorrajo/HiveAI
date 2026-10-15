@@ -6,8 +6,6 @@ import {
 } from "../../../../../../modules/executions/use-cases/run-execution/plugin-node-executor.ts";
 import type { HiveMicrokernel } from "../../../../../../core/microkernel/hive-microkernel.ts";
 
-// --- resolveMappingValue ---
-
 Deno.test("resolveMappingValue - a bare '${var}' template resolves to the state value", () => {
   assertEquals(resolveMappingValue("${query}", { query: "hello" }), "hello");
 });
@@ -56,8 +54,6 @@ Deno.test("resolveMappingValue - an object with neither 'value' nor 'staticValue
   assertEquals(resolveMappingValue(obj, {}), obj);
 });
 
-// --- resolveInputMapping ---
-
 Deno.test("resolveInputMapping - resolves every key independently against the same state", () => {
   const result = resolveInputMapping(
     { query: "${search}", limit: 5, label: "fixed" },
@@ -69,8 +65,6 @@ Deno.test("resolveInputMapping - resolves every key independently against the sa
 Deno.test("resolveInputMapping - empty mapping returns an empty object", () => {
   assertEquals(resolveInputMapping({}, { any: "state" }), {});
 });
-
-// --- createPluginNodeRegistry ---
 
 function fakeHive(tools: Record<string, (args: unknown) => Promise<unknown>>) {
   return {

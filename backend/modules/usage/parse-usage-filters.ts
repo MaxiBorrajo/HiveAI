@@ -33,7 +33,6 @@ function oneOf<T extends string>(
   return raw as T;
 }
 
-// Pure so it can be tested without a server: query string in, filters out.
 export function parseUsageFilters(query: Record<string, string>): UsageFilters {
   const limit = int(query, "limit") ?? DEFAULT_USAGE_LIMIT;
   const offset = int(query, "offset") ?? 0;

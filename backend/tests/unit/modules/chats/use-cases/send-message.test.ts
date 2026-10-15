@@ -13,8 +13,6 @@ function step(overrides: Partial<ChatStep> = {}): ChatStep {
   };
 }
 
-// ---- appendThinkingDelta ----
-
 Deno.test("appendThinkingDelta - starts a new run when the list is empty", () => {
   const runs: ThinkingRun[] = [];
 
@@ -67,8 +65,6 @@ Deno.test("appendThinkingDelta - undefined node is treated as its own distinct g
 
   assertEquals(runs, [{ node: undefined, text: "ab" }]);
 });
-
-// ---- consumeStream ----
 
 async function* toAsyncIterable<T>(items: T[]): AsyncIterable<T> {
   for (const item of items) yield item;

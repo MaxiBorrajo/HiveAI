@@ -2,9 +2,6 @@ import { assertEquals, assertExists } from "@std/assert";
 import { initORM } from "../../../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../../../infrastructure/db/repositories/execution-repository.ts";
 
-// initORM caches a single db instance per process, so every call here shares
-// the same underlying sqlite file. Tests must use unique names/ids and only
-// assert on the rows they themselves created, never on total table counts.
 async function makeRepository() {
   const tempDir = await Deno.makeTempDir();
   const db = await initORM(tempDir);
@@ -48,7 +45,6 @@ Deno.test("ExecutionRepository.findAll includes a freshly created row and orders
   const olderIdx = all.findIndex((e: { id: number }) => e.id === older.id);
   const newerIdx = all.findIndex((e: { id: number }) => e.id === newer.id);
   assertExists(olderIdx >= 0 && newerIdx >= 0 ? true : undefined);
-  // newer (higher updatedAt) must appear before older in descending order
   assertEquals(newerIdx < olderIdx, true);
 });
 
@@ -79,8 +75,6 @@ Deno.test("ExecutionRepository.delete is a no-op for a non-existent id", async (
   assertExists(await repo.findById(survivor.id));
 });
 
-// --- Execution Graphs ---
-
 Deno.test("ExecutionRepository.createGraph persists a graph linked to its execution", async () => {
   const repo = await makeRepository();
   const execution = await repo.create(newExecution("graph-owner"));
@@ -101,8 +95,6 @@ Deno.test("ExecutionRepository.findGraphById returns undefined for a non-existen
   const repo = await makeRepository();
   assertEquals(await repo.findGraphById(999_999), undefined);
 });
-
-// --- Execution History ---
 
 Deno.test("ExecutionRepository.createHistory persists a history row and countHistories reflects it", async () => {
   const repo = await makeRepository();

@@ -19,8 +19,6 @@ async function makeHiveWithTwoPlugins() {
 Deno.test("setPluginsActive rolls back already-applied changes when a later change fails", async () => {
   const { hive, tempDir } = await makeHiveWithTwoPlugins();
   try {
-    // Simulate a mid-batch failure: 'counter' succeeds first, then a plugin
-    // that isn't registered fails, forcing a rollback of 'counter'.
     const result = await setPluginsActive(hive, [
       { name: "counter", active: true },
       { name: "does-not-exist", active: true },
@@ -31,7 +29,6 @@ Deno.test("setPluginsActive rolls back already-applied changes when a later chan
       assertEquals(result.failedPlugin, "does-not-exist");
     }
 
-    // The state must be consistent with pre-batch state: nothing partially applied.
     assertFalse(hive.isActive("counter"));
     assertFalse(hive.isActive("does-not-exist"));
   } finally {
@@ -50,7 +47,6 @@ Deno.test("setPluginsActive rolls back a deactivation followed by a failing acti
     ]);
 
     assertFalse(result.ok);
-    // 'counter' was deactivated then must be rolled back to active.
     assert(hive.isActive("counter"));
   } finally {
     await Deno.remove(tempDir, { recursive: true });

@@ -38,7 +38,7 @@ function isPrivateIPv4(a: number, b: number): boolean {
     a === 127 ||
     a === 10 ||
     a === 0 ||
-    (a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
+    (a === 100 && b >= 64 && b <= 127) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
     (a === 169 && b === 254)
@@ -60,9 +60,9 @@ function isBlockedIp(ip: string): boolean {
     return (
       v6 === "::" ||
       v6 === "::1" ||
-      /^f[cd][0-9a-f]{2}:/.test(v6) || // unique local fc00::/7
-      /^fe[89ab][0-9a-f]:/.test(v6) || // link-local fe80::/10
-      /^::ffff:[0-9a-f]+:[0-9a-f]+$/.test(v6) // hex-form mapped IPv4
+      /^f[cd][0-9a-f]{2}:/.test(v6) ||
+      /^fe[89ab][0-9a-f]:/.test(v6) ||
+      /^::ffff:[0-9a-f]+:[0-9a-f]+$/.test(v6)
     );
   }
 
@@ -75,7 +75,6 @@ function isBlockedHost(hostname: string): boolean {
   return isBlockedIp(h);
 }
 
-/** Resolves the hostname and rejects it if any address is private/local. */
 async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
   if (isBlockedHost(hostname)) return true;
   if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) return false;
@@ -84,7 +83,6 @@ async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
       const addresses = await Deno.resolveDns(hostname, recordType);
       if (addresses.some(isBlockedIp)) return true;
     } catch {
-      // no record of this type (or resolution failed) — fetch will surface it
     }
   }
   return false;

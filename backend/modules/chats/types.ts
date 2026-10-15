@@ -7,7 +7,5 @@ export type FrontendMessage = Omit<Message, "id" | "chatId" | "metadata"> & {
   id: string;
   chatId: string;
   metadata: Record<string, unknown> | null;
-  // null: nothing was recorded for this message (it predates usage tracking,
-  // or it is a user message).
   usage: MessageUsage | null;
 };

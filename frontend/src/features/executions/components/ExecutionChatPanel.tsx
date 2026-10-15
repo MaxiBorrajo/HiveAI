@@ -1,5 +1,8 @@
 import { ChatInput } from "../../chats/components/ChatInput";
 import { cn } from "../../../lib/utils";
+import { InteractionDialog } from "../../interactions/components/InteractionDialog";
+import { GenerationActivityFeed } from "./GenerationActivityFeed";
+import type { ActivityEntry } from "../lib/generationActivity";
 import type { GraphEdge, GraphNode } from "../types";
 
 interface ExecutionChatPanelProps {
@@ -8,6 +11,8 @@ interface ExecutionChatPanelProps {
   isThinking: boolean;
   isEmpty: boolean;
   isEditing: boolean;
+  activity: ActivityEntry[];
+  onSelectNode: (nodeId: string) => void;
   selectedNode?: GraphNode;
   selectedEdge?: GraphEdge;
   onSend: () => void;
@@ -21,6 +26,8 @@ export function ExecutionChatPanel({
   isThinking,
   isEmpty,
   isEditing,
+  activity,
+  onSelectNode,
   selectedNode,
   selectedEdge,
   onSend,
@@ -35,7 +42,13 @@ export function ExecutionChatPanel({
         : "I want a flow that researches a topic and generates a report...";
 
   return (
-    <div className={cn("w-full px-6 pt-12 pb-8", isEditing && "pr-66")}>
+    <div
+      className={cn(
+        "w-full px-6 pt-12 pb-8",
+        isEditing && "pr-66",
+        (selectedNode || selectedEdge) && "pl-88",
+      )}
+    >
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 pointer-events-auto">
         {isEditing && (selectedNode || selectedEdge) && (
           <div className="flex items-center gap-2 px-3 py-1 bg-primary/20 border border-primary/40 rounded-full text-xs text-primary shadow">
@@ -48,6 +61,12 @@ export function ExecutionChatPanel({
             </button>
           </div>
         )}
+        <GenerationActivityFeed
+          entries={activity}
+          isActive={isThinking}
+          onSelectNode={onSelectNode}
+        />
+        <InteractionDialog />
         <ChatInput
           input={input}
           setInput={setInput}

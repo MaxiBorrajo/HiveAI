@@ -69,9 +69,6 @@ Deno.test("executeExecutionTest reports failure with 'Logic Error' (not a raw ex
     const body = await res.json();
 
     assertFalse(body.success);
-    // hive.execute() wraps plugin exceptions into an error message rather
-    // than rethrowing, so this surfaces as a failed expectation ("Logic
-    // Error"), not as an "Exception" from executeExecutionTest's own catch.
     assertEquals(body.data.failureCategory, "Logic Error");
     assert(body.data.details.output.includes("boom"));
   } finally {

@@ -8,7 +8,6 @@ import {
 import type { ConversationUsage, MessageUsage } from "./types.ts";
 
 export interface ChatUsage {
-  // Keyed by message id. A message with no recorded calls is absent.
   byMessage: Map<number, MessageUsage>;
   conversation: ConversationUsage;
 }

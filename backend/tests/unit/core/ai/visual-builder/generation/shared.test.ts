@@ -6,8 +6,6 @@ function node(overrides: Partial<GraphNode>): GraphNode {
   return { id: "n1", name: "Node", type: "plugin", config: {}, ...overrides };
 }
 
-// --- stateKeySchema ---
-
 Deno.test("stateKeySchema - with available keys, builds an enum restricted to exactly those keys", () => {
   const schema = stateKeySchema(["foo", "bar"], "enum desc", "fallback desc");
   assertEquals(schema.safeParse("foo").success, true);
@@ -31,8 +29,6 @@ Deno.test("stateKeySchema - blank-only input also falls back to the unrestricted
   const schema = stateKeySchema(["", "  "], "enum desc", "fallback desc");
   assertEquals(schema.safeParse("literally anything").success, true);
 });
-
-// --- resolveOutputKey ---
 
 Deno.test("resolveOutputKey - uses the configured key when provided", () => {
   const n = node({ id: "step1" });

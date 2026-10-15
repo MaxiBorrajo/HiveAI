@@ -5,9 +5,17 @@ import type {
   MessageUsage,
 } from "@/features/chats/types";
 
+export interface LiveToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
 export interface StreamHandlers {
   onChatCreated: (chatId: string) => void;
   onThinking: () => void;
+  onStep: (step: ChatStep) => void;
+  onToolCalls: (calls: LiveToolCall[]) => void;
+  onStatus: (phase: "loading_model" | "processing") => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
   onDone: (
@@ -34,6 +42,12 @@ export async function sendMessage(
         handlers.onChatCreated(payload.chatId);
       } else if (eventName === "thinking") {
         handlers.onThinking();
+      } else if (eventName === "step") {
+        handlers.onStep(payload);
+      } else if (eventName === "tool_calls") {
+        handlers.onToolCalls(payload.calls ?? []);
+      } else if (eventName === "status") {
+        handlers.onStatus(payload.phase);
       } else if (eventName === "thinking_delta") {
         handlers.onThinkingDelta(payload.content, payload.node);
       } else if (eventName === "token") {

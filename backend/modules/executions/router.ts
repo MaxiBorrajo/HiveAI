@@ -39,6 +39,7 @@ executionsRouter.post("/generate", async (c) => {
     {
       currentGraph: body.currentGraph,
       dryRun: body.dryRun === true,
+      signal: c.req.raw.signal,
     },
   );
 });

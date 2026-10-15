@@ -38,8 +38,6 @@ export interface Message {
   usedTools?: string[];
   steps?: ChatStep[];
   thinkingRuns?: ThinkingRun[];
-  // undefined: the response is still streaming. null: no usage was recorded
-  // for it (it predates usage tracking), shown as "—".
   usage?: MessageUsage | null;
 }
 

@@ -41,7 +41,6 @@ Deno.test("POST /api/plugins/:name/deactivate deactivates an active plugin", asy
 Deno.test("POST /api/plugins/:name/deactivate returns 404 for a plugin that was never active", async () => {
   const { app, tempDir } = await makeTestApp();
   try {
-    // 'counter' is registered but never activated.
     const res = await app.request("/api/plugins/counter/deactivate", {
       method: "POST",
     });

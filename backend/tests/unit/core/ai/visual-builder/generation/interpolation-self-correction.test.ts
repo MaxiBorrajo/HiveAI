@@ -26,8 +26,6 @@ async function collect<T>(gen: AsyncGenerator<T, void, unknown>): Promise<T[]> {
   return out;
 }
 
-// Fake ChatOllama-like object: withStructuredOutput returns an agent whose
-// .invoke() always resolves with `fixedConfig` (bypassing real LLM calls).
 function fakeConfigLlm(fixedConfig: Record<string, unknown>): any {
   return {
     withStructuredOutput: () => ({
@@ -47,7 +45,6 @@ Deno.test("runInterpolationSelfCorrection - a graph with no violations yields no
   const ctx: InterpolationSelfCorrectionContext = {
     graph,
     availablePlugins: plugins,
-    // An LLM that always throws — proves it's never invoked on this path.
     configLlm: { withStructuredOutput: () => { throw new Error("should not be called"); } } as any,
     nodeDescriptions: new Map(),
   };
@@ -76,9 +73,6 @@ Deno.test("runInterpolationSelfCorrection - an 'llm' node mentioning an unequipp
 });
 
 Deno.test("runInterpolationSelfCorrection - a plugin node with a bad inputMapping is corrected via the (mocked) LLM retry path, without reaching the deterministic fallback", async () => {
-  // A real upstream node that actually produces "search_results" as its
-  // outputKey, so once the LLM "fixes" the mapping to reference it bare,
-  // re-validation passes and the loop exits BEFORE exhausting retries.
   const upstream = node({ id: "upstream", type: "plugin", config: { pluginId: "web-search", outputKey: "search_results" } });
   const pluginNode = node({
     id: "search",
@@ -118,16 +112,12 @@ Deno.test("runInterpolationSelfCorrection - once retries are exhausted, the dete
   const ctx: InterpolationSelfCorrectionContext = {
     graph,
     availablePlugins: plugins,
-    // The LLM "retry" always returns the SAME broken mapping, so validation
-    // keeps failing and the deterministic fallback must kick in.
     configLlm: fakeConfigLlm({ inputMapping: { query: "${bogus.path[0]}" } }),
     nodeDescriptions: new Map(),
   };
 
   await collect(runInterpolationSelfCorrection(ctx));
 
-  // The deterministic fallback replaces the ${...} reference with the
-  // immediate predecessor's real outputKey.
   assertEquals(
     (pluginNode.config.inputMapping as any).query,
     "${search_results}",

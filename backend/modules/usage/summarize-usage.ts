@@ -8,12 +8,10 @@ import type {
   UsedModel,
 } from "./types.ts";
 
-// The call's own start, derived from when it was recorded (at its end).
 export function startedAt(call: UsageRecord): number {
   return call.createdAt - call.durationMs;
 }
 
-// Sum of the reported values, or null when none was reported.
 export function sumReported(values: (number | null)[]): number | null {
   let total: number | null = null;
   for (const value of values) {
@@ -36,9 +34,6 @@ export function tokenTotals(calls: UsageRecord[]): TokenTotals {
   };
 }
 
-// Output tokens per second of generation. Only calls that reported both their
-// output tokens and when the first token arrived can say how long generating
-// took; the rest are left out instead of guessed.
 export function tokensPerSecond(calls: UsageRecord[]): number | null {
   let tokens = 0;
   let generationMs = 0;
@@ -74,8 +69,6 @@ function usedModels(calls: UsageRecord[]): UsedModel[] {
   return [...byKey.values()];
 }
 
-// null when nothing was recorded for the response (messages from before usage
-// tracking), so the UI can show "—" instead of zeros.
 export function summarizeMessageUsage(
   calls: UsageRecord[],
 ): MessageUsage | null {
@@ -135,8 +128,6 @@ export function summarizeConversationUsage(
   };
 }
 
-// Groups chat calls by the message they produced. Calls not linked to a
-// message (a response that was never saved) are left out.
 export function groupByMessage(
   calls: UsageRecord[],
 ): Map<number, UsageRecord[]> {

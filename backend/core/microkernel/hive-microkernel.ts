@@ -41,8 +41,9 @@ export class HiveMicrokernel {
     model: "",
     modelProvider: "ollama",
     modelKeyId: "",
-    currentMode: "default",
     ollamaKvCacheType: "",
+    ollamaFlashAttention: "",
+    ollamaServerPromptDismissed: false,
     callbackBaseUrl: "",
   });
 
@@ -62,16 +63,6 @@ export class HiveMicrokernel {
     this.pluginStateRepository = repository;
   }
 
-  /**
-   * Applies persisted active/inactive state to plugins already registered
-   * in-memory. Plugins with no persisted record keep their current
-   * (default) state, so freshly-added internal plugins still start active.
-   *
-   * Must run AFTER registration but BEFORE any default-activation step that
-   * unconditionally calls activate() on every registered plugin — otherwise
-   * that default activation persists `active: true` and overwrites a
-   * previously persisted `false`, defeating the point of restoring state.
-   */
   async restorePersistedActiveStates(): Promise<void> {
     if (!this.pluginStateRepository) return;
 
@@ -87,11 +78,6 @@ export class HiveMicrokernel {
     }
   }
 
-  /**
-   * Returns the persisted active state for a plugin, or `undefined` if it
-   * has no persisted record (i.e. it should fall back to its default
-   * behavior, such as internal plugins defaulting to active).
-   */
   async getPersistedActiveState(name: string): Promise<boolean | undefined> {
     if (!this.pluginStateRepository) return undefined;
     const persistedStates = await this.pluginStateRepository.findAll();
@@ -178,8 +164,6 @@ export class HiveMicrokernel {
         new URL("./bee-plugin.ts", import.meta.url),
       );
     } catch (e) {
-      // If we are running in a compiled executable, the core bee-plugin.ts
-      // might not be available as a file asset. In production, we trust the bundled plugins.
       return;
     }
     

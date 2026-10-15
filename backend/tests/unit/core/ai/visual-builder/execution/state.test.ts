@@ -1,8 +1,6 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { getReducerFunction, mapTypeToZod } from "../../../../../../core/ai/visual-builder/execution/state.ts";
 
-// --- getReducerFunction ---
-
 Deno.test("getReducerFunction - overwrite/default returns undefined", () => {
   assertEquals(getReducerFunction("overwrite"), undefined);
   assertEquals(getReducerFunction(undefined), undefined);
@@ -49,8 +47,6 @@ Deno.test("getReducerFunction - divide by zero throws", () => {
   const fn = getReducerFunction("divide")! as any;
   assertThrows(() => fn(6, 0), Error, "Division by zero");
 });
-
-// --- mapTypeToZod ---
 
 Deno.test("mapTypeToZod - required string accepts strings, rejects numbers", () => {
   const schema = mapTypeToZod({ type: "string", required: true });

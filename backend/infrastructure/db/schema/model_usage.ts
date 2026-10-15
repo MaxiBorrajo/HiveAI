@@ -20,10 +20,6 @@ export type UsageRole = (typeof USAGE_ROLES)[number];
 export const USAGE_STATUSES = ["ok", "error"] as const;
 export type UsageStatus = (typeof USAGE_STATUSES)[number];
 
-// One row per model call. There are no foreign keys here on purpose: deleting
-// an API key (or a chat) must not erase what was consumed, and the key alias is
-// a snapshot taken at call time. Token columns are nullable and have no
-// default: a provider that does not report a figure leaves it empty.
 export const modelUsage = sqliteTable(
   "model_usage",
   {

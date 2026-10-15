@@ -78,7 +78,6 @@ function pair(calls: UsageRecord[]): TokenPair {
   };
 }
 
-// Input + output the providers reported, or null when they reported none.
 function tokensOf(p: TokenPair): number | null {
   return sumReported([p.inputTokens, p.outputTokens]);
 }
@@ -88,9 +87,6 @@ function share(part: number | null, whole: number | null): number | null {
   return part / whole;
 }
 
-// `designCalls` are the graph-generation calls of the execution made before the
-// run: what the orchestrator spent designing it. Every call of the run itself
-// is delegated work.
 function delegation(
   calls: UsageRecord[],
   designCalls: UsageRecord[],
@@ -138,8 +134,6 @@ function nodes(calls: UsageRecord[], info: RunInfo | null): RunNodeUsage[] {
   const result: RunNodeUsage[] = [];
   const seen = new Set<string>();
 
-  // Graph order first. A model node with no calls is kept so its resolved
-  // model is still visible; other nodes only appear when they made calls.
   for (const node of info?.nodes ?? []) {
     const nodeCalls = byNode.get(node.id) ?? [];
     seen.add(node.id);
@@ -161,8 +155,6 @@ function wallClock(calls: UsageRecord[]): number | null {
   return end - start;
 }
 
-// null when nothing is known about the run (it predates usage tracking), so the
-// UI can say "No usage data" instead of showing zeros.
 export function summarizeRunUsage(
   calls: UsageRecord[],
   info: RunInfo | null,
@@ -171,7 +163,6 @@ export function summarizeRunUsage(
   if (!info && calls.length === 0) return null;
 
   return {
-    // The run's own wall clock; the calls' span only when it was not recorded.
     latencyMs: info?.durationMs ?? wallClock(calls),
     calls: calls.length,
     failedCalls: calls.filter((c) => c.status === "error").length,
@@ -183,8 +174,6 @@ export function summarizeRunUsage(
   };
 }
 
-// Groups an execution's calls by the run (history row) they belong to. Calls
-// of a run that did not finish are left out: they have no run to show in.
 export function groupByRun(calls: UsageRecord[]): Map<number, UsageRecord[]> {
   const byRun = new Map<number, UsageRecord[]>();
   for (const call of calls) {
@@ -197,8 +186,6 @@ export function groupByRun(calls: UsageRecord[]): Map<number, UsageRecord[]> {
   return byRun;
 }
 
-// The generation calls of an execution made up to a moment (the run's start):
-// what the orchestrator spent designing the graph the run executes.
 export function designCallsBefore(
   calls: UsageRecord[],
   before: number,

@@ -1,12 +1,9 @@
-// Mirrors backend/modules/usage/types.ts. Every figure is null when the
-// provider did not report it; it is never a stand-in 0.
 export interface TokenTotals {
   inputTokens: number | null;
   outputTokens: number | null;
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
-  // False when some call did not report tokens, so the sums are a lower bound.
   tokensComplete: boolean;
 }
 
@@ -43,18 +40,14 @@ export interface UsageBucket extends TokenTotals {
   models: ModelTotals[];
 }
 
-// Local and cloud stay apart on purpose: there is no combined figure.
 export interface ConversationUsage {
   local: UsageBucket;
   cloud: UsageBucket;
 }
 
-// ---- One run of an execution (mirrors backend/modules/usage/types.ts) ----
 
 export type UsageStatus = "ok" | "error";
 
-// The model of a node as it was resolved when the run started, and the key
-// alias as it was then.
 export interface RunModel {
   provider: string;
   model: string;
@@ -64,8 +57,6 @@ export interface RunModel {
 }
 
 export interface RunOrchestrator extends RunModel {
-  // "current": the graph predates recording its orchestrator, so the chat's
-  // model at run time was assumed.
   source: "generation" | "current";
 }
 
@@ -109,23 +100,14 @@ export interface TokenPair {
   outputTokens: number | null;
 }
 
-// The orchestrator is the model that generated the graph; every node of a run
-// is delegated work.
 export interface RunDelegation {
-  // What designing the graph cost. Null tokens when no generation was recorded.
   orchestrator: TokenPair;
   orchestratorCalls: number;
-  // What this run's nodes consumed.
   delegated: TokenPair;
-  // Of the delegated work, what ran on local models.
   local: TokenPair;
-  // delegated / (orchestrator + delegated); null without orchestrator data.
   delegatedShare: number | null;
-  // local / delegated.
   localShare: number | null;
 }
-
-// Local and cloud stay apart: there is no combined figure.
 export interface RunUsage {
   latencyMs: number | null;
   calls: number;
