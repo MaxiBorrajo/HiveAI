@@ -5,17 +5,10 @@ import { fetchAvailableModels } from "./get-models.ts";
 import { fetchCurrentModelsWithSupport } from "./get-current-models.ts";
 import { resolveToolSupport } from "./resolve-tool-support.ts";
 import { ollamaToolSupport } from "../../../core/ai/providers/tool-support.ts";
-import { setCurrentMode } from "../../modes/use-cases/set-current-mode.ts";
-import {
-  clearKvCacheOverride,
-  InvalidModeError,
-} from "../../modes/use-cases/set-mode.ts";
 import { isModelProvider } from "../../../core/ai/providers/types.ts";
 import { getORM } from "../../../infrastructure/db/orm.ts";
 import { ApiKeyRepository } from "../../../infrastructure/db/repositories/api-key-repository.ts";
 import { CurrentModels } from "../types.ts";
-
-const DEFAULT_MODE = "default";
 
 interface SetModelsBody {
   model?: string;
@@ -87,8 +80,6 @@ export async function updateModels(
   }
 
   hive.configure({ model, modelProvider: "ollama", modelKeyId: "" });
-  await clearKvCacheOverride(hive);
-  setCurrentMode(hive, DEFAULT_MODE);
 
   return fetchCurrentModelsWithSupport(hive);
 }
@@ -105,10 +96,7 @@ export async function setModels(
     const current = await updateModels(hive, parsed.body);
     return ResponseBuilder.success(current, { headers });
   } catch (error) {
-    if (
-      error instanceof InvalidModelsError ||
-      error instanceof InvalidModeError
-    ) {
+    if (error instanceof InvalidModelsError) {
       return ResponseBuilder.error(error.errors, undefined, {
         headers,
         status: 400,

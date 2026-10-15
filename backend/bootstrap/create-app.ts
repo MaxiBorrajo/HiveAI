@@ -11,7 +11,7 @@ import { chatsRouter } from "../modules/chats/router.ts";
 import { interactionsRouter } from "../modules/interactions/router.ts";
 import { externalPluginCallbacksRouter } from "../modules/external-plugin-callbacks/router.ts";
 import { draftsRouter } from "../modules/drafts/router.ts";
-import { modesRouter } from "../modules/modes/router.ts";
+import { modelSettingsRouter } from "../modules/model-settings/router.ts";
 import { modelsRouter } from "../modules/models/router.ts";
 import { executionsRouter } from "../modules/executions/router.ts";
 import { apiKeysRouter } from "../modules/api-keys/router.ts";
@@ -54,7 +54,7 @@ export function createApp(hive: HiveMicrokernel) {
 
   app.route("/api/plugins", pluginsRouter);
   app.route("/api/chats", chatsRouter);
-  app.route("/api/modes", modesRouter);
+  app.route("/api/model-settings", modelSettingsRouter);
   app.route("/api/models", modelsRouter);
   app.route("/api/interactions", interactionsRouter);
   app.route("/api/external-plugin-callbacks", externalPluginCallbacksRouter);

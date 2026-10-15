@@ -153,7 +153,7 @@ config/  experiments/
 
 ### Frontend (`frontend/src/`)
 ```
-features/<feature>/     chats, drafts, executions, interactions, models, modes, plugins
+features/<feature>/     chats, drafts, executions, interactions, models, model-settings, plugins
   api/ components/ hooks/ lib/ types.ts   (+ Contexto.tsx si hay)
 components/             ui/ (shadcn) y componentes compartidos de la app
 hooks/                  hooks compartidos (useCopyFeedback, useKeyedState...)

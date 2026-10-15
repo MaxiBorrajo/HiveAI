@@ -8,13 +8,13 @@ export interface HiveSettings {
   model: string;
   modelProvider: ModelProvider;
   modelKeyId: string;
-  currentMode: string;
   ollamaKvCacheType: string;
   ollamaFlashAttention: string;
+  ollamaServerPromptDismissed: boolean;
   callbackBaseUrl: string;
 }
 
-const PERSISTED_KEYS = ["model", "modelProvider", "modelKeyId", "ollamaKvCacheType", "ollamaFlashAttention"] as const;
+const PERSISTED_KEYS = ["model", "modelProvider", "modelKeyId", "ollamaKvCacheType", "ollamaFlashAttention", "ollamaServerPromptDismissed"] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;
 
 const SETTINGS_FILE_NAME = "settings.json";

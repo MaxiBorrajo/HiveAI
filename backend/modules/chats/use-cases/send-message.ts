@@ -8,7 +8,7 @@ import {
 import { ChatRepository } from "../../../infrastructure/db/repositories/chat-repository.ts";
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
 import { type ThinkingRun } from "../../../core/memory/types.ts";
-import { resolveModelOptions } from "../../modes/lib/resolve-model-options.ts";
+import { resolveModelOptions } from "../../model-settings/lib/resolve-model-options.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { embedText } from "../../../core/memory/embeddings.ts";
 import { splitContent } from "../../../core/ai/providers/capabilities.ts";
@@ -277,9 +277,7 @@ export async function sendMessage(
 
     send("thinking", {});
 
-    const modelOptions = await resolveModelOptions(
-      hive.getConfig().get("currentMode"),
-    );
+    const modelOptions = await resolveModelOptions();
 
     const msgRepo = new MessageRepository(db);
     const contextMessages = await msgRepo.buildTurnContext(

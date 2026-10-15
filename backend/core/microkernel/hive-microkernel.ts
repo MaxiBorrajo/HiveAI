@@ -40,9 +40,9 @@ export class HiveMicrokernel {
     model: "",
     modelProvider: "ollama",
     modelKeyId: "",
-    currentMode: "custom",
     ollamaKvCacheType: "",
     ollamaFlashAttention: "",
+    ollamaServerPromptDismissed: false,
     callbackBaseUrl: "",
   });
 
