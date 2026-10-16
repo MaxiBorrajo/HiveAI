@@ -21,7 +21,9 @@
     "check": "deno check main.ts plugins/*/index.ts",
     "test": "deno test -A",
     "test:coverage": "deno test -A --coverage=coverage_profile && deno coverage coverage_profile --html",
-    "eval:llm": "deno run -A tests/llm-eval/run.ts",
+    "eval": "deno run -A tests/llm-eval/run.ts",
+    "eval:compare": "deno run -A tests/llm-eval/compare.ts",
+    "eval:llm": "deno run -A tests/llm-eval/run.ts -- --suite=routing",
     "eval:generator": "deno run -A tests/llm-eval/runGenerator.ts"
   },
   "imports": {
