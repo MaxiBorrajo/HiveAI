@@ -1,4 +1,3 @@
-import ollama from "ollama";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
 import type { LangGraphAbstraction, PluginInfo } from "../../core/ai/visual-builder/types.ts";
@@ -11,9 +10,9 @@ import CounterPlugin from "../../plugins/counter/index.ts";
 import { generatorEvalCases, type GeneratorEvalCase } from "./generatorCases.ts";
 import { generateIncrementalGraph } from "../../core/ai/visual-builder/generation/generate-graph.ts";
 import { validateGraphAgentToolMentions, validateGraphInterpolationGrammar, validateGraphPluginParameters, validateGraphVariableReferences } from "../../core/ai/visual-builder/generation/validation.ts";
-import { modelRefLabel } from "./model-ref.ts";
+import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
-import type { EvalVerdict } from "./metrics.ts";
+import type { EvalVerdict, EvalLang } from "./metrics.ts";
 
 const ALL_PLUGINS = [WebSearchPlugin, WebReadPlugin, FileOpsPlugin, CurrentDatetimePlugin, CounterPlugin];
 const GENERATION_TIMEOUT_MS = 300_000;
@@ -25,14 +24,6 @@ interface CaseOutcome {
   graph?: LangGraphAbstraction;
 }
 
-async function ensureModelAvailable(model: string): Promise<boolean> {
-  try {
-    const { models } = await ollama.list();
-    return models.some((m) => m.name === model || m.model === model);
-  } catch {
-    return false;
-  }
-}
 
 function toPluginInfo(hive: HiveMicrokernel): PluginInfo[] {
   return hive.getTools().map((t) => {
@@ -63,9 +54,11 @@ async function runCase(
   executorRef: ModelRef,
   availablePlugins: PluginInfo[],
   testCase: GeneratorEvalCase,
+  lang: EvalLang,
 ): Promise<CaseOutcome & { inputTokens: number; outputTokens: number; durationMs: number }> {
   const details: string[] = [];
   const scopedPlugins = availablePlugins.filter((p) => testCase.activePlugins.includes(p.name));
+  const prompt = (lang === "es" ? testCase.promptEs : undefined) ?? testCase.prompt;
 
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`generation exceeded ${GENERATION_TIMEOUT_MS}ms`)), GENERATION_TIMEOUT_MS),
@@ -76,7 +69,7 @@ async function runCase(
   try {
     const captured = await captureUsage(async () => {
       const generator = generateIncrementalGraph(
-        testCase.prompt,
+        prompt,
         executorRef.model,
         scopedPlugins,
         undefined,
@@ -139,9 +132,10 @@ async function runCase(
 export async function runGeneratorSuite(
   executorRef: ModelRef,
   runId: string,
+  lang: EvalLang = "en",
 ): Promise<EvalVerdict[]> {
   if (executorRef.provider === "ollama") {
-    const available = await ensureModelAvailable(executorRef.model);
+    const available = await ensureOllamaModelAvailable(executorRef.model);
     if (!available) {
       console.log(
         `SKIPPED (generation): Ollama model '${executorRef.model}' is not available. Run 'ollama pull ${executorRef.model}'.`,
@@ -168,7 +162,7 @@ export async function runGeneratorSuite(
   const verdicts: EvalVerdict[] = [];
   for (const testCase of generatorEvalCases) {
     console.log(`\nRunning: ${testCase.name}`);
-    const outcome = await runCase(executorRef, availablePlugins, testCase);
+    const outcome = await runCase(executorRef, availablePlugins, testCase, lang);
     console.log(`  ${outcome.pass ? "PASS" : "FAIL"}`);
     if (!outcome.pass) {
       for (const d of outcome.details) console.log(`    - ${d}`);
@@ -199,10 +193,12 @@ export async function runGeneratorSuite(
 }
 
 async function main() {
-  const { parseModelArg } = await import("./model-ref.ts");
+  const { parseModelArg, envSecretResolver } = await import("./model-ref.ts");
   const { installInMemoryUsageRecorder } = await import("./usage-capture.ts");
   const { writeReport } = await import("./metrics.ts");
+  const { setSecretResolver } = await import("../../core/ai/providers/create-chat-model.ts");
 
+  setSecretResolver(envSecretResolver);
   installInMemoryUsageRecorder();
   const executorRef = parseModelArg(Deno.args[0] ?? "qwen3:8b");
   const runId = `standalone-${Date.now()}`;

@@ -1,5 +1,16 @@
 import type { LangGraphAbstraction } from "../../core/ai/visual-builder/types.ts";
 
+/**
+ * Some Ollama reasoning models (e.g. lfm2.5) emit a literal <think>...</think>
+ * block as plain text even with `think: false`, since the plain-string
+ * content path doesn't separate thinking from the final answer the way
+ * structured providers do. Strip it before judging a case's output, so the
+ * check reflects the actual answer rather than reasoning noise.
+ */
+export function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+}
+
 export interface ExecutionEvalCase {
   name: string;
   /** "execution" cases run through the model; nothing here needs activePlugins
@@ -53,6 +64,7 @@ function reasoningSummaryGraph(executorModel: string, provider: string, keyId?: 
           model: executorModel,
           provider,
           ...(keyId ? { keyId } : {}),
+          think: false,
           systemPrompt:
             "Summarize the given text in a single short sentence. Reply with only the sentence, nothing else.",
           outputKey: "summary",
@@ -83,9 +95,25 @@ function classifyAndBranchGraph(executorModel: string, provider: string, keyId?:
           model: executorModel,
           provider,
           ...(keyId ? { keyId } : {}),
+          think: false,
           systemPrompt:
             "Classify the sentiment of the given text as exactly one word: 'positive' or 'negative'. Reply with only that word.",
           outputKey: "sentiment",
+        },
+      },
+      {
+        // Reasoning models mention both candidate words ("could be positive
+        // or negative...") while thinking, which makes any contains/not_contains
+        // check on the raw sentiment field unreliable. This node strips the
+        // <think> block first so the condition below evaluates the model's
+        // actual final answer, not its reasoning trail.
+        id: "strip_think",
+        name: "Clean sentiment",
+        type: "plugin",
+        config: {
+          pluginId: "strip-think",
+          inputMapping: { text: "sentiment" },
+          outputKey: "sentiment_clean",
         },
       },
       {
@@ -93,7 +121,7 @@ function classifyAndBranchGraph(executorModel: string, provider: string, keyId?:
         name: "Is positive?",
         type: "condition",
         config: {
-          condition: { field: "sentiment", operator: "contains", value: "positive" },
+          condition: { field: "sentiment_clean", operator: "contains", value: "positive" },
         },
       },
       {
@@ -104,6 +132,7 @@ function classifyAndBranchGraph(executorModel: string, provider: string, keyId?:
           model: executorModel,
           provider,
           ...(keyId ? { keyId } : {}),
+          think: false,
           systemPrompt: "Reply with exactly: 'Thanks for the kind words!'",
           outputKey: "final_reply",
         },
@@ -116,6 +145,7 @@ function classifyAndBranchGraph(executorModel: string, provider: string, keyId?:
           model: executorModel,
           provider,
           ...(keyId ? { keyId } : {}),
+          think: false,
           systemPrompt: "Reply with exactly: 'Sorry to hear that, let us help.'",
           outputKey: "final_reply",
         },
@@ -124,15 +154,17 @@ function classifyAndBranchGraph(executorModel: string, provider: string, keyId?:
     ],
     edges: [
       { id: "e1", source: "start", target: "classify_step", isConditional: false },
-      { id: "e2", source: "classify_step", target: "is_positive", isConditional: false },
-      { id: "e3", source: "is_positive", target: "positive_step", isConditional: true, path: "true" },
-      { id: "e4", source: "is_positive", target: "negative_step", isConditional: true, path: "false" },
-      { id: "e5", source: "positive_step", target: "end", isConditional: false },
-      { id: "e6", source: "negative_step", target: "end", isConditional: false },
+      { id: "e2", source: "classify_step", target: "strip_think", isConditional: false },
+      { id: "e3", source: "strip_think", target: "is_positive", isConditional: false },
+      { id: "e4", source: "is_positive", target: "positive_step", isConditional: true, path: "true" },
+      { id: "e5", source: "is_positive", target: "negative_step", isConditional: true, path: "false" },
+      { id: "e6", source: "positive_step", target: "end", isConditional: false },
+      { id: "e7", source: "negative_step", target: "end", isConditional: false },
     ],
     stateSchema: {
       input: { type: "string", required: true },
       sentiment: { type: "string", required: false },
+      sentiment_clean: { type: "string", required: false },
       final_reply: { type: "string", required: false },
     },
   };
@@ -156,7 +188,7 @@ export function buildExecutionCases(
     {
       name: "execution: a single plugin node resets a counter to zero",
       activePlugins: ["counter"],
-      inputState: { counter_name: "eval-pushups", action: "reset" },
+      inputState: { counter_name: "eval-pushups", action: "reset", amount: 0 },
       buildGraph: counterGraph,
       expectedResultCheck: (state) =>
         typeof state.count_result === "string" && /\b0\b/.test(state.count_result),
@@ -170,10 +202,10 @@ export function buildExecutionCases(
           "The quarterly report shows revenue grew 12% year over year, driven primarily by the new enterprise product line, while operating costs remained flat thanks to the infrastructure migration completed in March.",
       },
       buildGraph: () => reasoningSummaryGraph(executorModel, provider, keyId),
-      expectedResultCheck: (state) =>
-        typeof state.summary === "string" &&
-        state.summary.length > 0 &&
-        state.summary.length < 300,
+      expectedResultCheck: (state) => {
+        const summary = typeof state.summary === "string" ? stripThinkTags(state.summary) : "";
+        return summary.length > 0 && summary.length < 300;
+      },
       expectedResultDescription: "summary is a short non-empty string",
     },
     {
@@ -184,9 +216,10 @@ export function buildExecutionCases(
           "Cats are small domesticated carnivorous mammals known for their agility, independence, and role as popular household pets across the world.",
       },
       buildGraph: () => reasoningSummaryGraph(executorModel, provider, keyId),
-      expectedResultCheck: (state) =>
-        typeof state.summary === "string" &&
-        !/^(sure|here is|here's)/i.test(state.summary.trim()),
+      expectedResultCheck: (state) => {
+        const summary = typeof state.summary === "string" ? stripThinkTags(state.summary) : "";
+        return summary.length > 0 && !/^(sure|here is|here's)/i.test(summary);
+      },
       expectedResultDescription: "summary does not start with a conversational preamble",
     },
     {
@@ -194,7 +227,9 @@ export function buildExecutionCases(
       activePlugins: [],
       inputState: { input: "This is amazing, thank you so much for your help!" },
       buildGraph: () => classifyAndBranchGraph(executorModel, provider, keyId),
-      expectedResultCheck: (state) => state.final_reply === "Thanks for the kind words!",
+      expectedResultCheck: (state) =>
+        typeof state.final_reply === "string" &&
+        stripThinkTags(state.final_reply) === "Thanks for the kind words!",
       expectedResultDescription: "final_reply matches the positive branch's fixed reply",
     },
     {
@@ -202,7 +237,9 @@ export function buildExecutionCases(
       activePlugins: [],
       inputState: { input: "This is terrible, nothing works and I'm very frustrated." },
       buildGraph: () => classifyAndBranchGraph(executorModel, provider, keyId),
-      expectedResultCheck: (state) => state.final_reply === "Sorry to hear that, let us help.",
+      expectedResultCheck: (state) =>
+        typeof state.final_reply === "string" &&
+        stripThinkTags(state.final_reply) === "Sorry to hear that, let us help.",
       expectedResultDescription: "final_reply matches the negative branch's fixed reply",
     },
   ];

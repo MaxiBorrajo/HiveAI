@@ -9,6 +9,8 @@ export type EvalVerdictCategory =
   | "generation"
   | "execution";
 
+export type EvalLang = "en" | "es";
+
 export interface EvalVerdict {
   case_id: string;
   category: EvalVerdictCategory;

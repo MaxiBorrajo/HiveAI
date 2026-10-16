@@ -1,25 +1,15 @@
-import ollama from "ollama";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
 import { buildStateSchema, compileGraph } from "../../core/ai/visual-builder/execution/compiler.ts";
 import { createPluginNodeRegistry } from "../../modules/executions/use-cases/run-execution/plugin-node-executor.ts";
 import type { ToolProvider } from "../../core/ai/visual-builder/types.ts";
 import type { ModelRef } from "../../core/ai/providers/types.ts";
-import { buildExecutionCases } from "./executionCases.ts";
-import { modelRefLabel } from "./model-ref.ts";
+import { buildExecutionCases, stripThinkTags } from "./executionCases.ts";
+import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
 import type { EvalVerdict } from "./metrics.ts";
 
 const EXECUTION_TIMEOUT_MS = 120_000;
-
-async function ensureOllamaModelAvailable(model: string): Promise<boolean> {
-  try {
-    const { models } = await ollama.list();
-    return models.some((m) => m.name === model || m.model === model);
-  } catch {
-    return false;
-  }
-}
 
 export async function runExecutionSuite(
   runId: string,
@@ -41,7 +31,20 @@ export async function runExecutionSuite(
   await hive.register(new CounterPlugin());
   await hive.activate("counter");
 
-  const pluginRegistry = createPluginNodeRegistry(hive);
+  const pluginRegistry = {
+    ...createPluginNodeRegistry(hive),
+    // Synthetic "plugin" used only by fixtures to strip a <think> block from
+    // a field before a condition node reads it — see executionCases.ts.
+    "strip-think": (state: Record<string, unknown>, config: Record<string, unknown>) => {
+      const inputMapping = config.inputMapping as Record<string, string>;
+      const stateKey = inputMapping.text;
+      const raw = state[stateKey];
+      const outputKey = config.outputKey as string;
+      return Promise.resolve({
+        [outputKey]: typeof raw === "string" ? stripThinkTags(raw) : "",
+      });
+    },
+  };
   const toolProvider: ToolProvider = {
     getTool: (name: string) => hive.getTool(name),
   };
