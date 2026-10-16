@@ -8,6 +8,7 @@ function makeContext(dataDir: string): BeeContext {
     getModel: () => "test-model",
     requestApproval: () => Promise.resolve(true),
     reportStep: () => {},
+    getConfig: () => Promise.resolve(undefined),
   };
 }
 

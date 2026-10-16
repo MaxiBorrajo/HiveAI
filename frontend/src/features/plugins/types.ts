@@ -21,6 +21,12 @@ export interface PluginParameter {
   description?: string;
 }
 
+export interface PluginConfigFieldSchema {
+  key: string;
+  label: string;
+  secret?: boolean;
+}
+
 export interface Plugin {
   id: string;
   name: string;
@@ -30,6 +36,15 @@ export interface Plugin {
   executionTests?: ExecutionTestCase[];
   isExternal?: boolean;
   parameters?: PluginParameter[];
+  configFields?: PluginConfigFieldSchema[];
+}
+
+export interface PluginConfigFieldValue {
+  key: string;
+  label: string;
+  secret: boolean;
+  masked: string | null;
+  value: string | null;
 }
 
 export interface PluginSelectionTestItem extends SelectionTestCase {

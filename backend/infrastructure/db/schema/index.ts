@@ -3,6 +3,7 @@ export * from "./messages.ts";
 export * from "./fts.ts";
 
 export * from "./plugin_states.ts";
+export * from "./plugin_config.ts";
 
 export * from "./executions.ts";
 

@@ -17,6 +17,7 @@ import {
   type TestSuiteQualityReport,
 } from "./plugin-quality-validator.ts";
 import type { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
+import { getSecretStore } from "../secrets/index.ts";
 
 export type { TestSuiteQualityReport };
 
@@ -108,6 +109,7 @@ export class HiveMicrokernel {
         return wait;
       },
       reportStep: (label) => reportPluginStep(label),
+      getConfig: (key) => getSecretStore().get(`${pluginName}:${key}`),
     };
   }
 
@@ -231,6 +233,23 @@ export class HiveMicrokernel {
     }
 
     return removed;
+  }
+
+  /**
+   * Restarts the subprocess of a running external plugin, so it picks up
+   * config changes (configFields) saved while it was already active.
+   * No-op for internal plugins or external plugins that aren't currently
+   * running — those will read fresh config on their next activate().
+   */
+  async restartExternalPlugin(name: string): Promise<void> {
+    if (
+      !this.externalPlugins.isExternal(name) ||
+      !this.externalPlugins.hasRunningHandle(name)
+    ) {
+      return;
+    }
+    await this.externalPlugins.stopHandle(name);
+    await this.externalPlugins.launchAndRegister(name);
   }
 
   isActive(name: string): boolean {

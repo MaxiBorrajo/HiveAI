@@ -3,6 +3,7 @@ import type {
   BeeContext,
   BeePlugin,
   ExecutionTestCase,
+  PluginConfigField,
   SelectionTestCase,
 } from "../bee-plugin.ts";
 import { getCurrentCallId } from "../step-capture.ts";
@@ -16,6 +17,7 @@ interface Manifest {
   schema: Record<string, unknown>;
   selectionTests: SelectionTestCase[];
   executionTests: Array<Omit<ExecutionTestCase, "expect">>;
+  configFields?: PluginConfigField[];
 }
 
 export class ExternalPluginProcessError extends Error {}
@@ -184,6 +186,7 @@ export async function launchExternalPlugin(
       ...t,
       expect: () => true,
     })),
+    configFields: manifest.configFields,
     initialize: (_context: BeeContext) => {},
     process: async (input: unknown) => {
       const callId = getCurrentCallId();

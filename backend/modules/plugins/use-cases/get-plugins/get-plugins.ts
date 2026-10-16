@@ -26,6 +26,7 @@ export function getPlugins(hive: HiveMicrokernel): GetPluginsResponse {
       executionTests: plugin.executionTests || [],
       isExternal: hive.isExternalPlugin(plugin.name),
       parameters: describeParameters(plugin),
+      configFields: plugin.configFields,
     }))
     .sort((a, b) => {
       if (a.name < b.name) {
