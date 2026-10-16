@@ -13,4 +13,6 @@ export async function deletePluginConfig(
   const id = configId(pluginName, key);
   await deps.secrets.delete(id);
   await deps.repo.delete(id);
+
+  await deps.hive.restartExternalPlugin(pluginName);
 }

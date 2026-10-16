@@ -35,4 +35,6 @@ export async function setPluginConfig(
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   });
+
+  await deps.hive.restartExternalPlugin(pluginName);
 }

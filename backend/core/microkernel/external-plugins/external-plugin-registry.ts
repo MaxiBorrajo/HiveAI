@@ -1,12 +1,17 @@
 import { basename, join } from "node:path";
 import { copy } from "@std/fs/copy";
 import { JsonManifestStore } from "../json-manifest-store.ts";
-import type { SelectionTestCase, ExecutionTestCase } from "../bee-plugin.ts";
+import type {
+  SelectionTestCase,
+  ExecutionTestCase,
+  PluginConfigField,
+} from "../bee-plugin.ts";
 
 export interface ExternalPluginMetadata {
   description: string;
   selectionTests: SelectionTestCase[];
   executionTests: Array<Omit<ExecutionTestCase, "expect">>;
+  configFields?: PluginConfigField[];
 }
 
 export interface ExternalPluginRecord {

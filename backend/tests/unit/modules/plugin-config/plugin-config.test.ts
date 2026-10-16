@@ -61,6 +61,7 @@ async function setup(plugin: BeePlugin | undefined = fakePlugin()) {
   const repo = new FakeRepo();
   const hive = {
     getPlugin: (name: string) => (plugin?.name === name ? plugin : undefined),
+    restartExternalPlugin: () => Promise.resolve(),
   } as unknown as HiveMicrokernel;
   const deps: PluginConfigDeps = {
     repo: repo as unknown as PluginConfigRepository,
@@ -179,6 +180,7 @@ Deno.test("plugin config - config is isolated per plugin (same key name, differe
   const hive = {
     getPlugin: (name: string) =>
       ({ plugin_a: pluginA, plugin_b: pluginB })[name],
+    restartExternalPlugin: () => Promise.resolve(),
   } as unknown as HiveMicrokernel;
   const deps: PluginConfigDeps = {
     repo: repo as unknown as PluginConfigRepository,

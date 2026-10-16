@@ -70,6 +70,21 @@ function buildContext(pluginDir: string, pluginName: string): BeeContext {
         body: JSON.stringify({ callId, label }),
       }).catch(() => {});
     },
+    getConfig: async (key) => {
+      if (!callbackBaseUrl) return undefined;
+      try {
+        const res = await fetch(`${callbackBaseUrl}/get-config`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pluginName, key }),
+        });
+        if (!res.ok) return undefined;
+        const body = await res.json();
+        return body.data?.value ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
   };
 }
 
@@ -120,6 +135,7 @@ const server = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
         kind: t.kind,
         params: t.params,
       })),
+      configFields: plugin.configFields,
     });
   }
 

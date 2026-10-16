@@ -46,6 +46,7 @@ function FieldRow({
     setSaving(true);
     try {
       await setPluginConfigValue(pluginName, field.key, value);
+      setValue("");
       onSaved();
     } catch (e) {
       setError(errorMessage(e));
