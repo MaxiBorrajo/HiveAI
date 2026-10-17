@@ -376,3 +376,34 @@ Deno.test("executeLlmNode - a provider error fails the node with a clear message
     "API key was rejected",
   );
 });
+
+Deno.test("executeLlmNode - local models get unlimited output unless the node sets maxTokens", async () => {
+  const seen: Record<string, unknown>[] = [];
+  const factory = (opts: Record<string, unknown>) => {
+    seen.push(opts);
+    return { invoke: () => Promise.resolve(new AIMessage("ok")) };
+  };
+  const run = (config: LlmConfig) =>
+    executeLlmNode("n", { model: "qwen3:8b", provider: "ollama", ...config }, {}, undefined, factory as never);
+
+  await run({});
+  await run({ maxTokens: 512 });
+
+  assertEquals(seen[0].numPredict, -1);
+  assertEquals(seen[1].numPredict, 512);
+});
+
+Deno.test("executeLlmNode - cloud models only receive maxTokens when the node sets it", async () => {
+  const seen: Record<string, unknown>[] = [];
+  const factory = (opts: Record<string, unknown>) => {
+    seen.push(opts);
+    return { invoke: () => Promise.resolve(new AIMessage("ok")) };
+  };
+  const base = { model: "claude-sonnet-5-5", provider: "anthropic", keyId: "k" };
+
+  await executeLlmNode("n", base, {}, undefined, factory as never);
+  await executeLlmNode("n", { ...base, maxTokens: 4000 }, {}, undefined, factory as never);
+
+  assertEquals("maxTokens" in seen[0], false);
+  assertEquals(seen[1].maxTokens, 4000);
+});

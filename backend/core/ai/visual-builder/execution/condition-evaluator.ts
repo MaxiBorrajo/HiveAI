@@ -41,7 +41,7 @@ export async function evaluateConditionWithFallback(
     const prompt = `Evaluate if the following condition is satisfied based on the provided context.
 Condition: "${nodeName}" (${cond.field} ${cond.operator} ${JSON.stringify(cond.value)})
 Context:
-${contextContent.slice(0, 1500)}
+${contextContent.slice(0, 8000)}
 
 Is the condition satisfied?
 Reply with ONLY the word "true" or "false".`;

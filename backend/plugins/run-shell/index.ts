@@ -8,7 +8,7 @@ import type {
   ExecutionTestCase,
 } from "./bee-plugin.ts";
 
-const MAX_OUTPUT_CHARS = 4000;
+const MAX_OUTPUT_CHARS = 20_000;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_STREAM_BYTES = 1_000_000;
 

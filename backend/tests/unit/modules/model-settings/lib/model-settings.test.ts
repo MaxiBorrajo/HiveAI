@@ -1,5 +1,8 @@
 import { assertEquals } from "@std/assert";
-import { mapSettingsToOllamaOptions } from "../../../../../modules/model-settings/lib/resolve-model-options.ts";
+import {
+  LIMITED_OUTPUT_NUM_PREDICT,
+  mapSettingsToOllamaOptions,
+} from "../../../../../modules/model-settings/lib/resolve-model-options.ts";
 import { validateModelSettings } from "../../../../../modules/model-settings/lib/validate-model-settings.ts";
 import {
   applyOverrides,
@@ -15,7 +18,8 @@ Deno.test("applyOverrides - with no overrides every setting holds its default", 
     settings.find((s) => s.name === name)?.currentValue;
   assertEquals(value("kv_cache_type"), "f16");
   assertEquals(value("flash_attention"), true);
-  assertEquals(value("n_ctx"), 4096);
+  assertEquals(value("n_ctx"), 8192);
+  assertEquals(value("limit_output"), false);
   assertEquals(value("n_batch"), 512);
   assertEquals(value("mmap"), true);
   assertEquals(value("mlock"), false);
@@ -24,17 +28,17 @@ Deno.test("applyOverrides - with no overrides every setting holds its default", 
 });
 
 Deno.test("extractOverrides - persists only values that differ from the default", () => {
-  const settings = applyOverrides({ n_ctx: 8192, thinking: false });
+  const settings = applyOverrides({ n_ctx: 16384, thinking: false });
   settings.find((s) => s.name === "top_k")!.currentValue = 40;
 
-  assertEquals(extractOverrides(settings), { n_ctx: 8192, thinking: false });
+  assertEquals(extractOverrides(settings), { n_ctx: 16384, thinking: false });
 });
 
 Deno.test("mapSettingsToOllamaOptions - maps defaults, including think", () => {
   const options = mapSettingsToOllamaOptions(applyOverrides({}));
 
   assertEquals(options, {
-    numCtx: 4096,
+    numCtx: 8192,
     numBatch: 512,
     useMmap: true,
     useMlock: false,
@@ -42,6 +46,7 @@ Deno.test("mapSettingsToOllamaOptions - maps defaults, including think", () => {
     topK: 40,
     topP: 0.9,
     repeatPenalty: 1.1,
+    numPredict: -1,
     keepAlive: "30m",
     think: true,
   });
@@ -55,6 +60,12 @@ Deno.test("mapSettingsToOllamaOptions - thinking off, unlimited output and expli
   assertEquals(options.think, false);
   assertEquals(options.numPredict, -1);
   assertEquals(options.numGpu, 20);
+});
+
+Deno.test("mapSettingsToOllamaOptions - limit_output caps the response at a fixed number of tokens", () => {
+  const options = mapSettingsToOllamaOptions(applyOverrides({ limit_output: true }));
+
+  assertEquals(options.numPredict, LIMITED_OUTPUT_NUM_PREDICT);
 });
 
 Deno.test("validateModelSettings - accepts values inside the allowed range", () => {

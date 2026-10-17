@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CopyIcon,
   GitCompareIcon,
   XIcon,
 } from "lucide-react";
@@ -11,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { useSlidePresence } from "@/hooks/useSlidePresence";
 import { formatDuration } from "@/lib/formatUsage";
 import { getErrorMessage } from "@/lib/errors";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { stringifyContent } from "@/lib/download";
 import { getExecutionRuns } from "../../api/getExecutionRuns";
 import { normalizeResult } from "../../lib/executionResult";
 import type { RunSummary } from "../../types";
@@ -18,6 +22,34 @@ import { RunComparisonModal } from "./RunComparisonModal";
 import { RunUsageBreakdown } from "./RunUsageBreakdown";
 
 const MAX_COMPARED = 2;
+
+function RunInput({ input }: { input: RunSummary["input"] }) {
+  const { copied, copy } = useCopyFeedback();
+  const entries = Object.entries(input ?? {}).filter(
+    ([, value]) => value !== undefined && value !== "",
+  );
+  if (entries.length === 0) return null;
+  const text = entries
+    .map(([key, value]) =>
+      entries.length === 1 ? stringifyContent(value) : `${key}: ${stringifyContent(value)}`,
+    )
+    .join("\n\n");
+
+  return (
+    <div className="mb-5 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium">Input</h4>
+        <Button size="xs" variant="ghost" onClick={() => copy(text)}>
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-3 font-sans text-xs leading-relaxed select-text">
+        {text}
+      </pre>
+    </div>
+  );
+}
 
 function RunRow({
   run,
@@ -91,6 +123,7 @@ function RunRow({
       </button>
       {expanded && (
         <div className="border-t border-border p-5">
+          <RunInput input={run.input} />
           <RunUsageBreakdown usage={run.usage} />
         </div>
       )}

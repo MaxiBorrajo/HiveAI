@@ -1,6 +1,6 @@
 import { Ollama } from "ollama";
 
-export const MAX_LOCAL_NUM_CTX = 16384;
+export const MAX_LOCAL_NUM_CTX = 32768;
 
 const cache = new Map<string, number | undefined>();
 

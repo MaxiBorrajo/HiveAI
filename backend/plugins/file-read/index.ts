@@ -7,7 +7,7 @@ import type {
   ExecutionTestCase,
 } from "./bee-plugin.ts";
 
-const MAX_CONTENT_CHARS = 20_000;
+const MAX_CONTENT_CHARS = 100_000;
 
 type Operation = "list" | "read";
 

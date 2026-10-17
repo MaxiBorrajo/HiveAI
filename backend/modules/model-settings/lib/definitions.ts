@@ -34,7 +34,7 @@ export const MODEL_SETTING_DEFINITIONS: ModelSettingDefinition[] = [
     description:
       "Context window size in tokens, defining the maximum prompt and history length the model can process simultaneously.",
     type: "number",
-    defaultValue: 4096,
+    defaultValue: 8192,
     minValue: 512,
     maxValue: 131072,
     step: 256,
@@ -149,10 +149,10 @@ export const MODEL_SETTING_DEFINITIONS: ModelSettingDefinition[] = [
   {
     name: "limit_output",
     description:
-      "Dynamically limits the maximum number of output tokens based on the available context and task type.",
+      "Caps the number of tokens the model may generate in a single response.",
     type: "boolean",
-    defaultValue: true,
-    note: "If true, num_predict is calculated at runtime based on the available n_ctx and task type; if false, num_predict = -1 (unlimited, stopped by EOS).",
+    defaultValue: false,
+    note: "If false (default), num_predict = -1: output is unlimited and stops when the model finishes or the context is full. If true, responses are capped at a fixed number of tokens.",
     requiresServiceRestart: false,
   },
 ];

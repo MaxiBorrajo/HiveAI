@@ -18,6 +18,8 @@ export interface OllamaModelOptions {
   think?: boolean;
 }
 
+export const LIMITED_OUTPUT_NUM_PREDICT = 2048;
+
 function toNumber(value: ModelSettingValue | undefined): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
@@ -47,7 +49,8 @@ export function mapSettingsToOllamaOptions(
     topK: toNumber(byName.get("top_k")),
     topP: toNumber(byName.get("top_p")),
     repeatPenalty: toNumber(byName.get("repeat_penalty")),
-    numPredict: byName.get("limit_output") === false ? -1 : undefined,
+    numPredict:
+      byName.get("limit_output") === true ? LIMITED_OUTPUT_NUM_PREDICT : -1,
     keepAlive: toKeepAlive(byName.get("keep_alive")),
     think: toBoolean(byName.get("thinking")),
   };

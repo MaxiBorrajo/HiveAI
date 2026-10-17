@@ -20,7 +20,7 @@ import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
 import { loadChatUsage } from "../../usage/load-chat-usage.ts";
 import { ModelUsageRepository } from "../../../infrastructure/db/repositories/model-usage-repository.ts";
 
-const MAX_MESSAGE_LENGTH = 20_000;
+const MAX_MESSAGE_LENGTH = 100_000;
 
 async function persistUserMessage(
   db: AppDatabase,

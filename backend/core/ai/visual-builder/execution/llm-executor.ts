@@ -48,13 +48,15 @@ function splitModelConfig(config: LlmConfig, temperature: number) {
     structuredOutput: _structuredOutput,
     outputKey: _outputKey,
     inputMapping: _inputMapping,
+    maxTokens,
     ...modelOptions
   } = config;
 
   const ref = normalizeModelRef(resolveModelName(model), { provider, keyId });
+  const outputLimit = typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : undefined;
   const options = isCloudProvider(ref.provider)
-    ? { temperature }
-    : { temperature, ...modelOptions };
+    ? { temperature, ...(outputLimit ? { maxTokens: outputLimit } : {}) }
+    : { temperature, numPredict: outputLimit ?? -1, ...modelOptions };
   return { ref, options };
 }
 

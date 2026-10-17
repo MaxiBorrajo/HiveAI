@@ -30,11 +30,11 @@ export function RunExecutionModal({
 }: RunExecutionModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Start Execution</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 py-4">
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto py-2">
           {graph?.stateSchema &&
             Object.entries(graph.stateSchema)
               .filter(([key]) => key === "input")
@@ -57,7 +57,7 @@ export function RunExecutionModal({
                         [key]: e.target.value,
                       }))
                     }
-                    className="min-h-[110px]"
+                    className="min-h-[140px] max-h-[45vh] overflow-y-auto"
                   />
                   <p className="text-xs text-muted-foreground">
                     {hasRequiredInputs

@@ -25,7 +25,6 @@ export const HiveQueenResponder: GraphNode<typeof HiveAIState> = async (
   const responderOptions = {
     model: state.model,
     temperature: 0.0,
-    numPredict: 1024,
     ...state.modelOptions,
     think: false,
   };
