@@ -18,6 +18,7 @@ import { stringifyContent } from "@/lib/download";
 import { getExecutionRuns } from "../../api/getExecutionRuns";
 import { normalizeResult } from "../../lib/executionResult";
 import type { RunSummary } from "../../types";
+import { ResultRenderer } from "../result/ResultRenderer";
 import { RunComparisonModal } from "./RunComparisonModal";
 import { RunUsageBreakdown } from "./RunUsageBreakdown";
 
@@ -124,6 +125,12 @@ function RunRow({
       {expanded && (
         <div className="border-t border-border p-5">
           <RunInput input={run.input} />
+          <div className="mb-5 flex flex-col gap-1.5">
+            <h4 className="text-sm font-medium">Result</h4>
+            <div className="max-h-96 overflow-y-auto select-text">
+              <ResultRenderer result={result} />
+            </div>
+          </div>
           <RunUsageBreakdown usage={run.usage} />
         </div>
       )}
