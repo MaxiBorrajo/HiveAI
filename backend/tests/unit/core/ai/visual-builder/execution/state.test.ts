@@ -91,3 +91,9 @@ Deno.test("mapTypeToZod - array of items validates each element", () => {
   assertEquals(schema.safeParse([1, 2, 3]).success, true);
   assertEquals(schema.safeParse([1, "x"]).success, false);
 });
+
+Deno.test("getReducerFunction - append on a string-typed key concatenates text", () => {
+  const fn = getReducerFunction("append", "string")! as any;
+  assertEquals(fn("a", "b"), "a\n\nb");
+  assertEquals(fn(undefined, "b"), "b");
+});

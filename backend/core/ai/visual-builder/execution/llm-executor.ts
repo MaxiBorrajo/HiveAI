@@ -22,7 +22,6 @@ export function coerceLlmBooleanReply(text: string): boolean {
   return /\btrue\b/.test(clean);
 }
 
-const MAX_CONTEXT_VALUE_CHARS = 4000;
 const MAX_REACT_ITERATIONS = 8;
 const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
   "input",
@@ -201,7 +200,7 @@ export function buildPromptMessages(
           ? resolved
           : JSON.stringify(resolved, null, 2);
       contextParts.push(
-        `CONTEXT [${label}]:\n${valStr.slice(0, MAX_CONTEXT_VALUE_CHARS)}`,
+        `CONTEXT [${label}]:\n${valStr}`,
       );
     }
   } else {
@@ -214,7 +213,7 @@ export function buildPromptMessages(
         const valStr =
           typeof value === "string" ? value : JSON.stringify(value, null, 2);
         contextParts.push(
-          `CONTEXT [${key}]:\n${valStr.slice(0, MAX_CONTEXT_VALUE_CHARS)}`,
+          `CONTEXT [${key}]:\n${valStr}`,
         );
       }
     }
@@ -327,7 +326,7 @@ async function runReactLoop(
   tools: ToolLike[],
   messages: BaseMessage[],
   toolProvider?: ToolProvider,
-): Promise<unknown> {
+): Promise<{ conversation: BaseMessage[]; final: AIMessage | null }> {
   console.log(
     `\n[LLM Agent Node ${nodeId}] Starting autonomous ReAct loop with tools: [${tools.map((t) => t.name).join(", ")}]`,
   );
@@ -349,7 +348,7 @@ async function runReactLoop(
       console.log(
         `[LLM Agent Node ${nodeId}] Agent reached conclusion after ${iteration} iterations.`,
       );
-      return response;
+      return { conversation, final: response };
     }
 
     console.log(
@@ -364,8 +363,36 @@ async function runReactLoop(
     }
   }
 
-  return conversation[conversation.length - 1];
+  console.warn(
+    `[LLM Agent Node ${nodeId}] Tool iteration budget (${MAX_REACT_ITERATIONS}) exhausted; forcing a final answer without tools.`,
+  );
+  return { conversation, final: null };
 }
+
+// Anthropic thinking blocks are signed against the exact tools list of the
+// request that produced them; the forced final call drops the tools, so the
+// signatures would be rejected. Strip them from the replayed conversation.
+function stripThinkingBlocks(conversation: BaseMessage[]): BaseMessage[] {
+  return conversation.map((msg) => {
+    if (!AIMessage.isInstance(msg) || !Array.isArray(msg.content)) return msg;
+    const content = msg.content.filter(
+      (block) =>
+        typeof block !== "object" ||
+        (block.type !== "thinking" && block.type !== "redacted_thinking"),
+    );
+    if (content.length === msg.content.length) return msg;
+    return new AIMessage({
+      content,
+      tool_calls: msg.tool_calls,
+      additional_kwargs: msg.additional_kwargs,
+      response_metadata: msg.response_metadata,
+      id: msg.id,
+    });
+  });
+}
+
+const FORCE_FINAL_ANSWER_PROMPT =
+  "You have no more tool calls available. Using only the information gathered above, write your final answer now, following the output format from your instructions. Do not request any tools.";
 
 function resolveModelOptions(config: LlmConfig, temperature: number) {
   const { ref, options } = splitModelConfig(config, temperature);
@@ -403,13 +430,30 @@ export async function executeLlmNode(
     const messages = buildPromptMessages(state, config);
 
     if (tools.length > 0) {
-      const finalResponse = await runReactLoop(
+      const { conversation, final } = await runReactLoop(
         nodeId,
         baseLlm,
         tools,
         messages,
         toolProvider,
       );
+      if (config.structuredOutput) {
+        // deno-lint-ignore no-explicit-any
+        const structured = (baseLlm as any).withStructuredOutput(
+          mapTypeToZod(config.structuredOutput),
+        ) as Runnable;
+        const parsed = await structured.invoke([
+          ...stripThinkingBlocks(conversation),
+          new HumanMessage(FORCE_FINAL_ANSWER_PROMPT),
+        ]);
+        return mapResponseToState(parsed, config, state);
+      }
+      const finalResponse =
+        final ??
+        (await baseLlm.invoke([
+          ...stripThinkingBlocks(conversation),
+          new HumanMessage(FORCE_FINAL_ANSWER_PROMPT),
+        ]));
       return mapResponseToState(finalResponse, config, state);
     }
 
@@ -427,6 +471,23 @@ export async function executeLlmNode(
   }
 }
 
+function coerceStructuredScalar(value: unknown, type: string): unknown {
+  if (type !== "number" && type !== "string") return value;
+  let v = value;
+  if (v instanceof AIMessage) {
+    v = Array.isArray(v.content) ? splitContent(v.content).text : v.content;
+  }
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    const values = Object.values(v);
+    if (values.length === 1) v = values[0];
+  }
+  if (type === "number" && typeof v === "string") {
+    const m = v.match(/-?\d+(?:\.\d+)?/);
+    return m ? Number(m[0]) : v;
+  }
+  return v;
+}
+
 export function mapResponseToState(
   response: unknown,
   config: LlmConfig,
@@ -435,7 +496,7 @@ export function mapResponseToState(
   let resultValue: unknown;
 
   if (config.structuredOutput) {
-    resultValue = response;
+    resultValue = coerceStructuredScalar(response, config.structuredOutput.type);
   } else {
     const content = (response as AIMessage).content;
     resultValue = Array.isArray(content) ? splitContent(content).text : content;

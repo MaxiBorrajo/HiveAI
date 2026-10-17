@@ -116,5 +116,6 @@ executionsRouter.post("/:id/run", async (c) => {
     body.input,
     headers,
     body.autoApprove !== false,
+    c.req.raw.signal,
   );
 });

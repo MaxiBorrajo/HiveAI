@@ -81,7 +81,10 @@ export function useExecutionWorkspace({
 
   const generateAbortRef = useRef<AbortController | null>(null);
 
+  const runAbortRef = useRef<AbortController | null>(null);
+
   const handleStop = () => generateAbortRef.current?.abort();
+  const handleStopRun = () => runAbortRef.current?.abort();
 
   const handleGenerate = async (userPrompt: string) => {
     const controller = new AbortController();
@@ -255,6 +258,8 @@ export function useExecutionWorkspace({
   ) => {
     if (!activeExecutionId) return;
     const currentKey = activeExecutionId;
+    const controller = new AbortController();
+    runAbortRef.current = controller;
     isRunning.set(true, currentKey);
     logs.set((prev) => [...prev, "--- Starting Execution ---"], currentKey);
     const finalInputs = { ...inputs };
@@ -300,11 +305,16 @@ export function useExecutionWorkspace({
           activeToolName.set(null, currentKey);
           logs.set((prev) => [...prev, `✓ [tool done] ${toolName || ""}`], currentKey);
         },
-      });
+      }, controller.signal);
     } catch (e: any) {
+      if (controller.signal.aborted) {
+        logs.set((prev) => [...prev, "⏹ Execution stopped."], currentKey);
+        return;
+      }
       logs.set((prev) => [...prev, `❌ Run error: ${e.message}`], currentKey);
       throw e;
     } finally {
+      if (runAbortRef.current === controller) runAbortRef.current = null;
       isRunning.set(false, currentKey);
       activeNodeId.set(undefined, currentKey);
       activeToolName.set(null, currentKey);
@@ -339,6 +349,7 @@ export function useExecutionWorkspace({
     setExecutionResult: executionResult.set,
     handleGenerate,
     handleStop,
+    handleStopRun,
     handleRun,
   };
 }

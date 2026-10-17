@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { downloadBlob, stringifyContent } from "@/lib/download";
+import { downloadFile, stringifyContent } from "@/lib/download";
 import { normalizeResult } from "@/features/executions/lib/executionResult";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { useResizableSidebar } from "@/hooks/useResizableSidebar";
@@ -72,16 +72,12 @@ export function ExecutionResultSidebar({
     ([k]) => k !== "result" && k !== "messages" && k !== "feedback",
   );
 
-  const downloadFile = (file: ExecutionFileArtifact) =>
-    downloadBlob(
-      file.name,
-      stringifyContent(resObj.content),
-      file.mimeType || "text/plain;charset=utf-8",
-    );
+  const downloadArtifact = (file: ExecutionFileArtifact) =>
+    downloadFile(file.name, stringifyContent(resObj.content));
 
   const handleDownload = () => {
     if (resObj.files && resObj.files.length > 0) {
-      downloadFile(resObj.files[0]);
+      downloadArtifact(resObj.files[0]);
       return;
     }
 
@@ -89,10 +85,9 @@ export function ExecutionResultSidebar({
     const safeName = (executionName || "result")
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, "-");
-    downloadBlob(
+    downloadFile(
       `${safeName}-${Date.now()}.${isJson ? "json" : "md"}`,
       stringifyContent(resObj.content),
-      `${isJson ? "application/json" : "text/markdown"};charset=utf-8`,
     );
   };
 
@@ -220,7 +215,7 @@ export function ExecutionResultSidebar({
                   <FileArtifactCard
                     key={idx}
                     file={file}
-                    onDownload={() => downloadFile(file)}
+                    onDownload={() => downloadArtifact(file)}
                   />
                 ))}
               </div>

@@ -25,7 +25,7 @@ export function buildStateSchema(
   const schema: Record<string, any> = {};
 
   for (const [key, def] of Object.entries(definitions)) {
-    const reducerFn = getReducerFunction(def.reducerStrategy);
+    const reducerFn = getReducerFunction(def.reducerStrategy, def.type);
 
     if (reducerFn) {
       schema[key] = {

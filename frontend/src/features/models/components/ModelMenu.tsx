@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   BrainCircuit,
   Check,
@@ -17,6 +18,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { CurrentModels, ModelOptionGroup } from "@/features/models/types";
 import {
   currentChoice,
@@ -52,11 +60,20 @@ export function ModelMenu({
 }: ModelMenuProps) {
   const active = currentChoice(current);
   const tree = buildProviderTree(groups);
+  const [selectedProvider, setSelectedProvider] = useState<string>();
+  const visibleProvider = tree.some((e) => e.provider === selectedProvider)
+    ? selectedProvider
+    : tree.some((e) => e.provider === active.provider)
+      ? active.provider
+      : tree[0]?.provider;
 
   return (
     <DropdownMenu
       onOpenChange={(open) => {
-        if (open) onOpen?.();
+        if (open) {
+          setSelectedProvider(undefined);
+          onOpen?.();
+        }
       }}
     >
       <DropdownMenuTrigger
@@ -99,6 +116,28 @@ export function ModelMenu({
           </div>
         </div>
 
+        {tree.length > 1 && (
+          <div className="shrink-0 px-1.5 pb-1">
+            <Select
+              value={visibleProvider}
+              onValueChange={(v) => setSelectedProvider(String(v))}
+            >
+              <SelectTrigger aria-label="Provider">
+                <SelectValue>
+                  {(v: string) => tree.find((e) => e.provider === v)?.label}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {tree.map((entry) => (
+                  <SelectItem key={entry.provider} value={entry.provider}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <DropdownMenuGroup className="min-h-0 flex-1 overflow-y-auto">
 
           {tree.length === 0 && (
@@ -107,12 +146,11 @@ export function ModelMenu({
             </div>
           )}
 
-          {tree.map((entry) => (
+          {tree
+            .filter((entry) => entry.provider === visibleProvider)
+            .map((entry) => (
             <div key={entry.provider}>
               <DropdownMenuSeparator />
-              <div className="px-2 py-1 text-xs font-medium text-muted-foreground truncate">
-                {entry.label}
-              </div>
               {entry.keyErrors.map((e) => (
                 <div
                   key={e.alias}

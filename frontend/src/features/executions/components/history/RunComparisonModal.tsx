@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { UsageLocationIcon } from "@/components/UsageLocationIcon";
-import { downloadBlob, stringifyContent } from "@/lib/download";
+import { downloadFile, stringifyContent } from "@/lib/download";
 import {
   formatDuration,
   formatTokens,
@@ -159,11 +159,7 @@ function HeadlineCard({
 function ResultColumn({ run }: { run: RunSummary }) {
   const result = normalizeResult(run.result);
   const download = (file: ExecutionFileArtifact) =>
-    downloadBlob(
-      file.name,
-      stringifyContent(result.content),
-      file.mimeType || "text/plain;charset=utf-8",
-    );
+    downloadFile(file.name, stringifyContent(result.content));
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border p-3">
       <div className="font-mono text-xs font-medium">{runLabel(run)}</div>

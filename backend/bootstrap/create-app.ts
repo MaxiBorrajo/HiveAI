@@ -6,6 +6,7 @@ import { cors } from "hono/cors";
 import { AppError } from "../core/api/errors.ts";
 import { ResponseBuilder } from "../core/api/response.ts";
 import type { HiveMicrokernel } from "../core/microkernel/hive-microkernel.ts";
+import { downloadsRouter } from "../modules/downloads/router.ts";
 import { pluginsRouter } from "../modules/plugins/router.ts";
 import { chatsRouter } from "../modules/chats/router.ts";
 import { interactionsRouter } from "../modules/interactions/router.ts";
@@ -63,6 +64,7 @@ export function createApp(hive: HiveMicrokernel) {
   app.route("/api/api-keys", apiKeysRouter);
   app.route("/api/usage", usageRouter);
   app.route("/api/app", appUpdatesRouter);
+  app.route("/api/downloads", downloadsRouter);
 
   app.use("/*", serveStatic({ root: frontendDistPath }));
 

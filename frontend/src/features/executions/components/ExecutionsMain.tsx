@@ -60,6 +60,7 @@ export function ExecutionsMain() {
     activeToolName,
     handleGenerate,
     handleStop,
+    handleStopRun,
     handleRun: runExecution,
   } = useExecutionWorkspace({
     key,
@@ -184,6 +185,7 @@ export function ExecutionsMain() {
               isRunning={isRunning}
               hasRequiredInputs={runControls.hasRequiredInputs}
               onRun={runControls.runClick}
+              onStopRun={handleStopRun}
               onOpenRunModal={runControls.openRunModal}
               onShowResult={() => setIsResultSidebarOpen(true)}
               onShowHistory={() => setIsHistoryOpen(true)}

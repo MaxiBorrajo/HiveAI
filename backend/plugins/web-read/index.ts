@@ -15,6 +15,7 @@ const MAX_CONTENT_CHARS = 20_000;
 const MIN_ACCEPTABLE_CONTENT_CHARS = 200;
 const MAX_FETCH_RETRIES = 2;
 const RETRY_BACKOFF_MS = 500;
+const MAX_RETRY_AFTER_S = 3;
 const READ_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
@@ -29,6 +30,14 @@ const readSchema = z.object({
     .string()
     .url()
     .describe("The URL of the webpage to read and extract text from."),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Character offset to start reading from. Use the offset given in a previous '[Showing chars ...]' note to continue a long page. Defaults to 0.",
+    ),
 });
 
 type WebReadSchema = typeof readSchema;
@@ -167,12 +176,15 @@ async function fetchWithRetry(
   for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt++) {
     try {
       const response = await fetchWithTimeout(url, ms, headers);
-      if (
-        response.ok ||
-        response.status < 500 ||
-        attempt === MAX_FETCH_RETRIES
-      ) {
+      const retryable = response.status >= 500 || response.status === 429;
+      if (response.ok || !retryable || attempt === MAX_FETCH_RETRIES) {
         return response;
+      }
+      const retryAfter = Number(response.headers.get("retry-after"));
+      await response.body?.cancel();
+      if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        await sleep(Math.min(retryAfter, MAX_RETRY_AFTER_S) * 1000);
+        continue;
       }
     } catch {
       if (attempt === MAX_FETCH_RETRIES) return null;
@@ -186,64 +198,135 @@ function isPdfUrl(url: string): boolean {
   return /\.pdf(\?|#|$)/i.test(url);
 }
 
-function truncate(content: string): string {
-  if (content.length <= MAX_CONTENT_CHARS) return content;
-  return `${content.slice(0, MAX_CONTENT_CHARS)}\n...(truncated)`;
+type Extraction =
+  | { ok: true; content: string; title?: string }
+  | { ok: false; reason: string; permanent?: boolean };
+
+const NOISE_SELECTORS = "nav, header, footer, aside, form, [role=navigation], [role=banner], [role=contentinfo], [aria-label*=cookie i], [id*=cookie i], [class*=cookie i]";
+
+function statusReason(status: number): Extraction & { ok: false } {
+  if (status === 404 || status === 410) {
+    return {
+      ok: false,
+      permanent: true,
+      reason: `HTTP ${status}: the page no longer exists. Do not retry; use another source.`,
+    };
+  }
+  if (status === 401 || status === 403 || status === 429) {
+    return {
+      ok: false,
+      reason: `HTTP ${status}: the site blocks or rate-limits automated access. Try a different source.`,
+    };
+  }
+  return { ok: false, reason: `HTTP ${status} error.` };
 }
 
-async function extractWithReadability(
-  url: string,
-): Promise<{ content: string; title?: string } | null> {
+function toReadableUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname === "reddit.com" || u.hostname === "www.reddit.com") {
+      u.hostname = "old.reddit.com";
+      return u.toString();
+    }
+  } catch {
+    // keep original
+  }
+  return rawUrl;
+}
+
+function paginate(content: string, offset: number): string {
+  const total = content.length;
+  if (offset >= total) {
+    return `[Offset ${offset} is beyond the end of the page (${total} chars).]`;
+  }
+  const end = Math.min(offset + MAX_CONTENT_CHARS, total);
+  const chunk = content.slice(offset, end);
+  if (end >= total) return chunk;
+  return `${chunk}\n\n[Showing chars ${offset}-${end} of ${total}. Call again with offset=${end} to continue.]`;
+}
+
+function htmlToMarkdown(html: string, url: string): Extraction {
+  let dom: JSDOM;
+  try {
+    dom = new JSDOM(html, { url });
+  } catch {
+    return { ok: false, reason: "The page HTML could not be parsed." };
+  }
+
+  const doc = dom.window.document;
+  doc
+    .querySelectorAll(NOISE_SELECTORS)
+    .forEach((el: { remove(): void }) => el.remove());
+  const cleanedBodyHtml = doc.body?.innerHTML ?? "";
+
+  const article = new Readability(doc).parse();
+  if (article?.content) {
+    const markdown = turndown.turndown(article.content).trim();
+    if (markdown.length >= MIN_ACCEPTABLE_CONTENT_CHARS) {
+      return { ok: true, content: markdown, title: article.title ?? undefined };
+    }
+  }
+
+  const body = cleanedBodyHtml ? turndown.turndown(cleanedBodyHtml).trim() : "";
+  if (body.length >= MIN_ACCEPTABLE_CONTENT_CHARS) {
+    return { ok: true, content: body, title: article?.title || undefined };
+  }
+  return {
+    ok: false,
+    reason: "Almost no readable text found; the page likely needs JavaScript.",
+  };
+}
+
+async function extractWithReadability(url: string): Promise<Extraction> {
   const response = await fetchWithRetry(url, FETCH_TIMEOUT_MS, {
     "User-Agent": READ_USER_AGENT,
     Accept: "text/html,*/*",
   });
 
-  if (!response || !response.ok) return null;
+  if (!response) {
+    return { ok: false, reason: "Network error or timeout." };
+  }
+  if (!response.ok) return statusReason(response.status);
 
   const contentType = response.headers.get("content-type") ?? "";
-  if (contentType && !contentType.includes("text/html")) return null;
-
-  const html = await response.text();
-
-  let dom: JSDOM;
-  try {
-    dom = new JSDOM(html, { url });
-  } catch {
-    return null;
+  if (contentType && !contentType.includes("text/html")) {
+    return { ok: false, reason: `Unsupported content type '${contentType}'.` };
   }
 
-  const article = new Readability(dom.window.document).parse();
-  if (!article?.content) return null;
-
-  const markdown = turndown.turndown(article.content).trim();
-  if (markdown.length < MIN_ACCEPTABLE_CONTENT_CHARS) return null;
-
-  return { content: markdown, title: article.title ?? undefined };
+  return htmlToMarkdown(await response.text(), url);
 }
 
-async function extractWithJina(url: string): Promise<string | null> {
+const JINA_ERROR_RE = /^(?:Title:.*\n+)?(?:URL Source:.*\n+)?Warning: Target URL returned error (\d{3})/i;
+
+async function extractWithJina(url: string): Promise<Extraction> {
   const jinaUrl = `https://r.jina.ai/${url}`;
 
   let response: Response;
   try {
     response = await fetchWithTimeout(jinaUrl, JINA_TIMEOUT_MS, {
       Accept: "text/plain",
+      "X-Return-Format": "markdown",
+      "X-Remove-Selector": "nav, header, footer, aside",
     });
   } catch {
-    return null;
+    return { ok: false, reason: "Network error or timeout." };
   }
 
-  if (!response.ok) return null;
+  if (!response.ok) return statusReason(response.status);
 
   const text = (await response.text()).trim();
-  return text.length >= MIN_ACCEPTABLE_CONTENT_CHARS ? text : null;
+  const jinaError = text.match(JINA_ERROR_RE);
+  if (jinaError) return statusReason(Number(jinaError[1]));
+  if (text.length < MIN_ACCEPTABLE_CONTENT_CHARS) {
+    return { ok: false, reason: "Almost no readable text found." };
+  }
+  return { ok: true, content: text };
 }
 
 export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
   name = "web_read";
   description =
-    "Fetches and returns the full text content of a specific URL or webpage. Use this tool to read the actual content of a page — for example, to read articles, documentation, or any page whose URL you already know. This is the complement to a web search tool: after a search returns a list of URLs and short snippets, use this tool to read the full content of individual URLs. Returns the complete readable text extracted from the page (titles, paragraphs, article body). Do NOT use this tool to search the web — it cannot discover URLs, it only reads a URL you provide.";
+    "Fetches and returns the full text content of a specific URL or webpage. Use this tool to read the actual content of a page — for example, to read articles, documentation, or any page whose URL you already know. This is the complement to a web search tool: after a search returns a list of URLs and short snippets, use this tool to read the full content of individual URLs. Returns the readable text extracted from the page (titles, paragraphs, article body) preceded by a short Source/Title/Length header. Long pages are returned in chunks of about 20,000 characters: follow the '[Showing chars ...]' note and call again with the given offset to continue. On failure the message explains why (e.g. HTTP 410 page gone, blocked, needs JavaScript) so you can pick another source. Do NOT use this tool to search the web — it cannot discover URLs, it only reads a URL you provide.";
 
   schema = readSchema;
   returnDescription =
@@ -339,6 +422,12 @@ export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
       expect: (output: string) => output.includes("is not allowed"),
     },
     {
+      description: "Offset beyond the end of the page is reported, not silently empty",
+      kind: "edge",
+      params: { url: "https://example.com", offset: 1_000_000 },
+      expect: (output: string) => output.includes("beyond the end"),
+    },
+    {
       description: "Read an unreachable URL",
       kind: "error",
       params: { url: "https://this-domain-does-not-exist-xyz123.invalid" },
@@ -371,33 +460,40 @@ export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { url } = parsed.data;
+    const { url, offset = 0 } = parsed.data;
 
     const check = validateUrl(url);
     if (!check.ok) {
       return `Cannot fetch '${url}': ${check.reason}`;
     }
 
+    const render = (content: string, title?: string): string => {
+      const header = `Source: ${url}${title ? `\nTitle: ${title}` : ""}\nLength: ${content.length} chars\n\n`;
+      return header + paginate(content, offset);
+    };
+
     if (isPdfUrl(url)) {
       this.context?.reportStep("Extracting PDF via Jina");
       const jinaResult = await extractWithJina(url);
-      if (jinaResult) return truncate(jinaResult);
-      return `Failed to extract content from PDF '${url}'.`;
+      if (jinaResult.ok) return render(jinaResult.content);
+      return `Failed to extract content from PDF '${url}'. ${jinaResult.reason}`;
     }
 
+    const target = toReadableUrl(url);
+
     this.context?.reportStep("Extracting content with Readability");
-    const readabilityResult = await extractWithReadability(url);
-    if (readabilityResult) {
-      const header = readabilityResult.title
-        ? `# ${readabilityResult.title}\n\n`
-        : "";
-      return truncate(`${header}${readabilityResult.content}`);
+    const readabilityResult = await extractWithReadability(target);
+    if (readabilityResult.ok) {
+      return render(readabilityResult.content, readabilityResult.title);
+    }
+    if (readabilityResult.permanent) {
+      return `Failed to extract readable content from '${url}'. ${readabilityResult.reason}`;
     }
 
     this.context?.reportStep("Falling back to Jina Reader");
     const jinaResult = await extractWithJina(url);
-    if (jinaResult) return truncate(jinaResult);
+    if (jinaResult.ok) return render(jinaResult.content, jinaResult.title);
 
-    return `Failed to extract readable content from '${url}'. The page may require JavaScript, be behind a paywall, or block automated access.`;
+    return `Failed to extract readable content from '${url}'. Direct fetch: ${readabilityResult.reason} Jina fallback: ${jinaResult.reason}`;
   }
 }

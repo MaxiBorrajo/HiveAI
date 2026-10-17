@@ -87,6 +87,7 @@ async function streamRun(
   app: CompiledGraph,
   inputState: Record<string, unknown> | undefined,
   send: SseSend,
+  signal?: AbortSignal,
 ): Promise<FinalState> {
   const initialInputs = {
     input: "",
@@ -99,6 +100,7 @@ async function streamRun(
   const events = await app.streamEvents(initialInputs, {
     version: "v2",
     recursionLimit: EXECUTION_RECURSION_LIMIT,
+    signal,
   });
   for await (const event of events) {
     send(event.event, event);
@@ -151,6 +153,7 @@ export async function runExecution(
   inputState: Record<string, unknown> | undefined,
   headers: Record<string, string>,
   autoApprove = true,
+  signal?: AbortSignal,
 ): Promise<Response> {
   try {
     const repo = new ExecutionRepository(db);
@@ -193,7 +196,7 @@ export async function runExecution(
           async (usageGroupId) => {
             if (warnings.length > 0) send("warning", { warnings });
             const startedAt = Date.now();
-            const finalState = await streamRun(app, inputState, send);
+            const finalState = await streamRun(app, inputState, send, signal);
             const endedAt = Date.now();
             finalizeExecutionResult(finalState, abstraction.nodes);
 

@@ -28,7 +28,9 @@ export function ClarifyPanel({
 
   return (
     <div className="w-full rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-sm">
-      <p className="whitespace-pre-line px-2 pb-2 pt-1 text-sm font-medium">{question}</p>
+      <p className="max-h-[40vh] overflow-y-auto whitespace-pre-line wrap-break-word px-2 pb-2 pt-1 text-sm font-medium">
+        {question}
+      </p>
 
       <div className="flex flex-col">
         {options.map((option, index) => (

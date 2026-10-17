@@ -293,7 +293,7 @@ Deno.test("executeLlmNode - a tool that throws is caught and recorded as an erro
   assertEquals(result.summary, "Recovered after tool failure.");
 });
 
-Deno.test("executeLlmNode - the loop stops at maxIterations (8) if the model keeps requesting tool calls", async () => {
+Deno.test("executeLlmNode - after maxIterations (8) a final tool-free call produces the answer, not the last tool output", async () => {
   const alwaysToolCall = new AIMessage({
     content: "",
     tool_calls: [{ name: "counter", args: {}, id: "call_x" }],
@@ -304,9 +304,11 @@ Deno.test("executeLlmNode - the loop stops at maxIterations (8) if the model kee
   const model = {
     invoke: async () => {
       invokeCount++;
-      return alwaysToolCall;
+      return invokeCount > 8
+        ? new AIMessage({ content: "final synthesized answer" })
+        : alwaysToolCall;
     },
-    bindTools: () => model,
+    bindTools: () => ({ invoke: model.invoke }),
     withStructuredOutput: () => model,
   };
 
@@ -318,8 +320,8 @@ Deno.test("executeLlmNode - the loop stops at maxIterations (8) if the model kee
     () => model,
   );
 
-  assertEquals(invokeCount, 8);
-  assertEquals("summary" in result, true);
+  assertEquals(invokeCount, 9);
+  assertEquals(result.summary, "final synthesized answer");
 });
 
 Deno.test("executeLlmNode - a thrown error from the LLM factory fails the node", async () => {

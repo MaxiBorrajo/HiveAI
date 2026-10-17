@@ -80,7 +80,7 @@ export function InteractionDialog() {
   return (
     <div className="w-full rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-sm">
       <p className="text-sm font-medium">{payload.title}</p>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 max-h-[30vh] overflow-y-auto whitespace-pre-line wrap-break-word text-sm text-muted-foreground">
         {payload.description}
       </p>
 

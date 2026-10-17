@@ -104,12 +104,45 @@ DATA HANDOFF: later nodes see ONLY this node's final answer text — never temp 
 FILES: if this agent writes a file, its final answer only confirms the path and size (and, if useful, a short summary). It must NOT paste the file content back: that pays for the same output twice.`;
 }
 
+function localModelsInUse(
+  selection: NonNullable<LlmNodeConfiguratorContext["modelSelection"]>,
+  graph: LangGraphAbstraction,
+  currentNodeId: string,
+): string[] {
+  const ids = new Set<string>();
+  for (const n of graph.nodes) {
+    const model = n.config?.model as string | undefined;
+    if (n.id === currentNodeId || n.type !== "llm" || !model) continue;
+    const provider = n.config?.provider as string | undefined;
+    const match = selection.catalog.find(
+      (o) =>
+        o.location === "local" &&
+        o.ref.model === model &&
+        (!provider || o.ref.provider === provider),
+    );
+    if (match) ids.add(match.id);
+  }
+  return [...ids];
+}
+
+function buildLocalReuseHint(inUse: string[]): string {
+  const inUseText = inUse.length > 0
+    ? `Local models already chosen by other nodes of this workflow: ${inUse.join(", ")}. `
+    : "";
+  return `LOCAL MODEL REUSE: loading and unloading a local model is very slow and heavy on the user's machine. ${inUseText}When this node goes local, reuse the SAME local model that the other nodes use (or the first one you pick) and do not switch to a different local model, unless there is a really good reason: this node needs [tools] and that model lacks them, or its context is clearly too small for this node's data, or this node needs a capability (e.g. vision) that model does not have. A slightly better fit is NOT a good reason. When two local models would both work, pick the one already in use.
+`;
+}
+
 function buildModelHint(
   selection: LlmNodeConfiguratorContext["modelSelection"],
   graph: LangGraphAbstraction,
   nodeDescriptions: Map<string, string>,
+  currentNodeId: string,
 ): string {
   if (!selection || selection.catalog.length < 2) return "";
+  const localReuse = selection.catalog.some((o) => o.location === "local")
+    ? buildLocalReuseHint(localModelsInUse(selection, graph, currentNodeId))
+    : "";
   const flow = graph.nodes
     .filter((n) => n.type !== "start" && n.type !== "end")
     .map((n) => `- ${n.name}: ${nodeDescriptions.get(n.id) || n.type}`)
@@ -121,7 +154,7 @@ Decide in this order:
 3. Only fall back to a light cloud model when no local model qualifies (missing [tools], context too small for the data flowing in, or the node must coordinate a long chain of dependent tool calls where a mistake would break the flow). Say so by choosing it; do not choose it just because it is familiar or "safer".
 - Tool outputs accumulate in an agent's context for the whole loop: reading one web page costs about 5k tokens, a file or shell output up to a few thousand. Add them up for the node (pages to read x 5k + the notes it writes) and compare with the model's context; local models run with at most 16k. An agent that must read many pages or large outputs does not fit a local model, so use a cloud model for it or keep the local model for nodes with small inputs.
 - Very small local models (under ~7B) only for nodes without tools that do a single simple operation; for anything bigger use the largest local model that has the capabilities.
-- A model marked [tools: unverified] has not been confirmed to support tool calling. For a node with plugins, choose a model with [tools] when one fits; pick an unverified one only when no verified model does.
+${localReuse}- A model marked [tools: unverified] has not been confirmed to support tool calling. For a node with plugins, choose a model with [tools] when one fits; pick an unverified one only when no verified model does.
 Workflow nodes, for relative comparison:
 ${flow}
 Available models:
@@ -471,7 +504,7 @@ export async function configureLlmNode(
       branchHint: buildBranchHint(incomingEdge),
       neighborHint,
       agentToolHint:
-        buildAgentToolHint(nodePlugins) + buildModelHint(ctx.modelSelection, graph, nodeDescriptions),
+        buildAgentToolHint(nodePlugins) + buildModelHint(ctx.modelSelection, graph, nodeDescriptions, node.id),
       conditionPromptHint: buildConditionPromptHint(feedsIntoCondition),
     },
     graphStateText,

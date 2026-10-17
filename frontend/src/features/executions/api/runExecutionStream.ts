@@ -17,6 +17,7 @@ export async function runExecutionStream(
   executionId: string,
   input: Record<string, any>,
   handlers: RunExecutionStreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
   await postSse(`/api/executions/${executionId}/run`, { input }, (eventName, data) => {
     if (eventName === "done" || data.result !== undefined) {
@@ -53,5 +54,5 @@ export async function runExecutionStream(
     } else if (evtType === "on_tool_end") {
       handlers.onToolEnd?.(data.name || null);
     }
-  });
+  }, signal);
 }

@@ -1,7 +1,20 @@
 import { z } from "zod";
 import type { ReducerStrategy, StatePropertyDefinition } from "../types.ts";
 
-export function getReducerFunction(strategy?: ReducerStrategy) {
+const joinText = (a: unknown, b: unknown) =>
+  [a, b]
+    .filter((v) => typeof v === "string" && v !== "")
+    .join("\n\n");
+
+export function getReducerFunction(
+  strategy?: ReducerStrategy,
+  type?: StatePropertyDefinition["type"],
+) {
+  if (type === "string" && (strategy === "append" || strategy === "prepend")) {
+    return strategy === "append"
+      ? (a: unknown, b: unknown) => joinText(a, b)
+      : (a: unknown, b: unknown) => joinText(b, a);
+  }
   switch (strategy) {
     case "append":
       return (a: unknown[], b: unknown[]) => (a || []).concat(b || []);
