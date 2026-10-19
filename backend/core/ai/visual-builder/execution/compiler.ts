@@ -62,8 +62,15 @@ function buildNodeRunnable(
   toolProvider?: ToolProvider,
 ): NodeExecutorFunction {
   if (node.type === "llm") {
-    return async (state: Record<string, unknown>) => {
-      return executeLlmNode(node.id, node.config, state, toolProvider);
+    return async (state: Record<string, unknown>, config?: Record<string, unknown>) => {
+      return executeLlmNode(
+        node.id,
+        node.config,
+        state,
+        toolProvider,
+        undefined,
+        { signal: config?.signal as AbortSignal | undefined },
+      );
     };
   }
 

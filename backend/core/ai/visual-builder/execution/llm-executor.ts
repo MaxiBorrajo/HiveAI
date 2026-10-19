@@ -14,6 +14,7 @@ import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
 import { withLocalNumCtx } from "../../providers/local-context.ts";
 import { splitContent } from "../../providers/capabilities.ts";
+import { streamToMessage } from "./stream-model.ts";
 
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -23,6 +24,24 @@ export function coerceLlmBooleanReply(text: string): boolean {
 }
 
 const MAX_REACT_ITERATIONS = 8;
+
+export interface LlmRunOptions {
+  signal?: AbortSignal;
+  onToken?: (text: string) => void;
+}
+
+// Models without stream() (e.g. test doubles) fall back to a blocking invoke.
+async function callModel(
+  // deno-lint-ignore no-explicit-any
+  model: any,
+  input: unknown,
+  opts: LlmRunOptions,
+): Promise<AIMessage> {
+  if (typeof model.stream === "function") {
+    return await streamToMessage(model, input, opts);
+  }
+  return (await model.invoke(input, { signal: opts.signal })) as AIMessage;
+}
 const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
   "input",
   "messages",
@@ -328,6 +347,7 @@ async function runReactLoop(
   tools: ToolLike[],
   messages: BaseMessage[],
   toolProvider?: ToolProvider,
+  runOpts: LlmRunOptions = {},
 ): Promise<{ conversation: BaseMessage[]; final: AIMessage | null }> {
   console.log(
     `\n[LLM Agent Node ${nodeId}] Starting autonomous ReAct loop with tools: [${tools.map((t) => t.name).join(", ")}]`,
@@ -342,7 +362,7 @@ async function runReactLoop(
       `[LLM Agent Node ${nodeId}] Iteration #${iteration} invoking model...`,
     );
 
-    const response = (await boundLlm.invoke(conversation)) as AIMessage;
+    const response = await callModel(boundLlm, conversation, runOpts);
     conversation.push(response);
 
     const toolCalls = response.tool_calls ?? [];
@@ -425,6 +445,7 @@ export async function executeLlmNode(
         await withLocalNumCtx(ref.provider, ref.model, options as Record<string, unknown>),
       );
     })(),
+  runOpts: LlmRunOptions = {},
 ): Promise<Record<string, unknown>> {
   try {
     const tools = resolveTools(nodeId, config, toolProvider);
@@ -438,6 +459,7 @@ export async function executeLlmNode(
         tools,
         messages,
         toolProvider,
+        runOpts,
       );
       if (config.structuredOutput) {
         // deno-lint-ignore no-explicit-any
@@ -452,21 +474,27 @@ export async function executeLlmNode(
       }
       const finalResponse =
         final ??
-        (await baseLlm.invoke([
-          ...stripThinkingBlocks(conversation),
-          new HumanMessage(FORCE_FINAL_ANSWER_PROMPT),
-        ]));
+        (await callModel(
+          baseLlm,
+          [
+            ...stripThinkingBlocks(conversation),
+            new HumanMessage(FORCE_FINAL_ANSWER_PROMPT),
+          ],
+          runOpts,
+        ));
       return mapResponseToState(finalResponse, config, state);
     }
 
-    let runnable: Runnable = baseLlm as unknown as Runnable;
+    // Structured output stays on invoke: partial-object streams add nothing here.
     if (config.structuredOutput) {
       // deno-lint-ignore no-explicit-any
-      runnable = (baseLlm as any).withStructuredOutput(
+      const structured = (baseLlm as any).withStructuredOutput(
         mapTypeToZod(config.structuredOutput),
-      );
+      ) as Runnable;
+      const parsed = await structured.invoke(messages, { signal: runOpts.signal });
+      return mapResponseToState(parsed, config, state);
     }
-    const response = await runnable.invoke(messages);
+    const response = await callModel(baseLlm, messages, runOpts);
     return mapResponseToState(response, config, state);
   } catch (err: unknown) {
     return handleLlmError(err, nodeId, config);

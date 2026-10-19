@@ -11,6 +11,7 @@ export interface RunExecutionStreamHandlers {
   onNodeStart?: (nodeName: string) => void;
   onToolStart?: (toolName: string | null) => void;
   onToolEnd?: (toolName: string | null) => void;
+  onToken?: (nodeName: string | null, text: string) => void;
 }
 
 export async function runExecutionStream(
@@ -53,6 +54,17 @@ export async function runExecutionStream(
       handlers.onToolStart?.(data.name || null);
     } else if (evtType === "on_tool_end") {
       handlers.onToolEnd?.(data.name || null);
+    } else if (evtType === "on_chat_model_stream") {
+      const content = data.data?.chunk?.kwargs?.content ?? data.data?.chunk?.content;
+      const text = Array.isArray(content)
+        ? content
+            .filter((b: { type?: string }) => b?.type === "text")
+            .map((b: { text?: string }) => b.text ?? "")
+            .join("")
+        : content;
+      if (typeof text === "string" && text) {
+        handlers.onToken?.(data.metadata?.langgraph_node || null, text);
+      }
     }
   }, signal);
 }

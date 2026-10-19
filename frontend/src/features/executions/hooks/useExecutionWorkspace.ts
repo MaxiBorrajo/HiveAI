@@ -301,6 +301,15 @@ export function useExecutionWorkspace({
           activeToolName.set(toolName, currentKey);
           logs.set((prev) => [...prev, `🔧 [tool] ${toolName}`], currentKey);
         },
+        onToken: (nodeName, text) => {
+          const prefix = `💬 [${nodeName ?? "llm"}] `;
+          logs.set((prev) => {
+            const last = prev[prev.length - 1];
+            return last?.startsWith(prefix)
+              ? [...prev.slice(0, -1), last + text]
+              : [...prev, prefix + text];
+          }, currentKey);
+        },
         onToolEnd: (toolName) => {
           activeToolName.set(null, currentKey);
           logs.set((prev) => [...prev, `✓ [tool done] ${toolName || ""}`], currentKey);

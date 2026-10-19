@@ -87,6 +87,7 @@ export interface LlmConfig {
   structuredOutput?: StatePropertyDefinition;
   outputKey?: string;
   inputMapping?: Record<string, string>;
+  maxTokens?: number;
   [key: string]: unknown;
 }
 

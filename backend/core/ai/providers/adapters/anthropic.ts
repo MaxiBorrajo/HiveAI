@@ -13,7 +13,8 @@ import {
 
 // langchain only knows per-model output caps for older ids and falls back to 4096
 // for unlisted ones (e.g. claude-haiku-5-5), which truncates long outputs such as
-// full HTML pages. 16384 is the highest value the SDK accepts without streaming.
+// full HTML pages. Nodes stream their responses, so nodes may raise maxTokens past
+// the 16384 the SDK accepts without streaming; this is only the default.
 const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
 
 const headers = (apiKey: string) => ({
