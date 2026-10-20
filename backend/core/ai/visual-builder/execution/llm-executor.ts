@@ -23,7 +23,8 @@ export function coerceLlmBooleanReply(text: string): boolean {
   return /\btrue\b/.test(clean);
 }
 
-const MAX_REACT_ITERATIONS = 8;
+// Safety net against runaway tool loops; high enough not to constrain normal agents.
+const MAX_REACT_ITERATIONS = 50;
 
 export interface LlmRunOptions {
   signal?: AbortSignal;
