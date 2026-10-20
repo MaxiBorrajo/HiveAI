@@ -38,10 +38,16 @@ async function callModel(
   input: unknown,
   opts: LlmRunOptions,
 ): Promise<AIMessage> {
-  if (typeof model.stream === "function") {
-    return await streamToMessage(model, input, opts);
+  const response = typeof model.stream === "function"
+    ? await streamToMessage(model, input, opts)
+    : ((await model.invoke(input, { signal: opts.signal })) as AIMessage);
+  const reason = stopReason(response);
+  if (reason === "max_tokens" || reason === "length") {
+    console.warn(
+      `[LLM] Response cut by the output limit (stop_reason=${reason}, usage=${JSON.stringify(response.usage_metadata ?? {})}). Raise maxTokens on the node.`,
+    );
   }
-  return (await model.invoke(input, { signal: opts.signal })) as AIMessage;
+  return response;
 }
 const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
   "input",
@@ -427,6 +433,24 @@ function resolveModelOptions(config: LlmConfig, temperature: number) {
   };
 }
 
+function hasText(response: AIMessage): boolean {
+  const text = Array.isArray(response.content)
+    ? splitContent(response.content).text
+    : response.content;
+  return text.trim().length > 0;
+}
+
+function stopReason(response: AIMessage): string {
+  const meta = response.response_metadata as Record<string, unknown> | undefined;
+  return String(meta?.stop_reason ?? meta?.finish_reason ?? "unknown");
+}
+
+function logEmptyResponse(nodeId: string, response: AIMessage): void {
+  console.warn(
+    `[LLM Agent Node ${nodeId}] Model returned empty text. stop_reason=${stopReason(response)} usage=${JSON.stringify(response.usage_metadata ?? {})}`,
+  );
+}
+
 export async function executeLlmNode(
   nodeId: string,
   config: LlmConfig,
@@ -495,7 +519,17 @@ export async function executeLlmNode(
       const parsed = await structured.invoke(messages, { signal: runOpts.signal });
       return mapResponseToState(parsed, config, state);
     }
-    const response = await callModel(baseLlm, messages, runOpts);
+    let response = await callModel(baseLlm, messages, runOpts);
+    if (!hasText(response)) {
+      logEmptyResponse(nodeId, response);
+      response = await callModel(baseLlm, messages, runOpts);
+      if (!hasText(response)) {
+        logEmptyResponse(nodeId, response);
+        throw new Error(
+          `The model returned no text (stop_reason: ${stopReason(response)}). It may have used the whole output budget on thinking.`,
+        );
+      }
+    }
     return mapResponseToState(response, config, state);
   } catch (err: unknown) {
     return handleLlmError(err, nodeId, config);
