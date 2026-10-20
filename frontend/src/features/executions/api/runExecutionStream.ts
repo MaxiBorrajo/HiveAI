@@ -3,6 +3,7 @@ import { postSse } from "../../../lib/sse";
 export interface RunExecutionStreamHandlers {
   onDone?: (data: {
     iteration?: number;
+    historyId?: number;
     result: any;
     finalState?: Record<string, any>;
   }) => void;
@@ -23,6 +24,7 @@ export async function runExecutionStream(
     if (eventName === "done" || data.result !== undefined) {
       handlers.onDone?.({
         iteration: data.iteration || 1,
+        historyId: data.historyId,
         result: data.result,
         finalState: data.finalState,
       });

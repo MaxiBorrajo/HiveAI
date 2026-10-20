@@ -28,6 +28,10 @@ chatsRouter.post("/", async (c) => {
   const config = hive.getConfig();
   const body = await c.req.json().catch(() => ({}));
 
+  const attachmentIds = Array.isArray(body.attachmentIds)
+    ? body.attachmentIds.filter((id: unknown) => typeof id === "number")
+    : [];
+
   return sendMessage(
     db,
     body.chatId || null,
@@ -36,6 +40,7 @@ chatsRouter.post("/", async (c) => {
     config.get("model"),
     c.req.raw,
     headers,
+    attachmentIds,
   );
 });
 
@@ -54,7 +59,8 @@ chatsRouter.get("/:id", async (c) => {
 chatsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return deleteChat(db, parseId(c.req.param("id")), headers);
+  const dataDir = c.get("hive").getConfig().get("dataDir");
+  return deleteChat(db, parseId(c.req.param("id")), headers, dataDir);
 });
 
 chatsRouter.patch("/:id", async (c) => {

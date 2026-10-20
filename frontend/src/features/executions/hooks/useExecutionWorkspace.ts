@@ -272,6 +272,7 @@ export function useExecutionWorkspace({
         onDone: (data) => {
           const resultData: ExecutionResultData = {
             iteration: data.iteration,
+            historyId: data.historyId,
             result: data.result,
             finalState: data.finalState,
             createdAt: Date.now(),

@@ -244,10 +244,13 @@ export function ExecutionsMain() {
       <RunExecutionModal
         open={runControls.isRunModalOpen}
         onOpenChange={runControls.setIsRunModalOpen}
+        executionId={activeExecutionId}
         graph={graph}
         hasRequiredInputs={runControls.hasRequiredInputs}
         runInputs={runControls.runInputs}
         setRunInputs={runControls.setRunInputs}
+        runAttachments={runControls.runAttachments}
+        setRunAttachments={runControls.setRunAttachments}
         onRun={() => runControls.run()}
       />
 

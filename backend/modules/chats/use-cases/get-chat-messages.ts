@@ -1,8 +1,10 @@
 import { ResponseBuilder } from "../../../core/api/response.ts";
 import { ChatRepository } from "../../../infrastructure/db/repositories/chat-repository.ts";
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
+import { AttachmentRepository } from "../../../infrastructure/db/repositories/attachment-repository.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { loadChatUsage } from "../../usage/load-chat-usage.ts";
+import { toAttachmentDto } from "../../attachments/types.ts";
 import type { FrontendChat, FrontendMessage } from "../types.ts";
 
 export async function getChatMessages(
@@ -33,12 +35,23 @@ export async function getChatMessages(
     const messages = await msgRepo.findByChatId(chatId);
     const { byMessage, conversation } = await loadChatUsage(db, chatId);
 
+    const attachmentRepo = new AttachmentRepository(db);
+    const chatAttachments = await attachmentRepo.findByChatId(chatId);
+    const attachmentsByMessage = new Map<number, ReturnType<typeof toAttachmentDto>[]>();
+    for (const attachment of chatAttachments) {
+      if (attachment.messageId === null) continue;
+      const list = attachmentsByMessage.get(attachment.messageId) ?? [];
+      list.push(toAttachmentDto(attachment));
+      attachmentsByMessage.set(attachment.messageId, list);
+    }
+
     const formattedMessages: FrontendMessage[] = messages.map((m) => ({
       ...m,
       id: m.id.toString(),
       chatId: m.chatId.toString(),
       metadata: m.metadata ? JSON.parse(m.metadata) : null,
       usage: byMessage.get(m.id) ?? null,
+      attachments: attachmentsByMessage.get(m.id) ?? [],
     }));
 
     const formattedChat: FrontendChat = { ...chat, id: chat.id.toString() };

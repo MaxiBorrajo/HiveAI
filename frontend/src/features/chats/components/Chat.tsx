@@ -10,7 +10,9 @@ import { InteractionDialog } from "../../interactions/components/InteractionDial
 import { formatDuration } from "@/lib/formatUsage";
 import type { ChatStep } from "../types.ts";
 import type { LiveToolCall } from "../api/sendMessage.ts";
+import type { AttachmentDto } from "../api/attachments.ts";
 import { useChatSession } from "../hooks/useChatSession.ts";
+import { useChats } from "../ChatsContext.tsx";
 
 function ChatDisclaimer({ className }: { className?: string }) {
   return (
@@ -114,8 +116,10 @@ export function Chat() {
     send,
     stop,
   } = useChatSession();
+  const { activeChatId } = useChats();
   const [input, setInput] = useState("");
   const [usageOpen, setUsageOpen] = useState(false);
+  const [attachments, setAttachments] = useState<AttachmentDto[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -124,7 +128,14 @@ export function Chat() {
 
   async function handleSend() {
     const content = input.trim();
-    await send(content, () => setInput(""));
+    await send(
+      content,
+      () => {
+        setInput("");
+        setAttachments([]);
+      },
+      attachments,
+    );
   }
 
   const handleStop = stop;
@@ -150,6 +161,9 @@ export function Chat() {
                 handleSend={handleSend}
                 handleStop={handleStop}
                 isEmpty
+                chatId={activeChatId}
+                attachments={attachments}
+                onAttachmentsChange={setAttachments}
               />
               <ChatDisclaimer className="text-center text-xs text-muted-foreground mt-2" />
             </div>
@@ -200,6 +214,9 @@ export function Chat() {
                   isThinking={isBusy}
                   handleSend={handleSend}
                   handleStop={handleStop}
+                  chatId={activeChatId}
+                  attachments={attachments}
+                  onAttachmentsChange={setAttachments}
                 />
                 <ChatDisclaimer />
               </div>

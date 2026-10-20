@@ -1,6 +1,7 @@
 import type { Chat } from "../../infrastructure/db/schema/chats.ts";
 import type { MessageUsage } from "../usage/types.ts";
 import type { Message } from "../../infrastructure/db/schema/messages.ts";
+import type { AttachmentDto } from "../attachments/types.ts";
 
 export type FrontendChat = Omit<Chat, "id"> & { id: string };
 export type FrontendMessage = Omit<Message, "id" | "chatId" | "metadata"> & {
@@ -8,4 +9,5 @@ export type FrontendMessage = Omit<Message, "id" | "chatId" | "metadata"> & {
   chatId: string;
   metadata: Record<string, unknown> | null;
   usage: MessageUsage | null;
+  attachments: AttachmentDto[];
 };

@@ -26,6 +26,8 @@ import { ApiKeyRepository } from "../../../../infrastructure/db/repositories/api
 import { resolveOrchestrator, snapshotNodes } from "./run-snapshot.ts";
 import type { RunInfo } from "../../../usage/run-info.ts";
 import { ModelUsageRepository } from "../../../../infrastructure/db/repositories/model-usage-repository.ts";
+import { AttachmentRepository } from "../../../../infrastructure/db/repositories/attachment-repository.ts";
+import { saveAttachment } from "../../../../core/attachments/attachment-storage.ts";
 
 type CompiledGraph = ReturnType<typeof compileGraph>;
 type FinalState = Record<string, any>;
@@ -144,6 +146,51 @@ async function linkUsageToRun(
   }
 }
 
+/**
+ * The visual-builder result can report files a plugin wrote to the user's
+ * real filesystem (ExecutionResult.files, absolute paths — not managed by
+ * Hive). To make "files this run produced" visible/downloadable from the
+ * execution history, copy their bytes into attachment storage as "output"
+ * attachments linked to this run's history id.
+ */
+async function captureOutputAttachments(
+  dataDir: string,
+  attachmentRepo: AttachmentRepository,
+  executionId: number,
+  historyId: number,
+  finalState: FinalState,
+): Promise<void> {
+  const files = (finalState.result as { files?: Array<{ name: string; path: string; mimeType?: string }> } | undefined)
+    ?.files;
+  if (!files || files.length === 0) return;
+
+  for (const file of files) {
+    try {
+      const bytes = await Deno.readFile(file.path);
+      const storagePath = await saveAttachment(dataDir, bytes, file.name);
+      await attachmentRepo.create({
+        chatId: null,
+        messageId: null,
+        executionId,
+        executionHistoryId: historyId,
+        direction: "output",
+        originalName: file.name,
+        mimeType: file.mimeType ?? "application/octet-stream",
+        sizeBytes: bytes.length,
+        storagePath,
+        extractedTextPath: null,
+        status: "ready",
+        createdAt: Date.now(),
+      });
+    } catch (error) {
+      console.error(
+        `[Attachments] Could not capture output file '${file.path}':`,
+        error,
+      );
+    }
+  }
+}
+
 const EXECUTION_RECURSION_LIMIT = 60;
 
 export async function runExecution(
@@ -215,6 +262,13 @@ export async function runExecution(
               },
             );
             await linkUsageToRun(db, usageGroupId, historyId);
+            await captureOutputAttachments(
+              hive.getConfig().get("dataDir"),
+              new AttachmentRepository(db),
+              id,
+              historyId,
+              finalState,
+            );
             send("done", {
               historyId,
               iteration,
