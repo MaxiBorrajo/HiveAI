@@ -85,4 +85,40 @@ export const generatorEvalCases: GeneratorEvalCase[] = [
     expectedNodeTypes: ["plugin"],
     minIntermediateNodes: 1,
   },
+  {
+    name: "dense multi-plugin chain: three tools across research, extraction, and persistence",
+    prompt:
+      "Search the web for today's weather in Buenos Aires, read the top result page to confirm the temperature, log the temperature to a counter called weather_log, and save a one-line summary to a file called weather.txt.",
+    promptEs:
+      "Buscá en la web el clima de hoy en Buenos Aires, leé la página del primer resultado para confirmar la temperatura, registrá la temperatura en un contador llamado weather_log, y guardá un resumen de una línea en un archivo llamado weather.txt.",
+    activePlugins: ["web_search", "web_read", "counter", "file_ops"],
+    expectedNodeTypes: ["llm", "plugin"],
+    minIntermediateNodes: 3,
+  },
+  {
+    name: "error-handling branch: a condition gates on whether the search actually found something",
+    prompt:
+      "Search the web for a company called 'Zzyzxqplorp Inc'. If you find real information about it, summarize it and save it to a file; if you find nothing useful, save a file saying no information was found instead.",
+    promptEs:
+      "Buscá en la web una empresa llamada 'Zzyzxqplorp Inc'. Si encontrás información real sobre ella, resumila y guardala en un archivo; si no encontrás nada útil, guardá un archivo diciendo que no se encontró información.",
+    activePlugins: ["web_search", "file_ops"],
+    expectedNodeTypes: ["llm", "condition"],
+    minIntermediateNodes: 3,
+  },
+  {
+    name: "structurally ambiguous request: a one-line ask that admits more than one reasonable graph shape",
+    prompt: "Keep track of how many times I've asked you for the time.",
+    promptEs: "Llevá la cuenta de cuántas veces te pedí la hora.",
+    activePlugins: ["counter", "current_datetime"],
+    expectedNodeTypes: ["plugin"],
+    minIntermediateNodes: 1,
+  },
+  {
+    name: "pedido nativo en español: investigar y registrar sin frase en inglés de referencia",
+    prompt:
+      "Quiero un flujo que busque en la web cuáles son las mejores prácticas para hacer code review, lea la página más relevante, y guarde un resumen de tres puntos en un archivo llamado code_review_tips.txt.",
+    activePlugins: ["web_search", "web_read", "file_ops"],
+    expectedNodeTypes: ["llm", "plugin"],
+    minIntermediateNodes: 2,
+  },
 ];
