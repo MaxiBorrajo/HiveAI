@@ -17,10 +17,11 @@ export interface RunExecutionStreamHandlers {
 export async function runExecutionStream(
   executionId: string,
   input: Record<string, any>,
+  attachmentIds: number[],
   handlers: RunExecutionStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  await postSse(`/api/executions/${executionId}/run`, { input }, (eventName, data) => {
+  await postSse(`/api/executions/${executionId}/run`, { input, attachmentIds }, (eventName, data) => {
     if (eventName === "done" || data.result !== undefined) {
       handlers.onDone?.({
         iteration: data.iteration || 1,

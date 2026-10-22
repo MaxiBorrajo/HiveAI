@@ -13,6 +13,7 @@ interface UseRunControlsOptions {
   runExecution: (
     inputs: Record<string, any>,
     onResult: (result: ExecutionResultData) => void,
+    attachmentIds?: number[],
   ) => Promise<void>;
   onResult: () => void;
 }
@@ -44,10 +45,11 @@ export function useRunControls({
 
   const run = async (overrideInputs?: Record<string, any>) => {
     setIsRunModalOpen(false);
+    const attachmentIds = runAttachments.map((a) => a.id);
     setRunAttachments([]);
 
     try {
-      await runExecution(overrideInputs ?? runInputs, onResult);
+      await runExecution(overrideInputs ?? runInputs, onResult, attachmentIds);
     } catch (e: any) {
       reportError([`Stream error: ${getErrorMessage(e)}`]);
     }

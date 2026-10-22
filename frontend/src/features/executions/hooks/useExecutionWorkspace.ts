@@ -255,6 +255,7 @@ export function useExecutionWorkspace({
   const handleRun = async (
     inputs: Record<string, any>,
     onResult: (result: ExecutionResultData) => void,
+    attachmentIds: number[] = [],
   ) => {
     if (!activeExecutionId) return;
     const currentKey = activeExecutionId;
@@ -268,7 +269,7 @@ export function useExecutionWorkspace({
     });
 
     try {
-      await runExecutionStream(activeExecutionId, finalInputs, {
+      await runExecutionStream(activeExecutionId, finalInputs, attachmentIds, {
         onDone: (data) => {
           const resultData: ExecutionResultData = {
             iteration: data.iteration,

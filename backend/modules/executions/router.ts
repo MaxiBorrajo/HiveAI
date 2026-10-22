@@ -118,5 +118,6 @@ executionsRouter.post("/:id/run", async (c) => {
     headers,
     body.autoApprove !== false,
     c.req.raw.signal,
+    Array.isArray(body.attachmentIds) ? body.attachmentIds : [],
   );
 });

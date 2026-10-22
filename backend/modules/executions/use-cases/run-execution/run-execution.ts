@@ -28,6 +28,8 @@ import type { RunInfo } from "../../../usage/run-info.ts";
 import { ModelUsageRepository } from "../../../../infrastructure/db/repositories/model-usage-repository.ts";
 import { AttachmentRepository } from "../../../../infrastructure/db/repositories/attachment-repository.ts";
 import { saveAttachment } from "../../../../core/attachments/attachment-storage.ts";
+import { buildAttachmentContent } from "../../../../core/attachments/build-attachment-content.ts";
+import { normalizeModelRef } from "../../../../core/ai/providers/types.ts";
 
 type CompiledGraph = ReturnType<typeof compileGraph>;
 type FinalState = Record<string, any>;
@@ -191,6 +193,37 @@ async function captureOutputAttachments(
   }
 }
 
+/**
+ * Input attachments the user picked in the "Start Execution" modal are only
+ * persisted as rows linked to the execution — the run never saw their bytes.
+ * Reuse the same chat pipeline (image -> base64 part, PDF/text -> extracted
+ * text part) so the llm nodes receive the file the same way the chat does.
+ */
+async function resolveInputAttachments(
+  db: AppDatabase,
+  hive: HiveMicrokernel,
+  attachmentIds: number[],
+  send: SseSend,
+): Promise<Record<string, unknown>> {
+  if (attachmentIds.length === 0) return {};
+
+  const config = hive.getConfig();
+  const modelRef = normalizeModelRef(config.get("model"), {
+    provider: config.get("modelProvider"),
+    keyId: config.get("modelKeyId"),
+  });
+
+  const { parts, skipped } = await buildAttachmentContent(
+    config.get("dataDir"),
+    new AttachmentRepository(db),
+    attachmentIds,
+    modelRef,
+  );
+  for (const warning of skipped) send("warning", { warnings: [{ reason: warning }] });
+
+  return parts.length > 0 ? { attachments: parts } : {};
+}
+
 const EXECUTION_RECURSION_LIMIT = 60;
 
 export async function runExecution(
@@ -201,6 +234,7 @@ export async function runExecution(
   headers: Record<string, string>,
   autoApprove = true,
   signal?: AbortSignal,
+  attachmentIds: number[] = [],
 ): Promise<Response> {
   try {
     const repo = new ExecutionRepository(db);
@@ -242,8 +276,28 @@ export async function runExecution(
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {
             if (warnings.length > 0) send("warning", { warnings });
+            let resolvedInputState = inputState;
+            try {
+              const attachmentState = await resolveInputAttachments(
+                db,
+                hive,
+                attachmentIds,
+                send,
+              );
+              if (Object.keys(attachmentState).length > 0) {
+                resolvedInputState = { ...inputState, ...attachmentState };
+              }
+            } catch (error) {
+              send("error", {
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : "Could not read an attachment.",
+              });
+              return;
+            }
             const startedAt = Date.now();
-            const finalState = await streamRun(app, inputState, send, signal);
+            const finalState = await streamRun(app, resolvedInputState, send, signal);
             const endedAt = Date.now();
             finalizeExecutionResult(finalState, abstraction.nodes);
 
