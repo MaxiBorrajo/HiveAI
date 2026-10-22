@@ -33,10 +33,15 @@ export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  attachmentIds?: number[],
 ): Promise<void> {
   await postSse(
     "/api/chats",
-    { chatId: chatId ?? undefined, message: content },
+    {
+      chatId: chatId ?? undefined,
+      message: content,
+      attachmentIds: attachmentIds?.length ? attachmentIds : undefined,
+    },
     (eventName, payload) => {
       if (eventName === "chat_created") {
         handlers.onChatCreated(payload.chatId);

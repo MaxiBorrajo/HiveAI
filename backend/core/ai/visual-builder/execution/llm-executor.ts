@@ -28,7 +28,39 @@ const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
   "messages",
   "feedback",
   "model",
+  "attachments",
 ]);
+
+interface AttachmentContentPart {
+  type: "text" | "image";
+  text?: string;
+  mimeType?: string;
+  data?: string;
+}
+
+function toLangchainImageUrl(part: AttachmentContentPart): string {
+  return `data:${part.mimeType};base64,${part.data}`;
+}
+
+function buildHumanMessage(
+  text: string,
+  attachmentParts: AttachmentContentPart[],
+): HumanMessage {
+  if (attachmentParts.length === 0) return new HumanMessage(text);
+
+  const content: Array<Record<string, unknown>> = [{ type: "text", text }];
+  for (const part of attachmentParts) {
+    if (part.type === "image") {
+      content.push({
+        type: "image_url",
+        image_url: { url: toLangchainImageUrl(part) },
+      });
+    } else if (part.type === "text" && part.text) {
+      content.push({ type: "text", text: part.text });
+    }
+  }
+  return new HumanMessage({ content: content as unknown as BaseMessage["content"] });
+}
 
 function resolveModelName(model: unknown): string {
   if (typeof model === "string") return model;
@@ -195,6 +227,10 @@ export function buildPromptMessages(
     | undefined;
   if (inputMapping && Object.keys(inputMapping).length > 0) {
     for (const [label, stateKey] of Object.entries(inputMapping)) {
+      // "attachments" is rendered as real image/text content parts below,
+      // not as a JSON blob — skip it here regardless of what label the
+      // node's inputMapping gave it.
+      if (stateKey === "attachments") continue;
       const resolved = state[stateKey];
       if (resolved === undefined || resolved === null) continue;
       const valStr =
@@ -221,23 +257,23 @@ export function buildPromptMessages(
     }
   }
 
+  const attachmentParts = Array.isArray(state.attachments)
+    ? (state.attachments as AttachmentContentPart[])
+    : [];
+
   const hasHumanMessage = messagesToSend.some((m) => m instanceof HumanMessage);
   if (!hasHumanMessage) {
-    if (contextParts.length > 0) {
-      messagesToSend.push(new HumanMessage(contextParts.join("\n\n")));
-    } else {
-      messagesToSend.push(
-        new HumanMessage(
-          "Please execute the designated task following the instructions.",
-        ),
-      );
-    }
-  } else if (contextParts.length > 0) {
-    messagesToSend.push(
-      new HumanMessage(
-        `CURRENT MEMORY STATE CONTEXT:\n${contextParts.join("\n\n")}`,
-      ),
-    );
+    const text =
+      contextParts.length > 0
+        ? contextParts.join("\n\n")
+        : "Please execute the designated task following the instructions.";
+    messagesToSend.push(buildHumanMessage(text, attachmentParts));
+  } else if (contextParts.length > 0 || attachmentParts.length > 0) {
+    const text =
+      contextParts.length > 0
+        ? `CURRENT MEMORY STATE CONTEXT:\n${contextParts.join("\n\n")}`
+        : "See the attached file(s).";
+    messagesToSend.push(buildHumanMessage(text, attachmentParts));
   }
 
   return messagesToSend;

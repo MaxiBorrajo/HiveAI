@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Copy,
@@ -11,6 +11,7 @@ import {
   FileText,
   Code2,
   Database,
+  Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,11 @@ import { normalizeResult } from "@/features/executions/lib/executionResult";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { useResizableSidebar } from "@/hooks/useResizableSidebar";
 import { useSlidePresence } from "@/hooks/useSlidePresence";
+import { AttachmentsList } from "@/features/chats/components/AttachmentsList";
+import {
+  getExecutionHistoryAttachments,
+  type AttachmentDto,
+} from "@/features/chats/api/attachments";
 import type {
   ExecutionFileArtifact,
   ExecutionResultData,
@@ -62,6 +68,25 @@ export function ExecutionResultSidebar({
   });
 
   const { mounted, shown } = useSlidePresence(isOpen);
+
+  const [runAttachments, setRunAttachments] = useState<AttachmentDto[]>([]);
+  useEffect(() => {
+    if (!data?.historyId) {
+      setRunAttachments([]);
+      return;
+    }
+    let cancelled = false;
+    getExecutionHistoryAttachments(data.historyId)
+      .then(({ data: dtos }) => {
+        if (!cancelled) setRunAttachments(dtos ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRunAttachments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.historyId]);
 
   if (!mounted || !data) return null;
 
@@ -218,6 +243,15 @@ export function ExecutionResultSidebar({
                     onDownload={() => downloadArtifact(file)}
                   />
                 ))}
+              </div>
+            )}
+            {runAttachments.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Paperclip className="size-3" />
+                  Files
+                </h4>
+                <AttachmentsList attachments={runAttachments} />
               </div>
             )}
             <ResultRenderer result={resObj} />

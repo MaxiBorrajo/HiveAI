@@ -1,5 +1,6 @@
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
+import FileOpsPlugin from "../../plugins/file-ops/index.ts";
 import { buildStateSchema, compileGraph } from "../../core/ai/visual-builder/execution/compiler.ts";
 import { createPluginNodeRegistry } from "../../modules/executions/use-cases/run-execution/plugin-node-executor.ts";
 import type { ToolProvider } from "../../core/ai/visual-builder/types.ts";
@@ -30,6 +31,8 @@ export async function runExecutionSuite(
   hive.configure({ dataDir: tempDir, model: executorRef.model });
   await hive.register(new CounterPlugin());
   await hive.activate("counter");
+  await hive.register(new FileOpsPlugin());
+  await hive.activate("file_ops");
 
   const pluginRegistry = {
     ...createPluginNodeRegistry(hive),
@@ -50,7 +53,7 @@ export async function runExecutionSuite(
   };
 
   const label = modelRefLabel(executorRef);
-  const cases = buildExecutionCases(executorRef.model, executorRef.provider, executorRef.keyId);
+  const cases = buildExecutionCases(executorRef.model, executorRef.provider, executorRef.keyId, tempDir);
 
   const verdicts: EvalVerdict[] = [];
   for (const testCase of cases) {
@@ -107,6 +110,7 @@ export async function runExecutionSuite(
   }
 
   await hive.unregister("counter");
+  await hive.unregister("file_ops");
   await Deno.remove(tempDir, { recursive: true }).catch(() => {});
   return verdicts;
 }

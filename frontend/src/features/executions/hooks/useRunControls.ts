@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { reportError } from "@/lib/toastManager";
 import { getErrorMessage } from "@/lib/errors";
 import { graphRequiresInput } from "@/features/executions/lib/inputs";
+import type { AttachmentDto } from "@/features/chats/api/attachments";
 import type { ExecutionResultData, LangGraphAbstraction } from "../types";
 
 interface UseRunControlsOptions {
@@ -12,6 +13,7 @@ interface UseRunControlsOptions {
   runExecution: (
     inputs: Record<string, any>,
     onResult: (result: ExecutionResultData) => void,
+    attachmentIds?: number[],
   ) => Promise<void>;
   onResult: () => void;
 }
@@ -26,6 +28,7 @@ export function useRunControls({
 }: UseRunControlsOptions) {
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [runInputs, setRunInputs] = useState<Record<string, any>>({});
+  const [runAttachments, setRunAttachments] = useState<AttachmentDto[]>([]);
 
   const hasRequiredInputs = graphRequiresInput(graph);
 
@@ -36,14 +39,17 @@ export function useRunControls({
       initialInputs[key] = "";
     });
     setRunInputs(initialInputs);
+    setRunAttachments([]);
     setIsRunModalOpen(true);
   };
 
   const run = async (overrideInputs?: Record<string, any>) => {
     setIsRunModalOpen(false);
+    const attachmentIds = runAttachments.map((a) => a.id);
+    setRunAttachments([]);
 
     try {
-      await runExecution(overrideInputs ?? runInputs, onResult);
+      await runExecution(overrideInputs ?? runInputs, onResult, attachmentIds);
     } catch (e: any) {
       reportError([`Stream error: ${getErrorMessage(e)}`]);
     }
@@ -76,6 +82,8 @@ export function useRunControls({
     setIsRunModalOpen,
     runInputs,
     setRunInputs,
+    runAttachments,
+    setRunAttachments,
     hasRequiredInputs,
     openRunModal,
     run,

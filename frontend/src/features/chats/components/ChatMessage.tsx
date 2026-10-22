@@ -5,6 +5,7 @@ import type { Message } from "../types.ts";
 import { MessageMarkdown } from "./MessageMarkdown.tsx";
 import { StepsPanel } from "./StepsPanel.tsx";
 import { MessageUsageLine } from "./MessageUsageLine.tsx";
+import { AttachmentsList } from "./AttachmentsList.tsx";
 
 export const ChatMessage = memo(function ChatMessage({
   message,
@@ -77,6 +78,12 @@ export const ChatMessage = memo(function ChatMessage({
   return (
     <div className="flex w-full justify-end">
       <div className="max-w-[75%] rounded-2xl bg-card border border-border px-5 py-3 text-sm text-foreground whitespace-pre-wrap break-words">
+        {!!message.attachments?.length && (
+          <AttachmentsList
+            attachments={message.attachments}
+            className="mb-2"
+          />
+        )}
         {message.content}
         <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground justify-end">
           <span>

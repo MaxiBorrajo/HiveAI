@@ -72,7 +72,8 @@ executionsRouter.get("/:id/runs", async (c) => {
 executionsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return deleteExecution(db, parseId(c.req.param("id")), headers);
+  const dataDir = c.get("hive").getConfig().get("dataDir");
+  return deleteExecution(db, parseId(c.req.param("id")), headers, dataDir);
 });
 
 executionsRouter.patch("/:id", async (c) => {
@@ -117,5 +118,6 @@ executionsRouter.post("/:id/run", async (c) => {
     headers,
     body.autoApprove !== false,
     c.req.raw.signal,
+    Array.isArray(body.attachmentIds) ? body.attachmentIds : [],
   );
 });

@@ -6,7 +6,7 @@ import {
   PluginParameterInfo,
   ViolationKind,
 } from "../types.ts";
-import { CONDITION_OPERATORS, END_NODE_ID, START_NODE_ID } from "../constants.ts";
+import { BUILTIN_STATE_KEYS, CONDITION_OPERATORS, END_NODE_ID, START_NODE_ID } from "../constants.ts";
 import {
   validateInterpolationValue,
   validateGraphAgentToolMentions,
@@ -18,8 +18,6 @@ import {
   findConvergingConditionBranches,
   findMissingConditionBranches,
 } from "../generation/graph-sanitizer.ts";
-
-const BUILTIN_STATE_KEYS = ["input", "cwd", "os"];
 
 function violation(
   kind: ViolationKind,
