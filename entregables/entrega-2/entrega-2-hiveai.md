@@ -21,6 +21,7 @@ HiveAI pasó de usar solo modelos locales (Ollama) a poder **mezclar modelos loc
 - **Preguntas aclaratorias** del agente cuando falta información, en el chat y al generar ejecuciones.
 - **Rendimiento del modelo local**: ajustes de Ollama (flash attention, KV cache, keep_alive, batch, thinking) reemplazan a los Modos.
 - **Evals offline** extendidos (chat, generador de grafos y ejecuciones) con reporte comparable.
+- **Spike de técnicas para reducir el gasto en modelos cloud**: relevamiento documentado en `entregables/spike/gasto-cloud/` (no es una user story).
 
 ### Decisiones tomadas
 
@@ -379,3 +380,38 @@ Harness de `backend/tests/llm-eval/` extendido (import corregido a `strategy/sco
 > **DoD ajustado:** (a) el set quedó en **69 casos** y no en 20 a 30, porque se agregaron suites para generador y ejecuciones; (b) **no se agregó un job de CI** que corra los tests unitarios: el único workflow es `release.yml`, que solo compila y publica. Los 480 tests unitarios se corren a mano con `deno test -A`. (c) La corrida del eval en Mac y Windows no se verificó; se probó en Linux.
 
 ---
+
+# Spike (no cuenta como user story)
+
+## Spike2 - Técnicas para minimizar el gasto en modelos cloud
+
+### Objetivo
+Relevar las técnicas que reducen el consumo de tokens y el costo en modelos cloud, para decidir cuáles implementar en el harness antes de comprometer una historia dedicada. El ahorro es parte del diferencial del producto: el modelo grande orquesta y los chicos o locales ejecutan.
+
+### Alcance
+- El ruteo y la cascada de modelos (HiveQueen más nodos delegados) ya existen y se toman como línea base; solo se evalúan mejoras sobre eso.
+- Es un relevamiento: no incluye mediciones propias ni cálculo de precios. El registro de uso (US-C) guarda tokens y tiempos, y permitiría medir cada técnica cuando se implemente.
+- Las cifras de ahorro son órdenes de magnitud de terceros, no verificadas en HiveAI.
+
+### Resultado
+Documentación por tema en `entregables/spike/gasto-cloud/`. Para cada técnica: qué hace, soporte por proveedor, ahorro esperado, esfuerzo, riesgo y cómo medirla.
+
+| Tema | Técnicas relevadas |
+|---|---|
+| Selección de modelo y ruteo | Modelo chico para tareas simples, cascada con verificación barata, router liviano, subagentes de distinto tamaño |
+| Prompt caching | Prefijo estático primero, cuándo se invalida el caché, soporte y precios por proveedor |
+| Contexto e historial | Ventana deslizante, compactación con un nodo resumidor, contexto fresco por tarea, memoria persistente, RAG limpio y reranker |
+| Salida y thinking | Tope y formato de salida, salida estructurada, control del thinking, idioma de prompts y respuestas |
+| Prompts y herramientas | Prompt más corto, cargar solo las tools necesarias, truncar resultados de tools, resolver con código antes que con LLM |
+
+### Aprendizajes
+- **Hoy HiveAI no pide caché explícito a Anthropic.** El registro de uso ya guarda tokens cacheados, así que el efecto se podría medir apenas se active.
+- **Cambiar de modelo a mitad de un chat invalida el caché del prefijo.** La app permite ese cambio, por lo que el ahorro por caché tiene un límite de diseño.
+- **El tamaño del historial y de las definiciones de tools** pesa más que el precio por token: reenviar contexto en cada llamada es lo que más crece.
+- **Los modelos locales** no tienen precio por token: el costo es tiempo y memoria. Cómo aplica cada técnica a Ollama queda **a investigar**.
+
+### Pendiente
+- Verificar el caching de Gemini y el comportamiento del thinking en turnos con tools en Anthropic.
+- Evaluar herramientas sugeridas como reductoras de tokens (rtk ai, graphify).
+- Investigar cómo aplican las técnicas a modelos locales.
+
