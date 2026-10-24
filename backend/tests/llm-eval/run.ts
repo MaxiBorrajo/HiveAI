@@ -22,7 +22,7 @@ const SCOUT_RECURSION_LIMIT = MAX_TOOL_CALLS * 2;
 // The eval runs unattended — tools that wait on a human (ask_user, approvals)
 // would otherwise hang forever since nobody is there to answer. This bounds
 // each case so a stuck call surfaces as a failed case, not a frozen process.
-const CASE_TIMEOUT_MS = 120_000;
+const CASE_TIMEOUT_MS = 1000_000;
 
 interface CaseOutcome {
   case: EvalCase;

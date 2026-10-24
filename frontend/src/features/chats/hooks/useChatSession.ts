@@ -70,6 +70,8 @@ function toMessage(stored: StoredMessage): Message {
   };
 }
 
+class RejectedSendError extends Error {}
+
 export function useChatSession() {
   const {
     chats,
@@ -122,6 +124,7 @@ export function useChatSession() {
     content: string,
     onAccepted?: () => void,
     attachments?: AttachmentDto[],
+    onRejected?: () => void,
   ): Promise<boolean> {
     if (!content || thinkingState.value.isBusy) return false;
     if (!hasModel) return false;
@@ -146,8 +149,9 @@ export function useChatSession() {
         key,
       );
 
+    const userMessageId = crypto.randomUUID();
     appendMessage({
-      id: crypto.randomUUID(),
+      id: userMessageId,
       role: "user",
       content,
       timestamp: Date.now(),
@@ -245,8 +249,9 @@ export function useChatSession() {
               );
             }
           },
-          onError: (errorMessage) => {
+          onError: (errorMessage, rejected) => {
             reportError([errorMessage]);
+            if (rejected) throw new RejectedSendError(errorMessage);
             throw new Error(errorMessage);
           },
         },
@@ -254,7 +259,15 @@ export function useChatSession() {
         attachments?.map((a) => a.id),
       );
     } catch (error) {
-      if (abortController.signal.aborted) {
+      if (error instanceof RejectedSendError) {
+        // Nothing was persisted: drop the optimistic message and give the
+        // draft back so the user can fix it.
+        messagesState.set(
+          (prev) => prev.filter((m) => m.id !== userMessageId),
+          key,
+        );
+        onRejected?.();
+      } else if (abortController.signal.aborted) {
         messagesState.set((prev) => {
           const hasPartial = prev.some((m) => m.id === agentMessageId);
           return hasPartial

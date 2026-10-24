@@ -20,7 +20,10 @@ import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
 import { loadChatUsage } from "../../usage/load-chat-usage.ts";
 import { ModelUsageRepository } from "../../../infrastructure/db/repositories/model-usage-repository.ts";
 import { AttachmentRepository } from "../../../infrastructure/db/repositories/attachment-repository.ts";
-import { buildAttachmentContent } from "../../../core/attachments/build-attachment-content.ts";
+import {
+  buildAttachmentContent,
+  type AttachmentContentPart,
+} from "../../../core/attachments/build-attachment-content.ts";
 import { normalizeModelRef } from "../../../core/ai/providers/types.ts";
 import { HumanMessage, type BaseMessage } from "@langchain/core/messages";
 
@@ -276,6 +279,32 @@ export async function sendMessage(
       return;
     }
 
+    // Resolve attachments before anything is persisted, so a rejected file
+    // leaves no chat or message behind and the client can restore the input.
+    let attachmentParts: AttachmentContentPart[] = [];
+    if (attachmentIds.length > 0) {
+      const config = hive.getConfig();
+      const modelRef = normalizeModelRef(model, {
+        provider: config.get("modelProvider"),
+        keyId: config.get("modelKeyId"),
+      });
+      try {
+        ({ parts: attachmentParts } = await buildAttachmentContent(
+          config.get("dataDir"),
+          new AttachmentRepository(db),
+          attachmentIds,
+          modelRef,
+        ));
+      } catch (error) {
+        send("error", {
+          message:
+            error instanceof Error ? error.message : "Could not read an attachment.",
+          rejected: true,
+        });
+        return;
+      }
+    }
+
     const chatRepo = new ChatRepository(db);
 
     let resolvedChatId: number;
@@ -318,41 +347,16 @@ export async function sendMessage(
       userText,
     );
 
-    if (attachmentIds.length > 0) {
-      const config = hive.getConfig();
-      const modelRef = normalizeModelRef(model, {
-        provider: config.get("modelProvider"),
-        keyId: config.get("modelKeyId"),
-      });
-      let attachmentResult;
-      try {
-        attachmentResult = await buildAttachmentContent(
-          config.get("dataDir"),
-          new AttachmentRepository(db),
-          attachmentIds,
-          modelRef,
-        );
-      } catch (error) {
-        send("error", {
-          message:
-            error instanceof Error ? error.message : "Could not read an attachment.",
+    if (attachmentParts.length > 0) {
+      const lastIndex = contextMessages.length - 1;
+      const last = contextMessages[lastIndex];
+      if (last instanceof HumanMessage) {
+        contextMessages[lastIndex] = new HumanMessage({
+          content: [
+            { type: "text", text: userText },
+            ...attachmentParts,
+          ] as unknown as BaseMessage["content"],
         });
-        return;
-      }
-      for (const warning of attachmentResult.skipped) {
-        send("attachment_skipped", { message: warning });
-      }
-      if (attachmentResult.parts.length > 0) {
-        const lastIndex = contextMessages.length - 1;
-        const last = contextMessages[lastIndex];
-        if (last instanceof HumanMessage) {
-          contextMessages[lastIndex] = new HumanMessage({
-            content: [
-              { type: "text", text: userText },
-              ...attachmentResult.parts,
-            ] as unknown as BaseMessage["content"],
-          });
-        }
       }
     }
 

@@ -213,13 +213,12 @@ async function resolveInputAttachments(
     keyId: config.get("modelKeyId"),
   });
 
-  const { parts, skipped } = await buildAttachmentContent(
+  const { parts } = await buildAttachmentContent(
     config.get("dataDir"),
     new AttachmentRepository(db),
     attachmentIds,
     modelRef,
   );
-  for (const warning of skipped) send("warning", { warnings: [{ reason: warning }] });
 
   return parts.length > 0 ? { attachments: parts } : {};
 }

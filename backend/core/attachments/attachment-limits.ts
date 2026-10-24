@@ -5,6 +5,7 @@ export const TEXT_MIME_TYPES = new Set([
   "text/plain",
   "text/markdown",
   "text/x-markdown",
+  "text/csv",
 ]);
 
 export const PDF_MIME_TYPE = "application/pdf";
@@ -26,8 +27,16 @@ export function isExcelMimeType(mimeType: string): boolean {
   return EXCEL_MIME_TYPES.has(mimeType);
 }
 
+// Formats accepted by Anthropic, Gemini and Ollama vision models alike.
+export const IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
 export function isImageMimeType(mimeType: string): boolean {
-  return mimeType.startsWith("image/");
+  return IMAGE_MIME_TYPES.has(mimeType);
 }
 
 /**

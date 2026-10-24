@@ -4,7 +4,7 @@ import type { ResponseEntity } from "../../../lib/config";
 const quiet = { silenceErrorToast: true };
 
 export const ACCEPTED_ATTACHMENT_TYPES =
-  ".txt,.md,.pdf,.xlsx,.xls,image/*";
+  ".txt,.md,.csv,.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp";
 
 export type AttachmentDirection = "input" | "output";
 export type AttachmentStatus =

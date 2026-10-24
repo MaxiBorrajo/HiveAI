@@ -138,14 +138,14 @@ export function PluginConfigDialog({
 
   return (
     <Dialog open={!!pluginName} onOpenChange={(open) => !open && onOpenChange(false)}>
-      <DialogContent className="w-[90vw] max-w-lg" showCloseButton>
+      <DialogContent className="flex h-[70vh] w-[90vw] max-w-lg flex-col" showCloseButton>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="size-4" /> Configure {pluginName}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
           {error && (
             <p role="alert" className="text-xs text-destructive">
               {error}

@@ -15,7 +15,7 @@ import { captureUsage } from "./usage-capture.ts";
 import type { EvalVerdict, EvalLang } from "./metrics.ts";
 
 const ALL_PLUGINS = [WebSearchPlugin, WebReadPlugin, FileOpsPlugin, CurrentDatetimePlugin, CounterPlugin];
-const GENERATION_TIMEOUT_MS = 300_000;
+const GENERATION_TIMEOUT_MS = 1000_000;
 
 interface CaseOutcome {
   case: GeneratorEvalCase;

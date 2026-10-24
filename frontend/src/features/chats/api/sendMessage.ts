@@ -25,7 +25,7 @@ export interface StreamHandlers {
     usage: MessageUsage | null,
     conversationUsage: ConversationUsage | null,
   ) => void;
-  onError: (message: string) => void;
+  onError: (message: string, rejected: boolean) => void;
 }
 
 export async function sendMessage(
@@ -66,7 +66,7 @@ export async function sendMessage(
           payload.conversationUsage ?? null,
         );
       } else if (eventName === "error") {
-        handlers.onError(payload.message);
+        handlers.onError(payload.message, payload.rejected === true);
       }
     },
     signal,

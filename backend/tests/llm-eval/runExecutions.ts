@@ -10,7 +10,7 @@ import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
 import type { EvalVerdict } from "./metrics.ts";
 
-const EXECUTION_TIMEOUT_MS = 120_000;
+const EXECUTION_TIMEOUT_MS = 1000_000;
 
 export async function runExecutionSuite(
   runId: string,

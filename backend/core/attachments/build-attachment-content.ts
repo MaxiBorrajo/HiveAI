@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { AppError } from "../api/errors.ts";
 import type { ModelRef } from "../ai/providers/types.ts";
 import {
@@ -39,17 +40,16 @@ function toBase64(bytes: Uint8Array): string {
  * content parts the model can use: text/markdown, PDF, and Excel (already
  * extracted) become text blocks labeled with the file name; images become an inline
  * base64 block only if the active model reports vision support, otherwise
- * the attachment is skipped and the caller is told explicitly why — never
- * silently dropped or truncated.
+ * the call fails with an explicit error — nothing is silently dropped or
+ * truncated.
  */
 export async function buildAttachmentContent(
   dataDir: string,
   repo: AttachmentRepository,
   attachmentIds: number[],
   modelRef: ModelRef,
-): Promise<{ parts: AttachmentContentPart[]; skipped: string[] }> {
+): Promise<{ parts: AttachmentContentPart[] }> {
   const parts: AttachmentContentPart[] = [];
-  const skipped: string[] = [];
   let totalTextChars = 0;
   let visionChecked = false;
   let hasVision = false;
@@ -64,10 +64,10 @@ export async function buildAttachmentContent(
         visionChecked = true;
       }
       if (!hasVision) {
-        skipped.push(
-          `'${row.originalName}' was not sent: the active model does not support image input.`,
+        throw new AppError(
+          `'${row.originalName}' is an image, but the active model (${modelRef.model}) does not support image input. Remove it or switch to a vision model.`,
+          422,
         );
-        continue;
       }
       const bytes = await readAttachment(dataDir, row.storagePath);
       parts.push({ type: "image", mimeType: row.mimeType, data: toBase64(bytes) });
@@ -76,6 +76,7 @@ export async function buildAttachmentContent(
 
     const text = await attachmentText(dataDir, row);
     if (text === undefined) continue;
+    const filePath = join(dataDir, row.storagePath);
 
     if (totalTextChars + text.length > MAX_TOTAL_CONTEXT_CHARS) {
       await repo.updateStatus(id, "context_overflow");
@@ -87,11 +88,11 @@ export async function buildAttachmentContent(
     totalTextChars += text.length;
     parts.push({
       type: "text",
-      text: `--- Attached file: ${row.originalName} ---\n${text}`,
+      text: `--- Attached file: ${row.originalName} (saved at: ${filePath}, read-only: never modify or write next to it) ---\n${text}`,
     });
   }
 
-  return { parts, skipped };
+  return { parts };
 }
 
 async function attachmentText(

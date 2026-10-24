@@ -36,7 +36,7 @@ export async function createAttachment(
 
   if (!isSupportedMimeType(mimeType)) {
     throw new AppError(
-      `'${file.name}' has an unsupported type (${mimeType}). Supported: plain text, Markdown, PDF, Excel, and images.`,
+      `'${file.name}' has an unsupported type (${mimeType}). Supported: plain text, Markdown, CSV, PDF, Excel, and PNG/JPEG/GIF/WebP images.`,
       415,
     );
   }

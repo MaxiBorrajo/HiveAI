@@ -135,6 +135,10 @@ export function Chat() {
         setAttachments([]);
       },
       attachments,
+      () => {
+        setInput(content);
+        setAttachments(attachments);
+      },
     );
   }
 
