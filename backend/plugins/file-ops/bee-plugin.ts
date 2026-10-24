@@ -9,6 +9,13 @@ export interface BeeContext {
     details?: Record<string, string>,
   ): Promise<boolean>;
   reportStep(label: string): void;
+  getConfig(key: string): Promise<string | undefined>;
+}
+
+export interface PluginConfigField {
+  key: string;
+  label: string;
+  secret?: boolean;
 }
 
 export type SelectionCaseKind = "positive" | "negative" | "ambiguous";
@@ -36,6 +43,7 @@ export interface BeePlugin<S extends z.ZodType = z.ZodType> {
   returnDescription?: string;
   selectionTests: SelectionTestCase<S>[];
   executionTests: ExecutionTestCase<S>[];
+  configFields?: PluginConfigField[];
   initialize(context: BeeContext): void | Promise<void>;
   process(
     input: z.infer<S>,

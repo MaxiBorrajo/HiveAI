@@ -1,38 +1,49 @@
 import { useModels } from "@/features/models/ModelsContext";
+import { ApiKeysModal } from "@/features/api-keys/components/ApiKeysModal";
 import { ModelMenu } from "./ModelMenu";
 import { ModelsModal } from "./ModelsModal";
 
-interface ModelsManagerProps {
-  forceOpenDownward?: boolean;
-}
-
-export function ModelsManager({ forceOpenDownward }: ModelsManagerProps) {
+export function ModelsManager() {
   const {
     models,
+    optionGroups,
     current,
     changeModel,
     isManageOpen,
     openManage,
     closeManage,
+    isKeysOpen,
+    openKeys,
+    closeKeys,
     refreshModels,
+    deleteLocalModel,
+    embeddingModelStatus,
   } = useModels();
 
   return (
     <>
       <ModelMenu
-        models={models}
+        groups={optionGroups}
         current={current}
         onChangeModel={changeModel}
         onOpenManage={openManage}
+        onOpenKeys={openKeys}
         onOpen={refreshModels}
-        forceOpenDownward={forceOpenDownward}
       />
       <ModelsModal
         isOpen={isManageOpen}
         onOpenChange={(open) => (open ? openManage() : closeManage())}
         models={models}
+        groups={optionGroups}
         current={current}
         onChangeModel={changeModel}
+        onDeleteModel={deleteLocalModel}
+        protectedModel={embeddingModelStatus?.model}
+      />
+      <ApiKeysModal
+        isOpen={isKeysOpen}
+        onOpenChange={(open) => (open ? openKeys() : closeKeys())}
+        onChanged={refreshModels}
       />
     </>
   );

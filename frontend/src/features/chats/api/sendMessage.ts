@@ -1,13 +1,31 @@
 import { postSse } from "../../../lib/sse";
-import type { ChatStep } from "@/features/chats/types";
+import type {
+  ChatStep,
+  ConversationUsage,
+  MessageUsage,
+} from "@/features/chats/types";
+
+export interface LiveToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
 
 export interface StreamHandlers {
   onChatCreated: (chatId: string) => void;
   onThinking: () => void;
+  onStep: (step: ChatStep) => void;
+  onToolCalls: (calls: LiveToolCall[]) => void;
+  onStatus: (phase: "loading_model" | "processing") => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
-  onDone: (content: string, usedTools: string[], steps: ChatStep[]) => void;
-  onError: (message: string) => void;
+  onDone: (
+    content: string,
+    usedTools: string[],
+    steps: ChatStep[],
+    usage: MessageUsage | null,
+    conversationUsage: ConversationUsage | null,
+  ) => void;
+  onError: (message: string, rejected: boolean) => void;
 }
 
 export async function sendMessage(
@@ -15,15 +33,26 @@ export async function sendMessage(
   content: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  attachmentIds?: number[],
 ): Promise<void> {
   await postSse(
     "/api/chats",
-    { chatId: chatId ?? undefined, message: content },
+    {
+      chatId: chatId ?? undefined,
+      message: content,
+      attachmentIds: attachmentIds?.length ? attachmentIds : undefined,
+    },
     (eventName, payload) => {
       if (eventName === "chat_created") {
         handlers.onChatCreated(payload.chatId);
       } else if (eventName === "thinking") {
         handlers.onThinking();
+      } else if (eventName === "step") {
+        handlers.onStep(payload);
+      } else if (eventName === "tool_calls") {
+        handlers.onToolCalls(payload.calls ?? []);
+      } else if (eventName === "status") {
+        handlers.onStatus(payload.phase);
       } else if (eventName === "thinking_delta") {
         handlers.onThinkingDelta(payload.content, payload.node);
       } else if (eventName === "token") {
@@ -33,9 +62,11 @@ export async function sendMessage(
           payload.content,
           payload.usedTools ?? [],
           payload.steps ?? [],
+          payload.usage ?? null,
+          payload.conversationUsage ?? null,
         );
       } else if (eventName === "error") {
-        handlers.onError(payload.message);
+        handlers.onError(payload.message, payload.rejected === true);
       }
     },
     signal,

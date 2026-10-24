@@ -15,6 +15,41 @@
       "when": 1790597056021,
       "tag": "0001_glorious_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791223713622,
+      "tag": "0002_superb_typhoid_mary",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791656034332,
+      "tag": "0003_blushing_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791668726401,
+      "tag": "0004_curved_doorman",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791983938806,
+      "tag": "0005_next_odin",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792501307012,
+      "tag": "0006_stale_stark_industries",
+      "breakpoints": true
     }
   ]
 }

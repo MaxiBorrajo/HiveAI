@@ -15,7 +15,6 @@ interface PluginsMenuProps {
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
   onOpenManage: () => void;
-  forceOpenDownward?: boolean;
 }
 
 export function PluginsMenu({
@@ -23,7 +22,6 @@ export function PluginsMenu({
   onToggle,
   onToggleAll,
   onOpenManage,
-  forceOpenDownward = false,
 }: PluginsMenuProps) {
   const allActive = plugins.length > 0 && plugins.every((p) => p.active);
 
@@ -39,7 +37,7 @@ export function PluginsMenu({
         align="start"
         side="bottom"
         sideOffset={8}
-        collisionAvoidance={forceOpenDownward ? { side: "none" } : undefined}
+        collisionAvoidance={undefined}
         className="w-56"
       >
         <DropdownMenuGroup>

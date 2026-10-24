@@ -3,6 +3,31 @@ import { MessageMarkdown } from "@/features/chats/components/MessageMarkdown";
 import { stringifyContent } from "@/lib/download";
 import type { ExecutionResult } from "@/features/executions/types";
 
+const HTML_FENCE = /^\s*```(?:html)?\s*\n([\s\S]*?)\n```\s*$/i;
+const HTML_DOC = /^\s*(?:<!doctype\s+html|<html[\s>])/i;
+
+function extractHtmlDocument(result: ExecutionResult): string | null {
+  const text = stringifyContent(result.content);
+  const unfenced = HTML_FENCE.exec(text)?.[1] ?? text;
+  const isHtmlFile = result.files?.some((f) => /\.html?$/i.test(f.name));
+  return HTML_DOC.test(unfenced) || (isHtmlFile && unfenced.trimStart().startsWith("<"))
+    ? unfenced
+    : null;
+}
+
+function HtmlResult({ html }: { html: string }) {
+  return (
+    <div className="rounded-xl border border-border overflow-hidden bg-white shadow-lg">
+      <iframe
+        title="HTML preview"
+        srcDoc={html}
+        sandbox="allow-scripts"
+        className="w-full h-[70vh] border-0"
+      />
+    </div>
+  );
+}
+
 function TableResult({ rows }: { rows: Record<string, unknown>[] }) {
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-card/60 shadow-lg">
@@ -73,6 +98,8 @@ export function ResultRenderer({ result }: { result: ExecutionResult }) {
   const { type, content } = result;
 
   if (type === "file" || type === "markdown") {
+    const html = extractHtmlDocument(result);
+    if (html) return <HtmlResult html={html} />;
     return (
       <div className="text-sm text-foreground leading-relaxed max-w-none pt-1">
         <MessageMarkdown content={stringifyContent(content)} />

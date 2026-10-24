@@ -2,22 +2,35 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { Loader2 } from "lucide-react";
 import { getModels } from "@/features/models/api/getModels";
+import { deleteModel } from "@/features/models/api/deleteModel";
+import { reportWarning } from "@/lib/toastManager";
+import { getModelOptions } from "@/features/models/api/getModelOptions";
 import { getCurrentModels } from "@/features/models/api/getCurrentModels";
 import { setModels as setModelsRequest } from "@/features/models/api/setModels";
 import {
   getEmbeddingModelStatus,
   type EmbeddingModelStatus,
 } from "@/features/models/api/getEmbeddingModelStatus";
-import type { CurrentModels, ModelInfo } from "@/features/models/types";
+import type {
+  CurrentModels,
+  ModelInfo,
+  ModelOptionGroup,
+} from "@/features/models/types";
+import type { ModelChoice } from "@/features/models/lib/modelChoices";
 
 interface ModelsContextValue {
   models: ModelInfo[];
+  optionGroups: ModelOptionGroup[];
   current: CurrentModels;
+  isKeysOpen: boolean;
+  openKeys: () => void;
+  closeKeys: () => void;
   hasModel: boolean;
   hasAvailableModels: boolean;
   embeddingModelStatus: EmbeddingModelStatus | null;
@@ -25,8 +38,8 @@ interface ModelsContextValue {
   openManage: () => void;
   closeManage: () => void;
   refreshModels: () => void;
-  changeModel: (name: string) => Promise<void>;
-  modeResetSignal: number;
+  changeModel: (choice: string | ModelChoice) => Promise<void>;
+  deleteLocalModel: (name: string) => Promise<void>;
   runBusy: <T>(message: string, task: () => Promise<T>) => Promise<T>;
 }
 
@@ -34,11 +47,14 @@ const ModelsContext = createContext<ModelsContextValue | null>(null);
 
 export function ModelsProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [optionGroups, setOptionGroups] = useState<ModelOptionGroup[]>([]);
+  const [isKeysOpen, setIsKeysOpen] = useState(false);
   const [current, setCurrent] = useState<CurrentModels>({
     model: "",
+    provider: "ollama",
+    keyId: "",
   });
   const [isManageOpen, setIsManageOpen] = useState(false);
-  const [modeResetSignal, setModeResetSignal] = useState(0);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [embeddingModelStatus, setEmbeddingModelStatus] =
     useState<EmbeddingModelStatus | null>(null);
@@ -55,10 +71,29 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const warnedRef = useRef<string | null>(null);
+
+  function warnIfUnusable(model: CurrentModels) {
+    if (model.toolSupport?.status !== "unsupported") return;
+    const key = `${model.provider}:${model.model}`;
+    if (warnedRef.current === key) return;
+    warnedRef.current = key;
+    reportWarning(
+      `The active model '${model.model}' no longer supports tools`,
+      `${model.toolSupport.reason ?? ""} Choose another model from the model menu.`.trim(),
+    );
+  }
+
   function refreshModels() {
     getModels().then(({ data }) => setModels(data ?? []));
+    getModelOptions()
+      .then(({ data }) => setOptionGroups(data ?? []))
+      .catch(() => setOptionGroups([]));
     getCurrentModels().then(({ data }) => {
-      if (data) setCurrent(data);
+      if (data) {
+        setCurrent(data);
+        warnIfUnusable(data);
+      }
     });
     getEmbeddingModelStatus().then(({ data }) => {
       if (data) setEmbeddingModelStatus(data);
@@ -67,24 +102,53 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
 
   useEffect(refreshModels, []);
 
-  async function changeModel(name: string) {
-    const previousModel = current.model;
-    setCurrent((prev) => ({ ...prev, model: name }));
+  async function changeModel(choice: string | ModelChoice) {
+    const target: ModelChoice =
+      typeof choice === "string"
+        ? { provider: "ollama", model: choice, keyId: "" }
+        : choice;
+    const previous = current;
+    setCurrent(target);
 
     await runBusy("Applying model change...", async () => {
       try {
-        const { data } = await setModelsRequest({ model: name });
-        if (data) setCurrent((prev) => ({ ...prev, model: data.model }));
-        setModeResetSignal((n) => n + 1);
+        const { data } = await setModelsRequest({
+          model: target.model,
+          provider: target.provider,
+          keyId: target.keyId,
+        });
+        if (data) {
+          setCurrent(data);
+          if (data.toolSupport?.status === "unknown") {
+            reportWarning(
+              `Tool support of '${data.model}' could not be verified`,
+              data.toolSupport.reason,
+            );
+          }
+        }
       } catch {
-        setCurrent((prev) => ({ ...prev, model: previousModel }));
+        setCurrent(previous);
       }
     });
   }
 
+  async function deleteLocalModel(name: string) {
+    await runBusy(`Deleting ${name}...`, async () => {
+      try {
+        await deleteModel(name);
+      } catch {
+      }
+    });
+    refreshModels();
+  }
+
   const value: ModelsContextValue = {
     models,
+    optionGroups,
     current,
+    isKeysOpen,
+    openKeys: () => setIsKeysOpen(true),
+    closeKeys: () => setIsKeysOpen(false),
     hasModel: !!current.model,
     hasAvailableModels: models.length > 0,
     embeddingModelStatus,
@@ -93,7 +157,7 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     closeManage: () => setIsManageOpen(false),
     refreshModels,
     changeModel,
-    modeResetSignal,
+    deleteLocalModel,
     runBusy,
   };
 

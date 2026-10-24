@@ -17,6 +17,7 @@ import {
   type TestSuiteQualityReport,
 } from "./plugin-quality-validator.ts";
 import type { PluginStateRepository } from "../../infrastructure/db/repositories/plugin-state-repository.ts";
+import { getSecretStore } from "../secrets/index.ts";
 
 export type { TestSuiteQualityReport };
 
@@ -38,8 +39,11 @@ export class HiveMicrokernel {
     dataDir: "",
     configDir: "",
     model: "",
-    currentMode: "default",
+    modelProvider: "ollama",
+    modelKeyId: "",
     ollamaKvCacheType: "",
+    ollamaFlashAttention: "",
+    ollamaServerPromptDismissed: false,
     callbackBaseUrl: "",
   });
 
@@ -59,16 +63,6 @@ export class HiveMicrokernel {
     this.pluginStateRepository = repository;
   }
 
-  /**
-   * Applies persisted active/inactive state to plugins already registered
-   * in-memory. Plugins with no persisted record keep their current
-   * (default) state, so freshly-added internal plugins still start active.
-   *
-   * Must run AFTER registration but BEFORE any default-activation step that
-   * unconditionally calls activate() on every registered plugin — otherwise
-   * that default activation persists `active: true` and overwrites a
-   * previously persisted `false`, defeating the point of restoring state.
-   */
   async restorePersistedActiveStates(): Promise<void> {
     if (!this.pluginStateRepository) return;
 
@@ -84,11 +78,6 @@ export class HiveMicrokernel {
     }
   }
 
-  /**
-   * Returns the persisted active state for a plugin, or `undefined` if it
-   * has no persisted record (i.e. it should fall back to its default
-   * behavior, such as internal plugins defaulting to active).
-   */
   async getPersistedActiveState(name: string): Promise<boolean | undefined> {
     if (!this.pluginStateRepository) return undefined;
     const persistedStates = await this.pluginStateRepository.findAll();
@@ -120,6 +109,7 @@ export class HiveMicrokernel {
         return wait;
       },
       reportStep: (label) => reportPluginStep(label),
+      getConfig: (key) => getSecretStore().get(`${pluginName}:${key}`),
     };
   }
 
@@ -174,8 +164,6 @@ export class HiveMicrokernel {
         new URL("./bee-plugin.ts", import.meta.url),
       );
     } catch (e) {
-      // If we are running in a compiled executable, the core bee-plugin.ts
-      // might not be available as a file asset. In production, we trust the bundled plugins.
       return;
     }
     
@@ -245,6 +233,23 @@ export class HiveMicrokernel {
     }
 
     return removed;
+  }
+
+  /**
+   * Restarts the subprocess of a running external plugin, so it picks up
+   * config changes (configFields) saved while it was already active.
+   * No-op for internal plugins or external plugins that aren't currently
+   * running — those will read fresh config on their next activate().
+   */
+  async restartExternalPlugin(name: string): Promise<void> {
+    if (
+      !this.externalPlugins.isExternal(name) ||
+      !this.externalPlugins.hasRunningHandle(name)
+    ) {
+      return;
+    }
+    await this.externalPlugins.stopHandle(name);
+    await this.externalPlugins.launchAndRegister(name);
   }
 
   isActive(name: string): boolean {

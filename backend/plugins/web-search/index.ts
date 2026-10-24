@@ -6,25 +6,50 @@ import type {
   ExecutionTestCase,
 } from "./bee-plugin.ts";
 
-const FETCH_TIMEOUT_MS = 10_000;
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const FETCH_TIMEOUT_MS = 12_000;
 const DEFAULT_SEARCH_LIMIT = 5;
 const MAX_SEARCH_LIMIT = 10;
-const SEARXNG_INSTANCE_URL = Deno.env.get("SEARXNG_INSTANCE_URL");
 
-const MAX_SEARCH_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 800;
-const JITTER_MAX_MS = 400;
+// DuckDuckGo pacing. All DDG requests of the whole process go through ONE queue,
+// so an agent that fires several searches in parallel cannot burst the endpoint
+// (that burst is what gets the IP flagged as automated traffic).
+const DDG_MIN_INTERVAL_MS = 3_000;
+const DDG_JITTER_MS = 1_500;
+const DDG_BLOCK_COOLDOWN_MS = 45_000;
+const DDG_MAX_COOLDOWN_WAIT_MS = 20_000;
+const DDG_MAX_ATTEMPTS = 3;
+const DDG_ATTEMPT_ORDER = ["html", "lite", "html"] as const;
+
+// Identical queries inside this window are answered from memory (saves quota).
+const CACHE_TTL_MS = 10 * 60_000;
+const CACHE_MAX_ENTRIES = 200;
 
 const DDG_USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
 ];
 
+// ---------------------------------------------------------------------------
+// Schema & types
+// ---------------------------------------------------------------------------
+
+const TIME_RANGES = ["day", "week", "month", "year"] as const;
+type TimeRange = (typeof TIME_RANGES)[number];
+
 const searchSchema = z.object({
-  query: z.string().min(1).describe("The search query to look up on the web."),
+  query: z
+    .string()
+    .min(1)
+    .describe(
+      "The search query. Supports quotes for exact phrases, site:domain.com to restrict to a site, and -word to exclude a term. Keep it short (3-8 words plus operators). Do not chain many OR clauses.",
+    ),
   limit: z
     .number()
     .int()
@@ -34,6 +59,12 @@ const searchSchema = z.object({
     .describe(
       `Maximum number of results to return (default ${DEFAULT_SEARCH_LIMIT}, max ${MAX_SEARCH_LIMIT}).`,
     ),
+  time_range: z
+    .enum(TIME_RANGES)
+    .optional()
+    .describe(
+      "Only return pages from the last day, week, month or year. Use 'year' to prioritise recent discussions. Omit for no date filter.",
+    ),
 });
 
 type WebSearchSchema = typeof searchSchema;
@@ -42,214 +73,708 @@ interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+  date?: string;
 }
 
-interface SearxResult {
-  title: string;
-  url: string;
-  content?: string;
-}
+type Outcome =
+  | { ok: true; results: SearchResult[]; extras?: string[] }
+  | { ok: false; error: string };
 
-interface SearxResponse {
-  results?: SearxResult[];
+type ProviderName = "serper" | "tavily" | "brave" | "searxng" | "duckduckgo";
+
+const PROVIDER_LABEL: Record<ProviderName, string> = {
+  serper: "Serper (Google)",
+  tavily: "Tavily",
+  brave: "Brave Search",
+  searxng: "SearXNG",
+  duckduckgo: "DuckDuckGo",
+};
+
+const AUTO_ORDER: ProviderName[] = [
+  "serper",
+  "tavily",
+  "brave",
+  "searxng",
+  "duckduckgo",
+];
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchWithTimeout(
   url: string,
   ms: number,
-  headers: Record<string, string> = {},
+  init: RequestInit = {},
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(url, { signal: controller.signal, headers });
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
 }
 
-function decodeEntities(text: string): string {
-  const entities: Record<string, string> = {
+export function decodeEntities(text: string): string {
+  const named: Record<string, string> = {
     "&amp;": "&",
     "&lt;": "<",
     "&gt;": ">",
     "&quot;": '"',
     "&#39;": "'",
+    "&apos;": "'",
     "&nbsp;": " ",
   };
-  return text
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&nbsp;/g, (m) => entities[m] ?? m);
-}
-
-function extractAnchorsByClass(
-  html: string,
-  className: string,
-): Array<{ href: string; text: string }> {
-  const anchors: Array<{ href: string; text: string }> = [];
-  const regex = new RegExp(
-    `<a[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*href="([^"]*)"[^>]*>([\\s\\S]*?)<\\/a>`,
-    "g",
+  return text.replace(
+    /&#x([0-9a-f]+);|&#(\d+);|&(?:amp|lt|gt|quot|apos|nbsp);|&#39;/gi,
+    (m, hex, dec) => {
+      if (hex) return String.fromCodePoint(parseInt(hex, 16));
+      if (dec) return String.fromCodePoint(Number(dec));
+      return named[m.toLowerCase()] ?? m;
+    },
   );
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(html)) !== null) {
-    anchors.push({
-      href: match[1],
-      text: decodeEntities(match[2].replace(/<[^>]+>/g, "")).trim(),
-    });
+}
+
+function cleanText(html: string): string {
+  return decodeEntities(html.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function netError(provider: string, error: unknown): Outcome {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return {
+      ok: false,
+      error: `${provider} timed out after ${FETCH_TIMEOUT_MS}ms.`,
+    };
   }
-  return anchors;
+  const detail = error instanceof Error ? error.message : String(error);
+  return { ok: false, error: `${provider} request failed: ${detail}` };
 }
 
-function resolveDdgUrl(rawUrl: string): string {
-  const uddgMatch = rawUrl.match(/uddg=([^&]+)/);
-  return uddgMatch ? decodeURIComponent(uddgMatch[1]) : rawUrl;
+async function httpError(provider: string, res: Response): Promise<string> {
+  let detail = "";
+  try {
+    detail = (await res.text()).replace(/\s+/g, " ").slice(0, 200);
+  } catch {
+    // ignore
+  }
+  const hint = res.status === 401 || res.status === 403
+    ? " (check the API key)"
+    : res.status === 402
+    ? " (out of credits)"
+    : res.status === 429
+    ? " (rate limit or quota exhausted)"
+    : "";
+  return `${provider} returned HTTP ${res.status}${hint}. ${detail}`.trim();
 }
 
-function parseDuckDuckGoResults(html: string): SearchResult[] {
-  const titles = extractAnchorsByClass(html, "result__a");
-  const snippets = extractAnchorsByClass(html, "result__snippet");
-
-  return titles.map((t, i) => ({
-    title: t.text,
-    url: resolveDdgUrl(t.href),
-    snippet: snippets[i]?.text ?? "",
-  }));
+async function readJson<T>(
+  provider: string,
+  res: Response,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  try {
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, error: `${provider} did not return valid JSON.` };
+  }
 }
 
-function pickRandomUserAgent(): string {
-  return DDG_USER_AGENTS[Math.floor(Math.random() * DDG_USER_AGENTS.length)];
+function normalizeUrlKey(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    u.hash = "";
+    for (const key of [...u.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$|ref$)/i.test(key)) u.searchParams.delete(key);
+    }
+    return `${u.hostname.toLowerCase().replace(/^www\./, "")}${
+      u.pathname.replace(/\/+$/, "")
+    }${u.search}`;
+  } catch {
+    return rawUrl;
+  }
 }
 
-function buildDdgBrowserHeaders(userAgent: string): Record<string, string> {
+function dedupeResults(results: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  const out: SearchResult[] = [];
+  for (const r of results) {
+    const key = normalizeUrlKey(r.url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Result cache
+// ---------------------------------------------------------------------------
+
+interface CacheEntry {
+  at: number;
+  provider: ProviderName;
+  results: SearchResult[];
+  extras?: string[];
+}
+
+const searchCache = new Map<string, CacheEntry>();
+
+function cacheGet(key: string): CacheEntry | undefined {
+  const hit = searchCache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at > CACHE_TTL_MS) {
+    searchCache.delete(key);
+    return undefined;
+  }
+  return hit;
+}
+
+function cacheSet(key: string, entry: Omit<CacheEntry, "at">): void {
+  if (searchCache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = searchCache.keys().next().value;
+    if (oldest !== undefined) searchCache.delete(oldest);
+  }
+  searchCache.set(key, { ...entry, at: Date.now() });
+}
+
+// ---------------------------------------------------------------------------
+// Serper (Google results)  https://serper.dev
+// ---------------------------------------------------------------------------
+
+const SERPER_TBS: Record<TimeRange, string> = {
+  day: "qdr:d",
+  week: "qdr:w",
+  month: "qdr:m",
+  year: "qdr:y",
+};
+
+interface SerperResponse {
+  organic?: Array<
+    { title?: string; link?: string; snippet?: string; date?: string }
+  >;
+  peopleAlsoAsk?: Array<{ question?: string }>;
+  relatedSearches?: Array<{ query?: string }>;
+}
+
+async function searchSerper(
+  apiKey: string,
+  query: string,
+  limit: number,
+  timeRange?: TimeRange,
+): Promise<Outcome> {
+  const body: Record<string, unknown> = { q: query, num: limit };
+  if (timeRange) body.tbs = SERPER_TBS[timeRange];
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout("https://google.serper.dev/search", FETCH_TIMEOUT_MS, {
+      method: "POST",
+      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return netError("Serper", error);
+  }
+  if (!res.ok) return { ok: false, error: await httpError("Serper", res) };
+
+  const parsed = await readJson<SerperResponse>("Serper", res);
+  if (!parsed.ok) return parsed;
+
+  const results: SearchResult[] = (parsed.data.organic ?? [])
+    .filter((r) => r.link)
+    .slice(0, limit)
+    .map((r) => ({
+      title: r.title ?? "",
+      url: r.link as string,
+      snippet: r.snippet ?? "",
+      date: r.date,
+    }));
+
+  const extras: string[] = [];
+  const paa = (parsed.data.peopleAlsoAsk ?? [])
+    .map((p) => p.question)
+    .filter((q): q is string => !!q)
+    .slice(0, 6);
+  if (paa.length) {
+    extras.push(`People also ask:\n${paa.map((q) => `- ${q}`).join("\n")}`);
+  }
+  const related = (parsed.data.relatedSearches ?? [])
+    .map((p) => p.query)
+    .filter((q): q is string => !!q)
+    .slice(0, 6);
+  if (related.length) {
+    extras.push(`Related searches:\n${related.map((q) => `- ${q}`).join("\n")}`);
+  }
+
+  return { ok: true, results, extras };
+}
+
+// ---------------------------------------------------------------------------
+// Tavily  https://tavily.com
+// ---------------------------------------------------------------------------
+
+interface TavilyResponse {
+  results?: Array<
+    { title?: string; url?: string; content?: string; published_date?: string }
+  >;
+}
+
+async function searchTavily(
+  apiKey: string,
+  query: string,
+  limit: number,
+  timeRange?: TimeRange,
+): Promise<Outcome> {
+  // Tavily has no site: operator: turn plain domains into include_domains.
+  const domains: string[] = [];
+  const cleanQuery = query
+    .replace(/\bsite:(\S+)/gi, (whole, site: string) => {
+      if (/^[a-z0-9.-]+$/i.test(site)) {
+        domains.push(site);
+        return "";
+      }
+      return whole; // site:reddit.com/r/foo -> leave it in the text
+    })
+    .replace(/\s+/g, " ")
+    .trim() || query;
+
+  const body: Record<string, unknown> = {
+    query: cleanQuery,
+    max_results: limit,
+    search_depth: "basic",
+  };
+  if (domains.length) body.include_domains = domains;
+  if (timeRange) body.time_range = timeRange;
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout("https://api.tavily.com/search", FETCH_TIMEOUT_MS, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return netError("Tavily", error);
+  }
+  if (!res.ok) return { ok: false, error: await httpError("Tavily", res) };
+
+  const parsed = await readJson<TavilyResponse>("Tavily", res);
+  if (!parsed.ok) return parsed;
+
   return {
-    "User-Agent": userAgent,
-    Accept:
-      "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    Referer: "https://duckduckgo.com/",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-    "Upgrade-Insecure-Requests": "1",
-    DNT: "1",
+    ok: true,
+    results: (parsed.data.results ?? [])
+      .filter((r) => r.url)
+      .slice(0, limit)
+      .map((r) => ({
+        title: r.title ?? "",
+        url: r.url as string,
+        snippet: (r.content ?? "").replace(/\s+/g, " ").slice(0, 500),
+        date: r.published_date,
+      })),
   };
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+// ---------------------------------------------------------------------------
+// Brave Search API  https://brave.com/search/api
+// ---------------------------------------------------------------------------
+
+const BRAVE_FRESHNESS: Record<TimeRange, string> = {
+  day: "pd",
+  week: "pw",
+  month: "pm",
+  year: "py",
+};
+
+interface BraveResponse {
+  web?: {
+    results?: Array<
+      { title?: string; url?: string; description?: string; age?: string }
+    >;
+  };
 }
 
-function isDdgBlockedResponse(html: string): boolean {
-  return html.includes("anomaly") || html.includes("unusual traffic");
-}
-
-async function searchDuckDuckGo(
+async function searchBrave(
+  apiKey: string,
   query: string,
   limit: number,
-): Promise<SearchResult[] | string> {
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  timeRange?: TimeRange,
+): Promise<Outcome> {
+  const params = new URLSearchParams({ q: query, count: String(limit) });
+  if (timeRange) params.set("freshness", BRAVE_FRESHNESS[timeRange]);
 
-  for (let attempt = 1; attempt <= MAX_SEARCH_RETRIES; attempt++) {
-    if (attempt > 1) {
-      const backoff = RETRY_BASE_DELAY_MS * 2 ** (attempt - 2);
-      await sleep(backoff + Math.random() * JITTER_MAX_MS);
-    } else {
-      await sleep(Math.random() * JITTER_MAX_MS);
-    }
-
-    const headers = buildDdgBrowserHeaders(pickRandomUserAgent());
-
-    let response: Response;
-    try {
-      response = await fetchWithTimeout(url, FETCH_TIMEOUT_MS, headers);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        if (attempt === MAX_SEARCH_RETRIES) {
-          return `Search request timed out after ${FETCH_TIMEOUT_MS}ms.`;
-        }
-        continue;
-      }
-      const detail = error instanceof Error ? error.message : String(error);
-      if (attempt === MAX_SEARCH_RETRIES) {
-        return `An error occurred during web search: ${detail}`;
-      }
-      continue;
-    }
-
-    if (response.status === 429 || response.status === 403) {
-      if (attempt === MAX_SEARCH_RETRIES) {
-        return "DuckDuckGo blocked this request as automated traffic after multiple retries. Try again later or switch to a SearXNG instance.";
-      }
-      continue;
-    }
-
-    if (!response.ok) {
-      return `Failed to search. Status: ${response.status} ${response.statusText}`;
-    }
-
-    const html = await response.text();
-
-    if (isDdgBlockedResponse(html)) {
-      if (attempt === MAX_SEARCH_RETRIES) {
-        return "DuckDuckGo blocked this request as automated traffic after multiple retries. Try again later or switch to a SearXNG instance.";
-      }
-      continue;
-    }
-
-    return parseDuckDuckGoResults(html).slice(0, limit);
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      `https://api.search.brave.com/res/v1/web/search?${params}`,
+      FETCH_TIMEOUT_MS,
+      { headers: { Accept: "application/json", "X-Subscription-Token": apiKey } },
+    );
+  } catch (error) {
+    return netError("Brave Search", error);
   }
+  if (!res.ok) return { ok: false, error: await httpError("Brave Search", res) };
 
-  return "DuckDuckGo blocked this request as automated traffic after multiple retries. Try again later or switch to a SearXNG instance.";
+  const parsed = await readJson<BraveResponse>("Brave Search", res);
+  if (!parsed.ok) return parsed;
+
+  return {
+    ok: true,
+    results: (parsed.data.web?.results ?? [])
+      .filter((r) => r.url)
+      .slice(0, limit)
+      .map((r) => ({
+        title: cleanText(r.title ?? ""),
+        url: r.url as string,
+        snippet: cleanText(r.description ?? ""),
+        date: r.age,
+      })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SearXNG (self hosted)
+// ---------------------------------------------------------------------------
+
+interface SearxResponse {
+  results?: Array<
+    { title?: string; url?: string; content?: string; publishedDate?: string }
+  >;
 }
 
 async function searchSearxng(
   instanceUrl: string,
   query: string,
   limit: number,
-): Promise<SearchResult[] | string> {
-  const url = `${instanceUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}&format=json&categories=general`;
+  timeRange?: TimeRange,
+): Promise<Outcome> {
+  const params = new URLSearchParams({
+    q: query,
+    format: "json",
+    categories: "general",
+  });
+  if (timeRange) params.set("time_range", timeRange);
+  const url = `${instanceUrl.replace(/\/$/, "")}/search?${params}`;
 
-  let response: Response;
+  let res: Response;
   try {
-    response = await fetchWithTimeout(url, FETCH_TIMEOUT_MS, {
-      Accept: "application/json",
+    res = await fetchWithTimeout(url, FETCH_TIMEOUT_MS, {
+      headers: { Accept: "application/json" },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return `Search request timed out after ${FETCH_TIMEOUT_MS}ms.`;
+    return netError("SearXNG", error);
+  }
+  if (!res.ok) return { ok: false, error: await httpError("SearXNG", res) };
+
+  const parsed = await readJson<SearxResponse>("SearXNG", res);
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error:
+        "SearXNG did not return valid JSON. Check that 'json' is enabled in settings.yml under search.formats.",
+    };
+  }
+
+  return {
+    ok: true,
+    results: (parsed.data.results ?? [])
+      .filter((r) => r.url)
+      .slice(0, limit)
+      .map((r) => ({
+        title: r.title ?? "",
+        url: r.url as string,
+        snippet: (r.content ?? "").replace(/\s+/g, " "),
+        date: r.publishedDate,
+      })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DuckDuckGo (no API key; the fallback of last resort)
+// ---------------------------------------------------------------------------
+
+const DDG_DF: Record<TimeRange, string> = {
+  day: "d",
+  week: "w",
+  month: "m",
+  year: "y",
+};
+
+let ddgChain: Promise<void> = Promise.resolve();
+let ddgNextSlot = 0;
+let ddgCooldownUntil = 0;
+
+/** Serialises every DDG request in the process and spaces them out. */
+function acquireDdgSlot(): Promise<void> {
+  const run = ddgChain.then(async () => {
+    const now = Date.now();
+    const cooldownWait = Math.min(
+      Math.max(0, ddgCooldownUntil - now),
+      DDG_MAX_COOLDOWN_WAIT_MS,
+    );
+    const slotWait = Math.max(0, ddgNextSlot - now);
+    const wait = Math.max(cooldownWait, slotWait);
+    if (wait > 0) await sleep(wait);
+    ddgNextSlot = Date.now() + DDG_MIN_INTERVAL_MS +
+      Math.random() * DDG_JITTER_MS;
+  });
+  ddgChain = run.catch(() => {});
+  return run;
+}
+
+function pickRandomUserAgent(): string {
+  return DDG_USER_AGENTS[Math.floor(Math.random() * DDG_USER_AGENTS.length)];
+}
+
+function buildDdgHeaders(userAgent: string): Record<string, string> {
+  // No Accept-Encoding on purpose: the runtime negotiates and decodes it itself.
+  return {
+    "User-Agent": userAgent,
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    Referer: "https://duckduckgo.com/",
+    "Upgrade-Insecure-Requests": "1",
+    DNT: "1",
+  };
+}
+
+function resolveDdgUrl(rawHref: string): string {
+  const uddg = rawHref.match(/[?&]uddg=([^&]+)/);
+  if (uddg) {
+    try {
+      return decodeURIComponent(uddg[1]);
+    } catch {
+      return uddg[1];
     }
-    const detail = error instanceof Error ? error.message : String(error);
-    return `An error occurred during web search: ${detail}`;
   }
+  return rawHref.startsWith("//") ? `https:${rawHref}` : rawHref;
+}
 
-  if (!response.ok) {
-    return `Failed to search. Status: ${response.status} ${response.statusText}`;
-  }
+function isAdUrl(url: string): boolean {
+  return /duckduckgo\.com\/y\.js/.test(url) || /[?&]ad_provider=/.test(url);
+}
 
-  let data: SearxResponse;
+/**
+ * Parses html.duckduckgo.com. Each snippet is looked up inside the slice that
+ * belongs to ITS result, so a result without snippet no longer shifts the
+ * snippets of all the following ones.
+ */
+export function parseDdgHtml(html: string): SearchResult[] {
+  const anchorRe =
+    /<a\b([^>]*\bclass="[^"]*\bresult__a\b[^"]*"[^>]*)>([\s\S]*?)<\/a>/g;
+  const matches = [...html.matchAll(anchorRe)];
+  const out: SearchResult[] = [];
+
+  matches.forEach((m, i) => {
+    const href = m[1].match(/\bhref="([^"]*)"/)?.[1];
+    if (!href) return;
+    const start = (m.index ?? 0) + m[0].length;
+    const end = matches[i + 1]?.index ?? html.length;
+    const chunk = html.slice(start, end);
+    const snippet = chunk.match(
+      /<(?:a|div|td)\b[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div|td)>/,
+    )?.[1] ?? "";
+    const url = resolveDdgUrl(decodeEntities(href));
+    if (isAdUrl(url)) return;
+    out.push({ title: cleanText(m[2]), url, snippet: cleanText(snippet) });
+  });
+  return out;
+}
+
+/** Parses lite.duckduckgo.com (table based markup, single or double quotes). */
+export function parseDdgLite(html: string): SearchResult[] {
+  const anchorRe =
+    /<a\b([^>]*\bclass=['"][^'"]*\bresult-link\b[^'"]*['"][^>]*)>([\s\S]*?)<\/a>/g;
+  const matches = [...html.matchAll(anchorRe)];
+  const out: SearchResult[] = [];
+
+  matches.forEach((m, i) => {
+    const href = m[1].match(/\bhref=['"]([^'"]*)['"]/)?.[1];
+    if (!href) return;
+    const start = (m.index ?? 0) + m[0].length;
+    const end = matches[i + 1]?.index ?? html.length;
+    const chunk = html.slice(start, end);
+    const snippet = chunk.match(
+      /class=['"][^'"]*\bresult-snippet\b[^'"]*['"][^>]*>([\s\S]*?)<\/td>/,
+    )?.[1] ?? "";
+    const url = resolveDdgUrl(decodeEntities(href));
+    if (isAdUrl(url)) return;
+    out.push({ title: cleanText(m[2]), url, snippet: cleanText(snippet) });
+  });
+  return out;
+}
+
+type DdgAttempt =
+  | { kind: "ok"; results: SearchResult[] }
+  | { kind: "blocked" }
+  | { kind: "error"; error: string };
+
+async function ddgAttempt(
+  endpoint: "html" | "lite",
+  query: string,
+  timeRange?: TimeRange,
+): Promise<DdgAttempt> {
+  const headers = buildDdgHeaders(pickRandomUserAgent());
+  const params = new URLSearchParams({ q: query });
+  if (timeRange) params.set("df", DDG_DF[timeRange]);
+
+  let res: Response;
   try {
-    data = await response.json();
-  } catch {
-    return "SearXNG instance did not return valid JSON. Check that 'json' is enabled in its settings.yml under search.formats.";
+    if (endpoint === "html") {
+      res = await fetchWithTimeout(
+        `https://html.duckduckgo.com/html/?${params}`,
+        FETCH_TIMEOUT_MS,
+        { headers },
+      );
+    } else {
+      res = await fetchWithTimeout("https://lite.duckduckgo.com/lite/", FETCH_TIMEOUT_MS, {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://lite.duckduckgo.com",
+          Referer: "https://lite.duckduckgo.com/",
+        },
+        body: params.toString(),
+      });
+    }
+  } catch (error) {
+    const out = netError("DuckDuckGo", error);
+    return { kind: "error", error: out.ok ? "unknown error" : out.error };
   }
 
-  const results = (data.results ?? [])
-    .slice(0, limit)
-    .map((r) => ({ title: r.title, url: r.url, snippet: r.content ?? "" }));
+  // 202 is what DDG answers when it flags the request as a bot.
+  if (res.status === 202 || res.status === 403 || res.status === 429) {
+    await res.body?.cancel();
+    return { kind: "blocked" };
+  }
+  if (!res.ok) {
+    await res.body?.cancel();
+    return { kind: "error", error: `DuckDuckGo returned HTTP ${res.status}.` };
+  }
 
-  return results;
+  const html = await res.text();
+  const results = endpoint === "html" ? parseDdgHtml(html) : parseDdgLite(html);
+
+  // Only call it a block when there are NO results: a normal page about
+  // "anomaly detection" legitimately contains the word "anomaly".
+  if (
+    results.length === 0 &&
+    /anomaly|unusual traffic|captcha|are you a robot|bots use duckduckgo/i
+      .test(html)
+  ) {
+    return { kind: "blocked" };
+  }
+  return { kind: "ok", results };
+}
+
+async function searchDuckDuckGo(
+  query: string,
+  limit: number,
+  timeRange?: TimeRange,
+): Promise<Outcome> {
+  let blocked = false;
+  let lastError = "";
+
+  for (let attempt = 0; attempt < DDG_MAX_ATTEMPTS; attempt++) {
+    await acquireDdgSlot();
+    if (attempt > 0) await sleep(1_500 * attempt);
+
+    const result = await ddgAttempt(
+      DDG_ATTEMPT_ORDER[attempt],
+      query,
+      timeRange,
+    );
+    if (result.kind === "ok") {
+      return { ok: true, results: result.results.slice(0, limit) };
+    }
+    if (result.kind === "blocked") blocked = true;
+    else lastError = result.error;
+  }
+
+  if (blocked) {
+    // Make the next calls back off instead of hammering a flagged IP.
+    ddgCooldownUntil = Date.now() + DDG_BLOCK_COOLDOWN_MS;
+    return {
+      ok: false,
+      error:
+        "DuckDuckGo blocked this request as automated traffic after several attempts.",
+    };
+  }
+  return { ok: false, error: lastError || "DuckDuckGo search failed." };
+}
+
+// ---------------------------------------------------------------------------
+// Plugin
+// ---------------------------------------------------------------------------
+
+function formatResults(
+  query: string,
+  provider: ProviderName,
+  results: SearchResult[],
+  extras?: string[],
+): string {
+  const body = results
+    .map((r) => {
+      const lines = [`Title: ${r.title}`, `URL: ${r.url}`];
+      if (r.date) lines.push(`Date: ${r.date}`);
+      lines.push(`Snippet: ${r.snippet}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+  const tail = extras?.length ? `\n\n${extras.join("\n\n")}` : "";
+  return `Search results for '${query}':\n\n${body}${tail}\n\n(via ${
+    PROVIDER_LABEL[provider]
+  })`;
 }
 
 export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
   name = "web_search";
   description =
-    "Searches the web for real-time information and returns a list of results, each containing a title, URL, and a short snippet (a few sentences extracted from the page). IMPORTANT: this tool does NOT fetch or return the full content of any page — it only returns URLs and brief excerpts. If you need to read, analyze, or extract detailed information from a page's content, you must follow up by reading each URL individually with a page-reading tool. Prefer this tool over your own knowledge when the request is about something that changes over time — even if you believe you already know the answer, since your training data may be outdated. Time markers like 'this year', 'currently', 'latest', 'now', 'today', or any specific year mentioned in the request ALWAYS mean you should search. Do NOT search for genuinely timeless questions with no time marker (what a language/concept/technology is, how something works, historical facts from a specific past date).";
+    "Searches the web and returns a list of results, each with a title, URL, optional date and a short snippet. IMPORTANT: it does NOT return the full content of any page: to read a page, call a page-reading tool on its URL. Supports search operators: \"exact phrase\", site:domain.com (also site:reddit.com/r/name), and -excluded. Use time_range ('year', 'month'...) to restrict to recent pages instead of putting dates in the query. Make searches ONE AT A TIME, not in parallel: the search backend is rate limited and parallel bursts get blocked. If a search fails or is blocked, do not repeat the same query: rephrase it or use another site: operator. Prefer this tool over your own knowledge for anything that changes over time (news, prices, 'latest', 'current', any specific recent year) and for discovering what people say online; do NOT use it for timeless facts.";
 
   schema = searchSchema;
   returnDescription =
-    "Returns a plain-text list of search results. Each result contains: Title, URL, and Snippet (a short excerpt of a few sentences from the page). Does NOT include the full content of any page — only surface-level metadata and brief excerpts.";
+    "Returns a plain-text list of search results. Each result has Title, URL, optionally Date, and Snippet (a short excerpt). Some providers also add 'People also ask' and 'Related searches' lists that are useful to find new queries. Does NOT include the full content of any page.";
+
+  configFields = [
+    {
+      key: "SERPER_API_KEY",
+      label: "Serper API key (optional, Google results, recommended)",
+      secret: true,
+    },
+    {
+      key: "TAVILY_API_KEY",
+      label: "Tavily API key (optional)",
+      secret: true,
+    },
+    {
+      key: "BRAVE_API_KEY",
+      label: "Brave Search API key (optional)",
+      secret: true,
+    },
+    {
+      key: "SEARXNG_INSTANCE_URL",
+      label: "SearXNG instance URL (optional)",
+      secret: false,
+    },
+    {
+      key: "SEARCH_PROVIDER",
+      label:
+        "Force a provider first: serper | tavily | brave | searxng | duckduckgo (optional, default auto)",
+      secret: false,
+    },
+  ];
 
   selectionTests: SelectionTestCase<WebSearchSchema>[] = [
     {
@@ -268,6 +793,11 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
       shouldInvoke: true,
     },
     {
+      query: "find reddit posts from the last year where people ask for an app to track invoices",
+      kind: "positive",
+      shouldInvoke: true,
+    },
+    {
       query: "read the contents of README.md",
       kind: "negative",
       shouldInvoke: false,
@@ -282,18 +812,12 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
       kind: "negative",
       shouldInvoke: false,
     },
-    {
-      query: "check this out",
-      kind: "ambiguous",
-    },
+    { query: "check this out", kind: "ambiguous" },
     {
       query: "what do you know about the Zig programming language?",
       kind: "ambiguous",
     },
-    {
-      query: "tell me more about that",
-      kind: "ambiguous",
-    },
+    { query: "tell me more about that", kind: "ambiguous" },
   ];
 
   executionTests: ExecutionTestCase<WebSearchSchema>[] = [
@@ -315,6 +839,24 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
       params: { query: "Ecma International TC39" },
       expect: (output: string) =>
         output.includes("URL:") && output.includes("Snippet:"),
+    },
+    {
+      description: "Search with a time_range filter",
+      kind: "happy",
+      params: { query: "deno release", time_range: "year" },
+      expect: (output: string) => output.startsWith("Search results for"),
+    },
+    {
+      description: "Search with a site: operator",
+      kind: "happy",
+      params: { query: 'site:news.ycombinator.com "Ask HN" tools' },
+      expect: (output: string) => output.startsWith("Search results for"),
+    },
+    {
+      description: "A query about 'anomaly' is not mistaken for a block page",
+      kind: "edge",
+      params: { query: "anomaly detection algorithms" },
+      expect: (output: string) => output.startsWith("Search results for"),
     },
     {
       description: "Search query with only whitespace-adjacent punctuation",
@@ -342,10 +884,18 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
         output.startsWith("The provided parameters are invalid"),
     },
     {
-      description:
-        "Search with limit above the maximum fails schema validation",
+      description: "Search with limit above the maximum fails schema validation",
       kind: "error",
       params: { query: "test", limit: 999 },
+      expect: (output: string) =>
+        output.startsWith("The provided parameters are invalid"),
+    },
+    {
+      description: "Invalid time_range fails schema validation",
+      kind: "error",
+      params: { query: "test", time_range: "decade" } as unknown as z.infer<
+        WebSearchSchema
+      >,
       expect: (output: string) =>
         output.startsWith("The provided parameters are invalid"),
     },
@@ -364,28 +914,83 @@ export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
     this.context = context;
   }
 
+  private async cfg(key: string): Promise<string | undefined> {
+    const value = await this.context?.getConfig(key);
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return trimmed || undefined;
+  }
+
   async process(input: z.infer<WebSearchSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { query, limit = DEFAULT_SEARCH_LIMIT } = parsed.data;
+    const { query, limit = DEFAULT_SEARCH_LIMIT, time_range: timeRange } =
+      parsed.data;
 
-    let outcome: SearchResult[] | string;
-    if (SEARXNG_INSTANCE_URL) {
-      this.context?.reportStep(`Searching '${query}' via SearXNG`);
-      outcome = await searchSearxng(SEARXNG_INSTANCE_URL, query, limit);
-    } else {
-      this.context?.reportStep(`Searching '${query}' via DuckDuckGo`);
-      outcome = await searchDuckDuckGo(query, limit);
+    const cacheKey = `${query.toLowerCase()}|${limit}|${timeRange ?? ""}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+      this.context?.reportStep(`Search '${query}' served from cache`);
+      return formatResults(query, cached.provider, cached.results, cached.extras);
     }
 
-    if (typeof outcome === "string") return outcome;
-    if (outcome.length === 0) return `No results found for '${query}'.`;
+    const [serperKey, tavilyKey, braveKey, searxUrl, forcedRaw] = await Promise
+      .all([
+        this.cfg("SERPER_API_KEY"),
+        this.cfg("TAVILY_API_KEY"),
+        this.cfg("BRAVE_API_KEY"),
+        this.cfg("SEARXNG_INSTANCE_URL"),
+        this.cfg("SEARCH_PROVIDER"),
+      ]);
 
-    return `Search results for '${query}':\n\n${outcome
-      .map((r) => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}`)
-      .join("\n\n")}`;
+    const available = new Set<ProviderName>(["duckduckgo"]);
+    if (serperKey) available.add("serper");
+    if (tavilyKey) available.add("tavily");
+    if (braveKey) available.add("brave");
+    if (searxUrl) available.add("searxng");
+
+    const chain = AUTO_ORDER.filter((p) => available.has(p));
+    const forced = forcedRaw?.toLowerCase() as ProviderName | undefined;
+    if (forced && available.has(forced)) {
+      chain.splice(chain.indexOf(forced), 1);
+      chain.unshift(forced);
+    }
+
+    const run = (provider: ProviderName): Promise<Outcome> => {
+      switch (provider) {
+        case "serper":
+          return searchSerper(serperKey!, query, limit, timeRange);
+        case "tavily":
+          return searchTavily(tavilyKey!, query, limit, timeRange);
+        case "brave":
+          return searchBrave(braveKey!, query, limit, timeRange);
+        case "searxng":
+          return searchSearxng(searxUrl!, query, limit, timeRange);
+        case "duckduckgo":
+          return searchDuckDuckGo(query, limit, timeRange);
+      }
+    };
+
+    const failures: string[] = [];
+    for (const provider of chain) {
+      this.context?.reportStep(
+        `Searching '${query}' via ${PROVIDER_LABEL[provider]}`,
+      );
+      const outcome = await run(provider);
+      if (!outcome.ok) {
+        failures.push(`- ${PROVIDER_LABEL[provider]}: ${outcome.error}`);
+        continue;
+      }
+
+      const results = dedupeResults(outcome.results);
+      if (results.length === 0) return `No results found for '${query}'.`;
+
+      cacheSet(cacheKey, { provider, results, extras: outcome.extras });
+      return formatResults(query, provider, results, outcome.extras);
+    }
+
+    return `Web search failed on every provider:\n${failures.join("\n")}\n\nThis is usually temporary rate limiting. Do not repeat the same query right away: rephrase it, try a different site: operator, or continue with the evidence already collected.`;
   }
 }

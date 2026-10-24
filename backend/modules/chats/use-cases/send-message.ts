@@ -8,18 +8,33 @@ import {
 import { ChatRepository } from "../../../infrastructure/db/repositories/chat-repository.ts";
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
 import { type ThinkingRun } from "../../../core/memory/types.ts";
-import { resolveModelOptions } from "../../modes/lib/resolve-model-options.ts";
+import { executionContextStorage } from "../../../core/microkernel/human-interaction.ts";
+import { watchModelLoad } from "../../../core/ollama/model-load.ts";
+import { resolveModelOptions } from "../../model-settings/lib/resolve-model-options.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { embedText } from "../../../core/memory/embeddings.ts";
+import { splitContent } from "../../../core/ai/providers/capabilities.ts";
+import { normalizeProviderError } from "../../../core/ai/providers/errors.ts";
 import type { BeePlugin } from "../../../core/microkernel/bee-plugin.ts";
+import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
+import { loadChatUsage } from "../../usage/load-chat-usage.ts";
+import { ModelUsageRepository } from "../../../infrastructure/db/repositories/model-usage-repository.ts";
+import { AttachmentRepository } from "../../../infrastructure/db/repositories/attachment-repository.ts";
+import {
+  buildAttachmentContent,
+  type AttachmentContentPart,
+} from "../../../core/attachments/build-attachment-content.ts";
+import { normalizeModelRef } from "../../../core/ai/providers/types.ts";
+import { HumanMessage, type BaseMessage } from "@langchain/core/messages";
 
-const MAX_MESSAGE_LENGTH = 20_000;
+const MAX_MESSAGE_LENGTH = 100_000;
 
 async function persistUserMessage(
   db: AppDatabase,
   chatId: number,
   userText: string,
-) {
+  attachmentIds: number[],
+): Promise<number> {
   const chatRepo = new ChatRepository(db);
   const msgRepo = new MessageRepository(db);
 
@@ -31,7 +46,7 @@ async function persistUserMessage(
   await chatRepo.update(chat);
 
   const vector = await embedText(userText);
-  await msgRepo.create({
+  const messageId = await msgRepo.create({
     chatId: chat.id,
     role: "user",
     content: userText,
@@ -39,6 +54,15 @@ async function persistUserMessage(
     metadata: null,
     vector: JSON.stringify(vector),
   });
+
+  if (attachmentIds.length > 0) {
+    const attachmentRepo = new AttachmentRepository(db);
+    for (const id of attachmentIds) {
+      await attachmentRepo.linkToMessage(id, messageId);
+    }
+  }
+
+  return messageId;
 }
 
 async function persistAssistantMessage(
@@ -48,7 +72,9 @@ async function persistAssistantMessage(
   usedTools: string[],
   steps: ChatStep[],
   thinkingRuns: ThinkingRun[],
-) {
+  wasStopped = false,
+  usageGroupId?: string,
+): Promise<number> {
   const chatRepo = new ChatRepository(db);
   const msgRepo = new MessageRepository(db);
 
@@ -60,14 +86,65 @@ async function persistAssistantMessage(
   await chatRepo.update(chat);
 
   const vector = await embedText(fullContent);
-  await msgRepo.create({
+  const messageId = await msgRepo.create({
     chatId: chat.id,
     role: "agent",
     content: fullContent,
     timestamp: Date.now(),
-    metadata: JSON.stringify({ usedTools, steps, thinkingRuns }),
+    metadata: JSON.stringify({
+      usedTools,
+      steps,
+      thinkingRuns,
+      ...(wasStopped ? { wasStopped } : {}),
+    }),
     vector: JSON.stringify(vector),
   });
+
+  if (usageGroupId) await linkUsageToMessage(db, usageGroupId, messageId);
+  return messageId;
+}
+
+async function linkUsageToMessage(
+  db: AppDatabase,
+  groupId: string,
+  messageId: number,
+): Promise<void> {
+  try {
+    await new ModelUsageRepository(db).attachMessage(groupId, messageId);
+  } catch (error) {
+    console.error("[Usage] Could not link the calls to the message:", error);
+  }
+}
+
+async function persistStoppedMessage(
+  db: AppDatabase,
+  chatId: number,
+  { fullContent, steps, thinkingRuns }: StreamResult,
+  usageGroupId: string,
+) {
+  if (!fullContent) return;
+  try {
+    await persistAssistantMessage(
+      db,
+      chatId,
+      fullContent,
+      usedToolsOf(steps),
+      steps,
+      thinkingRuns,
+      true,
+      usageGroupId,
+    );
+  } catch (error) {
+    console.error("[Chat] Could not save the stopped response:", error);
+  }
+}
+
+function usedToolsOf(steps: ChatStep[]): string[] {
+  return Array.from(
+    new Set(
+      steps.filter((step) => step.node === "Executor").map((s) => s.label),
+    ),
+  );
 }
 
 export function appendThinkingDelta(
@@ -83,18 +160,37 @@ export function appendThinkingDelta(
   }
 }
 
+async function usageForDone(
+  db: AppDatabase,
+  chatId: number,
+  messageId: number,
+) {
+  try {
+    const { byMessage, conversation } = await loadChatUsage(db, chatId);
+    return {
+      usage: byMessage.get(messageId) ?? null,
+      conversationUsage: conversation,
+    };
+  } catch (error) {
+    console.error("[Usage] Could not read the response usage:", error);
+    return {};
+  }
+}
+
+export interface StreamResult {
+  fullContent: string;
+  steps: ChatStep[];
+  thinkingRuns: ThinkingRun[];
+}
+
 export async function consumeStream(
   streamIterable: AsyncIterable<unknown>,
   finalNodeName: string,
   send: (event: string, data: unknown) => void,
-): Promise<{
-  fullContent: string;
-  steps: ChatStep[];
-  thinkingRuns: ThinkingRun[];
-}> {
-  let fullContent = "";
-  const steps: ChatStep[] = [];
-  const thinkingRuns: ThinkingRun[] = [];
+  progress: StreamResult = { fullContent: "", steps: [], thinkingRuns: [] },
+): Promise<StreamResult> {
+  const { steps, thinkingRuns } = progress;
+  let seenMessages = 0;
 
   for await (const chunk of streamIterable) {
     const [mode, payload] = chunk as
@@ -108,12 +204,16 @@ export async function consumeStream(
             { langgraph_node?: string },
           ],
         ]
-      | ["values", { steps: ChatStep[] }];
+      | ["values", { steps: ChatStep[]; messages?: unknown[] }];
 
     if (mode === "messages") {
       const [message, metadata] = payload;
 
-      const reasoningChunk = message.additional_kwargs?.reasoning_content;
+      const { text: contentText, thinking: contentThinking } = splitContent(
+        message.content,
+      );
+      const reasoningChunk =
+        message.additional_kwargs?.reasoning_content || contentThinking;
       if (reasoningChunk) {
         appendThinkingDelta(
           thinkingRuns,
@@ -128,18 +228,33 @@ export async function consumeStream(
 
       if (metadata.langgraph_node !== finalNodeName) continue;
 
-      const chunkText = String(message.content ?? "");
+      const chunkText = contentText;
       if (!chunkText) continue;
-      fullContent += chunkText;
+      progress.fullContent += chunkText;
       send("token", { content: chunkText });
       continue;
     }
 
+    const alreadySent = steps.length;
     steps.length = 0;
     steps.push(...payload.steps);
+    for (const step of payload.steps.slice(alreadySent)) send("step", step);
+
+    const messages = payload.messages ?? [];
+    if (messages.length > seenMessages) {
+      seenMessages = messages.length;
+      const last = messages[messages.length - 1] as {
+        tool_calls?: { name: string; args: Record<string, unknown> }[];
+      };
+      if (last?.tool_calls?.length) {
+        send("tool_calls", {
+          calls: last.tool_calls.map(({ name, args }) => ({ name, args })),
+        });
+      }
+    }
   }
 
-  return { fullContent, steps, thinkingRuns };
+  return progress;
 }
 
 export async function sendMessage(
@@ -150,6 +265,7 @@ export async function sendMessage(
   model: string,
   req: Request,
   headers: Record<string, string>,
+  attachmentIds: number[] = [],
 ): Promise<Response> {
   return createSseResponse(headers, async (send) => {
     if (!userText.trim()) {
@@ -163,9 +279,34 @@ export async function sendMessage(
       return;
     }
 
+    // Resolve attachments before anything is persisted, so a rejected file
+    // leaves no chat or message behind and the client can restore the input.
+    let attachmentParts: AttachmentContentPart[] = [];
+    if (attachmentIds.length > 0) {
+      const config = hive.getConfig();
+      const modelRef = normalizeModelRef(model, {
+        provider: config.get("modelProvider"),
+        keyId: config.get("modelKeyId"),
+      });
+      try {
+        ({ parts: attachmentParts } = await buildAttachmentContent(
+          config.get("dataDir"),
+          new AttachmentRepository(db),
+          attachmentIds,
+          modelRef,
+        ));
+      } catch (error) {
+        send("error", {
+          message:
+            error instanceof Error ? error.message : "Could not read an attachment.",
+          rejected: true,
+        });
+        return;
+      }
+    }
+
     const chatRepo = new ChatRepository(db);
 
-    // Resolve or create chat
     let resolvedChatId: number;
     if (chatId !== null) {
       const existing = await chatRepo.findById(chatId);
@@ -194,13 +335,11 @@ export async function sendMessage(
         .join(", ")}]`,
     );
 
-    await persistUserMessage(db, resolvedChatId, userText);
+    await persistUserMessage(db, resolvedChatId, userText, attachmentIds);
 
     send("thinking", {});
 
-    const modelOptions = await resolveModelOptions(
-      hive.getConfig().get("currentMode"),
-    );
+    const modelOptions = await resolveModelOptions();
 
     const msgRepo = new MessageRepository(db);
     const contextMessages = await msgRepo.buildTurnContext(
@@ -208,32 +347,87 @@ export async function sendMessage(
       userText,
     );
 
-    const streamIterable = await Scout.stream(
-      { messages: contextMessages, chatId: resolvedChatId.toString(), model, modelOptions },
-      { streamMode: ["messages", "values"], signal: req.signal },
-    );
+    if (attachmentParts.length > 0) {
+      const lastIndex = contextMessages.length - 1;
+      const last = contextMessages[lastIndex];
+      if (last instanceof HumanMessage) {
+        contextMessages[lastIndex] = new HumanMessage({
+          content: [
+            { type: "text", text: userText },
+            ...attachmentParts,
+          ] as unknown as BaseMessage["content"],
+        });
+      }
+    }
 
-    const { fullContent, steps, thinkingRuns } = await consumeStream(
-      streamIterable,
-      "Agent",
-      send,
-    );
+    const config = hive.getConfig();
+    const modelProvider = config.get("modelProvider");
+    const progress: StreamResult = {
+      fullContent: "",
+      steps: [],
+      thinkingRuns: [],
+    };
+    const usageGroupId = crypto.randomUUID();
+    let streamResult: StreamResult;
+    const stopWatchingModelLoad =
+      modelProvider === "ollama"
+        ? await watchModelLoad(model, (phase) => send("status", { phase }))
+        : () => {};
+    try {
+      streamResult = await withUsageContext(
+        {
+          kind: "chat",
+          role: "orchestrator",
+          chatId: resolvedChatId,
+          groupId: usageGroupId,
+        },
+        async () => {
+          return await executionContextStorage.run(
+            { autoApprove: false, signal: req.signal },
+            async () => {
+              const streamIterable = await Scout.stream(
+                {
+                  messages: contextMessages,
+                  chatId: resolvedChatId.toString(),
+                  model,
+                  modelProvider,
+                  modelKeyId: config.get("modelKeyId"),
+                  modelOptions: modelProvider === "ollama" ? modelOptions : {},
+                },
+                { streamMode: ["messages", "values"], signal: req.signal },
+              );
+              return await consumeStream(
+                streamIterable,
+                "Agent",
+                send,
+                progress,
+              );
+            },
+          );
+        },
+      );
+    } catch (error) {
+      if (req.signal.aborted) {
+        await persistStoppedMessage(db, resolvedChatId, progress, usageGroupId);
+        throw error;
+      }
+      throw normalizeProviderError(error, modelProvider);
+    } finally {
+      stopWatchingModelLoad();
+    }
+    const { fullContent, steps, thinkingRuns } = streamResult;
 
-    const usedTools = Array.from(
-      new Set(
-        steps
-          .filter((step) => step.node === "Executor")
-          .map((step) => step.label),
-      ),
-    );
+    const usedTools = usedToolsOf(steps);
 
-    await persistAssistantMessage(
+    const messageId = await persistAssistantMessage(
       db,
       resolvedChatId,
       fullContent,
       usedTools,
       steps,
       thinkingRuns,
+      false,
+      usageGroupId,
     );
 
     send("done", {
@@ -241,6 +435,7 @@ export async function sendMessage(
       usedTools,
       steps,
       thinkingRuns,
+      ...(await usageForDone(db, resolvedChatId, messageId)),
     });
   });
 }

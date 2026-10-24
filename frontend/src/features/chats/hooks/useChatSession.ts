@@ -1,10 +1,17 @@
 import { useEffect, useRef } from "react";
-import { sendMessage } from "../api/sendMessage.ts";
+import { sendMessage, type LiveToolCall } from "../api/sendMessage.ts";
+import type { AttachmentDto } from "../api/attachments.ts";
 import { getChatMessages } from "../api/getChatMessages.ts";
 import { reportError } from "../../../lib/toastManager.ts";
 import { getErrorMessage } from "../../../lib/errors.ts";
 import { useKeyedState } from "../../../hooks/useKeyedState.ts";
-import type { Message, StoredMessage, ThinkingRun } from "../types.ts";
+import type {
+  ChatStep,
+  ConversationUsage,
+  Message,
+  StoredMessage,
+  ThinkingRun,
+} from "../types.ts";
 import { useChats } from "../ChatsContext.tsx";
 import { useModels } from "../../models/ModelsContext.tsx";
 import {
@@ -16,10 +23,21 @@ import {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
+  phase: "processing" | "loading_model";
+  liveSteps: ChatStep[];
+  liveTools: LiveToolCall[];
+  isBusy: boolean;
 }
 
 const NO_MESSAGES: Message[] = [];
-const IDLE_THINKING: ThinkingState = { isThinking: false, thinkingText: "" };
+const IDLE_THINKING: ThinkingState = {
+  isThinking: false,
+  thinkingText: "",
+  phase: "processing",
+  liveSteps: [],
+  liveTools: [],
+  isBusy: false,
+};
 
 function newChatKey(token: string): string {
   return `__new__:${token}`;
@@ -46,8 +64,13 @@ function toMessage(stored: StoredMessage): Message {
     usedTools: stored.metadata?.usedTools,
     steps: stored.metadata?.steps,
     thinkingRuns: stored.metadata?.thinkingRuns,
+    wasStopped: stored.metadata?.wasStopped,
+    usage: stored.usage ?? null,
+    attachments: stored.attachments,
   };
 }
+
+class RejectedSendError extends Error {}
 
 export function useChatSession() {
   const {
@@ -64,6 +87,7 @@ export function useChatSession() {
   const displayKey = activeChatId ?? newChatKey(newChatToken);
   const messagesState = useKeyedState<Message[]>(displayKey, NO_MESSAGES);
   const thinkingState = useKeyedState<ThinkingState>(displayKey, IDLE_THINKING);
+  const usageState = useKeyedState<ConversationUsage | null>(displayKey, null);
 
   const justCreatedChatIdRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -87,6 +111,7 @@ export function useChatSession() {
     getChatMessages(activeChatId).then(({ data }) => {
       if (cancelled || !data) return;
       setMessages(data.messages.map(toMessage), activeChatId);
+      usageState.set(data.usage ?? null, activeChatId);
     });
 
     return () => {
@@ -95,13 +120,19 @@ export function useChatSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChatId]);
 
-  async function send(content: string): Promise<boolean> {
-    if (!content || thinkingState.value.isThinking) return false;
+  async function send(
+    content: string,
+    onAccepted?: () => void,
+    attachments?: AttachmentDto[],
+    onRejected?: () => void,
+  ): Promise<boolean> {
+    if (!content || thinkingState.value.isBusy) return false;
     if (!hasModel) return false;
     if (embeddingModelStatus !== null && !embeddingModelStatus.available) {
       return false;
     }
 
+    onAccepted?.();
     requestNotificationPermission();
 
     const startKey = displayKey;
@@ -118,13 +149,25 @@ export function useChatSession() {
         key,
       );
 
+    const userMessageId = crypto.randomUUID();
     appendMessage({
-      id: crypto.randomUUID(),
+      id: userMessageId,
       role: "user",
       content,
       timestamp: Date.now(),
+      attachments,
     });
-    thinkingState.set({ isThinking: true, thinkingText: "" }, key);
+    thinkingState.set(
+      {
+        isThinking: true,
+        thinkingText: "",
+        phase: "processing",
+        liveSteps: [],
+        liveTools: [],
+        isBusy: true,
+      },
+      key,
+    );
     if (activeChatId) touchChat(activeChatId);
 
     const abortController = new AbortController();
@@ -139,10 +182,28 @@ export function useChatSession() {
             justCreatedChatIdRef.current = chatId;
             messagesState.moveKey(startKey, chatId);
             thinkingState.moveKey(startKey, chatId);
+            usageState.moveKey(startKey, chatId);
             key = chatId;
             onChatCreated(chatId);
           },
           onThinking: () => {},
+          onStep: (step) => {
+            thinkingState.set(
+              (prev) => ({
+                ...prev,
+                thinkingText: "",
+                liveSteps: [...prev.liveSteps, step],
+                liveTools: [],
+              }),
+              key,
+            );
+          },
+          onToolCalls: (calls) => {
+            thinkingState.set((prev) => ({ ...prev, liveTools: calls }), key);
+          },
+          onStatus: (phase) => {
+            thinkingState.set((prev) => ({ ...prev, phase }), key);
+          },
           onThinkingDelta: (delta, node) => {
             thinkingRuns = appendThinkingDelta(thinkingRuns, delta, node);
             thinkingState.set(
@@ -153,7 +214,7 @@ export function useChatSession() {
           onToken: (token) => {
             if (!streamStarted) {
               streamStarted = true;
-              thinkingState.set(IDLE_THINKING, key);
+              thinkingState.set({ ...IDLE_THINKING, isBusy: true }, key);
               appendMessage({
                 id: agentMessageId,
                 role: "agent",
@@ -164,14 +225,16 @@ export function useChatSession() {
             }
             patchAgentMessage((m) => ({ ...m, content: m.content + token }));
           },
-          onDone: (finalContent, usedTools, steps) => {
+          onDone: (finalContent, usedTools, steps, usage, conversationUsage) => {
             patchAgentMessage((m) => ({
               ...m,
               content: finalContent,
               usedTools,
               steps,
               thinkingRuns,
+              usage,
             }));
+            if (conversationUsage) usageState.set(conversationUsage, key);
             refreshChats();
 
             const isBeingViewed =
@@ -186,15 +249,25 @@ export function useChatSession() {
               );
             }
           },
-          onError: (errorMessage) => {
+          onError: (errorMessage, rejected) => {
             reportError([errorMessage]);
+            if (rejected) throw new RejectedSendError(errorMessage);
             throw new Error(errorMessage);
           },
         },
         abortController.signal,
+        attachments?.map((a) => a.id),
       );
     } catch (error) {
-      if (abortController.signal.aborted) {
+      if (error instanceof RejectedSendError) {
+        // Nothing was persisted: drop the optimistic message and give the
+        // draft back so the user can fix it.
+        messagesState.set(
+          (prev) => prev.filter((m) => m.id !== userMessageId),
+          key,
+        );
+        onRejected?.();
+      } else if (abortController.signal.aborted) {
         messagesState.set((prev) => {
           const hasPartial = prev.some((m) => m.id === agentMessageId);
           return hasPartial
@@ -237,7 +310,12 @@ export function useChatSession() {
   return {
     messages: messagesState.value,
     isThinking: thinkingState.value.isThinking,
+    isBusy: thinkingState.value.isBusy,
     thinkingText: thinkingState.value.thinkingText,
+    phase: thinkingState.value.phase,
+    liveSteps: thinkingState.value.liveSteps,
+    liveTools: thinkingState.value.liveTools,
+    conversationUsage: usageState.value,
     send,
     stop: () => abortControllerRef.current?.abort(),
   };

@@ -1,16 +1,20 @@
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import type { ModelProvider } from "../ai/providers/types.ts";
 
 export interface HiveSettings {
   dataDir: string;
   configDir: string;
   model: string;
-  currentMode: string;
+  modelProvider: ModelProvider;
+  modelKeyId: string;
   ollamaKvCacheType: string;
+  ollamaFlashAttention: string;
+  ollamaServerPromptDismissed: boolean;
   callbackBaseUrl: string;
 }
 
-const PERSISTED_KEYS = ["model", "currentMode", "ollamaKvCacheType"] as const;
+const PERSISTED_KEYS = ["model", "modelProvider", "modelKeyId", "ollamaKvCacheType", "ollamaFlashAttention", "ollamaServerPromptDismissed"] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;
 
 const SETTINGS_FILE_NAME = "settings.json";
@@ -64,7 +68,12 @@ export class HiveConfig {
     try {
       const raw = await Deno.readTextFile(this.getSettingsPath());
       const persisted = JSON.parse(raw) as Partial<PersistedSettings>;
-      Object.assign(this.settings, persisted);
+      const known = Object.fromEntries(
+        PERSISTED_KEYS.filter((key) => persisted[key] !== undefined).map(
+          (key) => [key, persisted[key]],
+        ),
+      ) as Partial<PersistedSettings>;
+      Object.assign(this.settings, known);
     } catch (error) {
       if (!(error instanceof Deno.errors.NotFound)) {
         console.error("Failed to load Hive settings:", error);

@@ -21,6 +21,8 @@ export const ScoutState = new StateSchema({
   messages: MessagesValue,
   chatId: z.string(),
   model: z.string(),
+  modelProvider: z.string().default("ollama"),
+  modelKeyId: z.string().default(""),
   modelOptions: z.record(z.string(), z.unknown()).default({}),
   steps: StepsValue,
   iterations: new ReducedValue(z.number().default(0), {

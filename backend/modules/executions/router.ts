@@ -11,6 +11,7 @@ import { deleteExecution } from "./use-cases/delete-execution.ts";
 import { updateExecution } from "./use-cases/update-execution.ts";
 import { createExecution } from "./use-cases/create-execution.ts";
 import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
+import { listRuns } from "./use-cases/list-runs.ts";
 import { runExecution } from "./use-cases/run-execution/run-execution.ts";
 
 export const executionsRouter = new Hono<{
@@ -38,6 +39,7 @@ executionsRouter.post("/generate", async (c) => {
     {
       currentGraph: body.currentGraph,
       dryRun: body.dryRun === true,
+      signal: c.req.raw.signal,
     },
   );
 });
@@ -61,10 +63,17 @@ executionsRouter.get("/:id", async (c) => {
   return getExecution(db, parseId(c.req.param("id")), headers);
 });
 
+executionsRouter.get("/:id/runs", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  return listRuns(db, parseId(c.req.param("id")), headers);
+});
+
 executionsRouter.delete("/:id", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
-  return deleteExecution(db, parseId(c.req.param("id")), headers);
+  const dataDir = c.get("hive").getConfig().get("dataDir");
+  return deleteExecution(db, parseId(c.req.param("id")), headers, dataDir);
 });
 
 executionsRouter.patch("/:id", async (c) => {
@@ -108,5 +117,7 @@ executionsRouter.post("/:id/run", async (c) => {
     body.input,
     headers,
     body.autoApprove !== false,
+    c.req.raw.signal,
+    Array.isArray(body.attachmentIds) ? body.attachmentIds : [],
   );
 });

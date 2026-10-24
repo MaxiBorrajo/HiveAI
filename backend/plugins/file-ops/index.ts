@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { dirname, join } from "node:path";
+import { expandHome } from "../expand-home.ts";
+import { unwrapCodeFence } from "./unwrap-code-fence.ts";
 import type {
   BeeContext,
   BeePlugin,
   SelectionTestCase,
   ExecutionTestCase,
 } from "./bee-plugin.ts";
-
-const MAX_CONTENT_CHARS = 50_000;
 
 type Operation = "create" | "write" | "touch" | "mkdir" | "copy" | "move";
 
@@ -211,9 +211,9 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       content?: string;
     };
 
-    // If the path points directly to root filesystem (e.g. "/notes.txt" or "/system_health.md"),
-    // models often emit leading slashes intending project-root/workspace-relative paths.
-    // Divert root writes to current working directory to avoid OS permission errors.
+    path = expandHome(path);
+    if (destination) destination = expandHome(destination);
+
     if (path.startsWith("/") && dirname(path) === "/" && !["/tmp", "/var"].includes(path)) {
       path = join(Deno.cwd(), path.slice(1));
     }
@@ -221,8 +221,8 @@ export default class FileOpsPlugin implements BeePlugin<FileOpsSchema> {
       destination = join(Deno.cwd(), destination.slice(1));
     }
 
-    if (content != null && content.length > MAX_CONTENT_CHARS) {
-      return `The provided content is too large (${content.length} chars). Maximum allowed is ${MAX_CONTENT_CHARS}.`;
+    if (content != null && (operation === "create" || operation === "write")) {
+      content = unwrapCodeFence(path, content);
     }
 
     console.log(

@@ -1,3 +1,6 @@
+import { Check, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { stringifyContent } from "@/lib/download";
 
 export function StateVariablesPanel({
@@ -5,8 +8,20 @@ export function StateVariablesPanel({
 }: {
   variables: [string, unknown][];
 }) {
+  const { copied, copy } = useCopyFeedback();
   return (
     <div className="p-4 space-y-3">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => copy(stringifyContent(Object.fromEntries(variables)))}
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? "Copied" : "Copy all"}
+        </Button>
+      </div>
       {variables.map(([key, value]) => (
         <div
           key={key}

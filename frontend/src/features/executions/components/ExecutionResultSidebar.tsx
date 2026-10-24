@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Copy,
@@ -11,13 +11,20 @@ import {
   FileText,
   Code2,
   Database,
+  Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { downloadBlob, stringifyContent } from "@/lib/download";
+import { downloadFile, stringifyContent } from "@/lib/download";
 import { normalizeResult } from "@/features/executions/lib/executionResult";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { useResizableSidebar } from "@/hooks/useResizableSidebar";
+import { useSlidePresence } from "@/hooks/useSlidePresence";
+import { AttachmentsList } from "@/features/chats/components/AttachmentsList";
+import {
+  getExecutionHistoryAttachments,
+  type AttachmentDto,
+} from "@/features/chats/api/attachments";
 import type {
   ExecutionFileArtifact,
   ExecutionResultData,
@@ -60,7 +67,28 @@ export function ExecutionResultSidebar({
     reservedViewportWidth: 300,
   });
 
-  if (!isOpen || !data) return null;
+  const { mounted, shown } = useSlidePresence(isOpen);
+
+  const [runAttachments, setRunAttachments] = useState<AttachmentDto[]>([]);
+  useEffect(() => {
+    if (!data?.historyId) {
+      setRunAttachments([]);
+      return;
+    }
+    let cancelled = false;
+    getExecutionHistoryAttachments(data.historyId)
+      .then(({ data: dtos }) => {
+        if (!cancelled) setRunAttachments(dtos ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRunAttachments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.historyId]);
+
+  if (!mounted || !data) return null;
 
   const resObj = normalizeResult(data.result);
   const typeTheme = getResultTheme(resObj.type);
@@ -69,16 +97,12 @@ export function ExecutionResultSidebar({
     ([k]) => k !== "result" && k !== "messages" && k !== "feedback",
   );
 
-  const downloadFile = (file: ExecutionFileArtifact) =>
-    downloadBlob(
-      file.name,
-      stringifyContent(resObj.content),
-      file.mimeType || "text/plain;charset=utf-8",
-    );
+  const downloadArtifact = (file: ExecutionFileArtifact) =>
+    downloadFile(file.name, stringifyContent(resObj.content));
 
   const handleDownload = () => {
     if (resObj.files && resObj.files.length > 0) {
-      downloadFile(resObj.files[0]);
+      downloadArtifact(resObj.files[0]);
       return;
     }
 
@@ -86,10 +110,9 @@ export function ExecutionResultSidebar({
     const safeName = (executionName || "result")
       .toLowerCase()
       .replace(/[^a-z0-9_-]/g, "-");
-    downloadBlob(
+    downloadFile(
       `${safeName}-${Date.now()}.${isJson ? "json" : "md"}`,
       stringifyContent(resObj.content),
-      `${isJson ? "application/json" : "text/markdown"};charset=utf-8`,
     );
   };
 
@@ -108,21 +131,22 @@ export function ExecutionResultSidebar({
 
   return (
     <div
-      style={{ width: `${sidebarWidth}px`, maxWidth: "calc(100vw - 280px)" }}
+      style={{
+        width: `${sidebarWidth}px`,
+        maxWidth: "calc(100vw - 280px)",
+        right: shown ? 0 : `-${sidebarWidth}px`,
+      }}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 bg-card/95 border-l border-border shadow-2xl backdrop-blur-xl flex flex-col animate-in slide-in-from-right duration-200",
-        isResizing && "select-none duration-0",
+        "fixed inset-y-0 z-50 bg-card border-l border-border shadow-2xl flex flex-col transition-[right] duration-200 ease-out",
+        isResizing && "select-none",
       )}
     >
-      {/* Drag handle */}
       <div
         onMouseDown={startResizing}
         className="absolute left-0 inset-y-0 w-1.5 -translate-x-1/2 cursor-ew-resize hover:bg-emerald-500/50 transition-colors z-50 group"
       >
         <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-1 h-8 rounded-full bg-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
-
-      {/* Top Header */}
       <div className="p-4 border-b border-border/80 bg-card/80 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="size-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
@@ -145,8 +169,6 @@ export function ExecutionResultSidebar({
             </div>
           </div>
         </div>
-
-        {/* Header Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
@@ -218,9 +240,18 @@ export function ExecutionResultSidebar({
                   <FileArtifactCard
                     key={idx}
                     file={file}
-                    onDownload={() => downloadFile(file)}
+                    onDownload={() => downloadArtifact(file)}
                   />
                 ))}
+              </div>
+            )}
+            {runAttachments.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Paperclip className="size-3" />
+                  Files
+                </h4>
+                <AttachmentsList attachments={runAttachments} />
               </div>
             )}
             <ResultRenderer result={resObj} />
@@ -239,8 +270,6 @@ export function ExecutionResultSidebar({
           <StateVariablesPanel variables={otherStateVariables} />
         )}
       </div>
-
-      {/* Footer */}
       <div className="p-3.5 border-t border-border/80 bg-muted/50 flex items-center justify-between gap-2">
         <div className="text-[11px] text-muted-foreground font-mono">
           Type: <span className="text-muted-foreground">{resObj.type}</span>

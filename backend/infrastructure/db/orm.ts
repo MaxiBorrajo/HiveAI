@@ -46,7 +46,6 @@ export async function initORM(dataDir: string): Promise<AppDatabase> {
 
   db.$client = client;
 
-  // Run pending Drizzle migrations automatically
   const migrationsFolder = join(__dirname, "migrations");
   await migrate(
     db,
@@ -58,7 +57,6 @@ export async function initORM(dataDir: string): Promise<AppDatabase> {
     { migrationsFolder },
   );
 
-  // Initialize FTS5 virtual table and synchronization triggers
   schema.initializeFts(client);
 
   dbInstance = db;

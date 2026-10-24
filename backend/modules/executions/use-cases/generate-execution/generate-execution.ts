@@ -1,3 +1,5 @@
+import { executionContextStorage } from "../../../../core/microkernel/human-interaction.ts";
+import { buildModelSelection } from "../../../models/use-cases/build-model-selection.ts";
 import { createSseResponse } from "../../../../core/api/sse.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../../infrastructure/db/repositories/execution-repository.ts";
@@ -9,6 +11,8 @@ import type {
 } from "../../../../core/ai/visual-builder/types.ts";
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { describeActivePlugins } from "./describe-plugins.ts";
+import type { ModelRef } from "../../../../core/ai/providers/types.ts";
+import { withUsageContext } from "../../../../core/ai/usage/usage-context.ts";
 
 const LOG = "[Executions Generator]";
 const MAX_NAME_LENGTH = 50;
@@ -78,11 +82,17 @@ async function saveGeneratedGraph(
   repo: ExecutionRepository,
   executionId: number,
   graph: LangGraphAbstraction,
+  orchestrator: ModelRef,
 ) {
   const saved = await repo.createGraph({
     executionId,
     graph,
     state: graph.stateSchema,
+    orchestrator: {
+      provider: orchestrator.provider,
+      model: orchestrator.model,
+      ...(orchestrator.keyId ? { keyId: orchestrator.keyId } : {}),
+    },
     createdAt: Date.now(),
   });
   await repo.update(executionId, { lastGraphId: saved.id });
@@ -98,7 +108,11 @@ export async function generateExecution(
   executionId: number | undefined,
   targetNodeId: string | undefined,
   headers: Record<string, string>,
-  options: { currentGraph?: LangGraphAbstraction; dryRun?: boolean } = {},
+  options: {
+    currentGraph?: LangGraphAbstraction;
+    dryRun?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<Response> {
   const { dryRun = false } = options;
   return createSseResponse(headers, async (send) => {
@@ -128,26 +142,45 @@ export async function generateExecution(
 
     if (!dryRun) send("execution_created", { executionId: targetExecutionId });
 
+    const modelSelection = await buildModelSelection(hive);
     const generator = generateIncrementalGraph(
       content,
       model,
       describeActivePlugins(hive),
       currentGraph,
       targetNodeId,
+      modelSelection,
     );
 
-    let result = await generator.next();
-    while (!result.done) {
-      logStreamEvent(result.value);
-      send(result.value.type, result.value);
-      result = await generator.next();
-    }
-    const finalGraph: LangGraphAbstraction | null = result.value ?? null;
+    const finalGraph: LangGraphAbstraction | null = await executionContextStorage.run(
+      { autoApprove: false, signal: options.signal, interactive: true },
+      () => withUsageContext(
+      {
+        kind: "graph_generation",
+        role: "orchestrator",
+        executionId: targetExecutionId,
+      },
+      async () => {
+        let result = await generator.next();
+        while (!result.done) {
+          logStreamEvent(result.value);
+          send(result.value.type, result.value);
+          result = await generator.next();
+        }
+        return result.value ?? null;
+      },
+      ),
+    );
     if (!finalGraph) return;
 
     const graphId = dryRun
       ? null
-      : (await saveGeneratedGraph(repo, targetExecutionId, finalGraph)).id;
+      : (await saveGeneratedGraph(
+        repo,
+        targetExecutionId,
+        finalGraph,
+        modelSelection.orchestrator,
+      )).id;
     send("done", {
       executionId: targetExecutionId,
       graphId,

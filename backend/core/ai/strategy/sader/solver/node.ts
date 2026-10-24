@@ -1,6 +1,6 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../../providers/create-chat-model.ts";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { HiveAIState, type ChatStep } from "../graph.ts";
 import { buildSolverSystemPrompt } from "./prompt.ts";
@@ -17,7 +17,10 @@ export const Solver: GraphNode<typeof HiveAIState> = async (state) => {
     think: true,
     ...state.modelOptions,
   };
-  const selectorModel = new ChatOllama(selectorOptions);
+  const selectorModel = await createChatModel(
+    { provider: "ollama", model: state.selectorModel },
+    (selectorOptions),
+  );
 
   console.log(`[SADER - Solver] Effective Ollama options:`, selectorOptions);
 

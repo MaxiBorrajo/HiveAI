@@ -1,4 +1,6 @@
-import { ChatOllama } from "@langchain/ollama";
+import type { ModelSelection } from "../../providers/model-selection.ts";
+import { createChatModel } from "../../providers/create-chat-model.ts";
+import { normalizeModelRef, type ModelRef } from "../../providers/types.ts";
 import {
   AIMessage,
   BaseMessage,
@@ -146,13 +148,16 @@ export async function runTopologyCompilerPhase(
     violations: string[];
   },
   existingGraph?: LangGraphAbstraction,
+  orchestrator?: ModelRef,
+  modelSelection?: ModelSelection,
 ): Promise<WorkflowSkeleton> {
   const workflowSkeletonSchema = buildWorkflowSkeletonSchema(availablePlugins);
 
-  const compilerAgent = new ChatOllama({
-    model: modelName,
-    temperature: 0.1,
-  }).withStructuredOutput(workflowSkeletonSchema, {
+  const compilerAgent = (
+    await createChatModel(orchestrator ?? normalizeModelRef(modelName), {
+      temperature: 0.1,
+    })
+  ).withStructuredOutput(workflowSkeletonSchema, {
     name: "TopologyCompiler",
   });
 
@@ -186,6 +191,8 @@ export async function runTopologyCompilerPhase(
   8. Use clean, descriptive lowercase IDs (e.g. 'search_news', 'analyze_metrics', 'anomaly_check').
   9. Explicit "agent" wording is a HARD signal, not a suggestion: if the user's objective names a step with the word "agent"/"agente" (e.g. "an agent with web_search...", "un agente equipado con..."), that step MUST be an "llm" node with "plugins" set to the named tool(s) — NEVER a standalone "plugin" node, even if the step happens to call only one tool. The user explicitly asked for agentic (reasoning + tool-use) behavior there, not a raw mechanical call.
   10. A verb like "draft"/"redactar", "write"/"escribir", "summarize"/"resumir", "compose"/"componer", "synthesize" describes COGNITIVE SYNTHESIS, not a mechanical tool call — a plugin like "web_search" only returns raw search snippets, it cannot itself "draft" or "write" anything coherent. Any step whose description contains one of these synthesis verbs together with a tool need (e.g. "search AND draft", "read AND summarize") MUST be an "llm" node with that tool in "plugins" — the tool fetches raw material, the LLM reasoning is what actually produces the requested prose.
+  11. A node that feeds a "condition" is a PURE JUDGE: its only output is the typed value the condition reads (score, boolean or label). Never make it also produce a deliverable (assembling a file, writing content), because its output is reduced to that single value and everything else is lost. Put production/assembly in its own node: after the condition on the "true" path, or before the judge as a separate step.
+  12. A retry loop (condition "false" -> back to an earlier node) must carry the critique with it: the judge's single value cannot. Insert a "critique" llm node on the "false" path (condition -> critique node -> earlier node) that reads the artifacts under review and writes the concrete issues to be fixed into its own output, and have the earlier node use that critique when revising. It only runs when the review fails, so it costs nothing on the happy path.
 
   WORKED EXAMPLES (study the REASONING in each, not just the shape — apply the same judgment to the actual objective below):
 
@@ -211,6 +218,16 @@ export async function runTopologyCompilerPhase(
     WRONG: outputKey "is_good_enough" (boolean) with condition operator "equals" true/false — this discards the actual numeric scale the user asked for.
     RIGHT: the "llm" node's outputKey is "quality_score", producing a real number (not a 0/1 flag); the "condition" node's field is "quality_score" with a numeric operator ("greater_than_or_equals") and a numeric value (8, not "8" or true/false). Use "string" outputs the same way for category/label judgments (e.g. field "severity", operator "equals", value "critical") — only use a boolean when the objective is a literal yes/no question.`;
 
+  const hasLightModels = (modelSelection?.catalog ?? []).some(
+    (o) => o.location === "local",
+  );
+  const smallModelRules = hasLightModels
+    ? `
+
+  SMALL-MODEL DESIGN PRINCIPLE (overrides the 2-5 node limit of rule 6 — use as many nodes as the workflow needs):
+  Light and local models are very good at narrow, well-scoped tasks and cost nothing, while the strongest model is expensive and should be spent only where it matters. Design the workflow so each node does ONE specific, clearly bounded job (e.g. "extract the errors", "classify the sentiment", "write one section"), even if that means more nodes. A narrow node with precise instructions gets done correctly by a small model; a broad node ("research, analyze and write everything") forces an expensive one. Reserve broad, ambiguous or coordinating work (planning the whole job, reconciling several outputs, reviewing quality and deciding to redo) for dedicated orchestrator-style nodes. This does NOT override rule 3: never split one tool chain whose steps depend on each other across nodes.`
+    : "";
+
   const editRules = existingGraph
     ? `
 
@@ -225,7 +242,7 @@ export async function runTopologyCompilerPhase(
     : "";
 
   const messages: BaseMessage[] = [
-    new SystemMessage(compilerPrompt + editRules),
+    new SystemMessage(compilerPrompt + smallModelRules + editRules),
     new HumanMessage(
       existingGraph ? `Change request: "${prompt}"` : `User Objective: "${prompt}"`,
     ),

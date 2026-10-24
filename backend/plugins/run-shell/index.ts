@@ -8,24 +8,17 @@ import type {
   ExecutionTestCase,
 } from "./bee-plugin.ts";
 
-const MAX_OUTPUT_CHARS = 4000;
+const MAX_OUTPUT_CHARS = 20_000;
 const DEFAULT_TIMEOUT_MS = 60_000;
-// Cap in bytes, applied while the process is still running (not just on the
-// final string) — Deno.Command.output() buffers the whole stream in memory
-// before returning, so an unbounded producer (`yes`, `cat /dev/zero`) can
-// exhaust memory long before MAX_OUTPUT_CHARS ever gets a chance to trim it.
 const MAX_STREAM_BYTES = 1_000_000;
 
-// Known-destructive / irreversible patterns. Not a sandbox: the goal is to
-// catch the commands a human is most likely to rubber-stamp without reading
-// closely (especially when chained after something innocuous).
 const DANGEROUS_PATTERNS: RegExp[] = [
-  /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+(\/|~|\*|\$HOME|\.\.?\/?\s*$)/i, // rm -rf / or ~ or *
+  /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+(\/|~|\*|\$HOME|\.\.?\/?\s*$)/i,
   /\bmkfs(\.\w+)?\b/i,
-  />\s*\/dev\/(sd|nvme|hd)\w*/i, // overwrite a raw block device
-  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, // fork bomb
+  />\s*\/dev\/(sd|nvme|hd)\w*/i,
+  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
   /\bdd\s+.*\bof=\/dev\//i,
-  /curl\s+[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/i, // curl | sh
+  /curl\s+[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/i,
   /wget\s+[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b/i,
   /\bchmod\s+-R\s+777\s+\//i,
   /\bchown\s+-R\s+.*\s+\//i,
@@ -78,7 +71,6 @@ async function readStreamCapped(
     try {
       await reader.cancel();
     } catch {
-      // stream may already be closed
     }
   }
 
@@ -95,7 +87,6 @@ async function killProcessTree(pid: number): Promise<void> {
       await new Deno.Command("kill", { args: ["-9", String(pid)] }).output();
     }
   } catch {
-    // best-effort: process may have already exited
   }
 }
 

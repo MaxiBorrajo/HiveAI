@@ -31,14 +31,6 @@ export interface SidebarEntityConfig<TItem extends { id: string; updatedAt: numb
   deleteItem: (id: string) => Promise<void>;
   renameItem: (id: string, newTitle: string) => Promise<void>;
 }
-
-/**
- * Builds an AppSidebar props object for one entity list (chats,
- * executions, ...). Both call sites in App.tsx used to hand-build this same
- * shape — same SidebarItem mapping, same Rename/Delete menu options wired
- * to setRenameTarget/setDeleteTarget — with only the entity's own labels
- * and CRUD functions differing.
- */
 export function buildSidebarProps<
   TItem extends { id: string; updatedAt: number; createdAt: number },
 >(

@@ -83,7 +83,6 @@ export class MessageRepository {
         .all(sanitizeFtsQuery(text)) as { msgId: number; score: number }[];
       for (const r of rows) scores[r.msgId] = r.score;
     } catch {
-      // FTS syntax error — fall back to vector-only scoring
     }
     return scores;
   }

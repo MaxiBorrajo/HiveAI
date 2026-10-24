@@ -1,5 +1,4 @@
-import { join } from "node:path";
-import { homeDir } from "../../../core/env.ts";
+import { saveToDownloads } from "../../../core/files/save-to-downloads.ts";
 import { ResponseBuilder } from "../../../core/api/response.ts";
 
 export async function handleSaveTestResults(
@@ -8,15 +7,10 @@ export async function handleSaveTestResults(
 ): Promise<Response> {
   const body = await req.text();
 
-  const downloadsDir = join(homeDir!, "Downloads");
-  await Deno.mkdir(downloadsDir, { recursive: true });
-
-  const filePath = join(
-    downloadsDir,
+  const filePath = await saveToDownloads(
     `plugin_test_results_${new Date().toISOString().replace(/:/g, "-")}.json`,
+    body,
   );
-
-  await Deno.writeTextFile(filePath, body);
 
   return ResponseBuilder.success({ path: filePath }, { headers });
 }

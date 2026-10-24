@@ -19,6 +19,7 @@ import { EditModeBar } from "./edit/EditModeBar";
 import { StateCard } from "./edit/StateCard";
 import { ValidateGraphModal } from "./edit/ValidateGraphModal";
 import { NodeDetailsPanel } from "./node-details/NodeDetailsPanel";
+import { ExecutionHistoryPanel } from "./history/ExecutionHistoryPanel";
 
 export function ExecutionsMain() {
   const {
@@ -39,6 +40,7 @@ export function ExecutionsMain() {
 
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
   const [isStateOpen, setIsStateOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const {
     isThinking,
@@ -53,10 +55,12 @@ export function ExecutionsMain() {
     activeNodeId,
     planningThought,
     logs,
+    activity,
     executionResult,
     activeToolName,
     handleGenerate,
     handleStop,
+    handleStopRun,
     handleRun: runExecution,
   } = useExecutionWorkspace({
     key,
@@ -181,8 +185,10 @@ export function ExecutionsMain() {
               isRunning={isRunning}
               hasRequiredInputs={runControls.hasRequiredInputs}
               onRun={runControls.runClick}
+              onStopRun={handleStopRun}
               onOpenRunModal={runControls.openRunModal}
               onShowResult={() => setIsResultSidebarOpen(true)}
+              onShowHistory={() => setIsHistoryOpen(true)}
               onEdit={editor.startEditing}
             />
           )}
@@ -208,6 +214,8 @@ export function ExecutionsMain() {
               isThinking={isThinking}
               isEmpty={isEmpty}
               isEditing={isEditing}
+              activity={activity}
+              onSelectNode={setSelectedNodeId}
               selectedNode={selectedNode}
               selectedEdge={selectedEdge}
               onSend={handleGenerateClick}
@@ -236,11 +244,21 @@ export function ExecutionsMain() {
       <RunExecutionModal
         open={runControls.isRunModalOpen}
         onOpenChange={runControls.setIsRunModalOpen}
+        executionId={activeExecutionId}
         graph={graph}
         hasRequiredInputs={runControls.hasRequiredInputs}
         runInputs={runControls.runInputs}
         setRunInputs={runControls.setRunInputs}
+        runAttachments={runControls.runAttachments}
+        setRunAttachments={runControls.setRunAttachments}
         onRun={() => runControls.run()}
+      />
+
+      <ExecutionHistoryPanel
+        executionId={activeExecutionId}
+        open={isHistoryOpen}
+        onOpenChange={setIsHistoryOpen}
+        refreshKey={executionResult?.createdAt}
       />
 
       <ExecutionResultSidebar

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { expandHome } from "../expand-home.ts";
 import type {
   BeeContext,
   BeePlugin,
@@ -6,7 +7,7 @@ import type {
   ExecutionTestCase,
 } from "./bee-plugin.ts";
 
-const MAX_CONTENT_CHARS = 20_000;
+const MAX_CONTENT_CHARS = 100_000;
 
 type Operation = "list" | "read";
 
@@ -150,11 +151,12 @@ export default class FileReadPlugin implements BeePlugin<FileReadSchema> {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;
     }
 
-    const { operation, path } = parsed.data as {
+    const { operation, path: rawPath } = parsed.data as {
       operation: Operation;
       path: string;
     };
 
+    const path = expandHome(rawPath);
     console.log(`[file-read]  Requested '${operation}' on '${path}'`);
 
     try {

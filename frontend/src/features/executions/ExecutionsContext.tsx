@@ -33,9 +33,6 @@ export function ExecutionsProvider({ children }: { children: ReactNode }) {
     {
       list: listExecutions,
       remove: deleteExecution,
-      // The backend returns the full `Execution` entity here (numeric `id`),
-      // not an `ExecutionSummary` — only forward the fields the merge
-      // function below actually reads.
       update: async (id, dto) => {
         const { data } = await updateExecutionRequest(id, dto);
         return { data: data ? { name: data.name, updatedAt: data.updatedAt } : undefined };

@@ -14,6 +14,7 @@ export interface DeleteConfirmationDialogProps {
   onOpenChange: (open: boolean) => void;
   itemName?: string;
   entityName: string;
+  warning?: string;
   onConfirm: () => void | Promise<void>;
 }
 
@@ -22,6 +23,7 @@ export function DeleteConfirmationDialog({
   onOpenChange,
   itemName,
   entityName,
+  warning,
   onConfirm,
 }: DeleteConfirmationDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
@@ -47,6 +49,7 @@ export function DeleteConfirmationDialog({
               ? ` "${itemName}"`
               : ` this ${entityName.toLowerCase().trim()}`}
             ? This action cannot be undone.
+            {warning && ` ${warning}`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

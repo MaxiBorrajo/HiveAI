@@ -1,5 +1,6 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
+import { useSlidePresence } from "@/hooks/useSlidePresence";
 import { ScrollArea } from "../../../components/ui/scroll-area.tsx";
 import { Button } from "../../../components/ui/button.tsx";
 import {
@@ -8,11 +9,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "../../../components/ui/accordion.tsx";
+import { formatDuration } from "@/lib/formatUsage";
 import type { Message, ThinkingRun } from "../types.ts";
-
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`;
-}
 
 function matchThinkingRun(
   steps: NonNullable<Message["steps"]>,
@@ -37,13 +35,17 @@ export function StepsPanel({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { mounted, shown } = useSlidePresence(open);
   const totalMs = steps.reduce((sum, step) => sum + step.durationMs, 0);
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <DialogPrimitive.Root open={mounted} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/40 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
-        <DialogPrimitive.Popup className="fixed top-0 right-0 z-50 flex h-screen w-full max-w-sm flex-col gap-4 border-l border-border bg-popover p-4 text-popover-foreground shadow-xl outline-none duration-150 data-open:animate-in data-open:slide-in-from-right data-closed:animate-out data-closed:slide-out-to-right">
+        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-background/40" />
+        <DialogPrimitive.Popup
+          style={{ right: shown ? 0 : "-24rem" }}
+          className="fixed top-0 z-50 flex h-screen w-full max-w-sm flex-col gap-4 border-l border-border bg-popover p-4 text-popover-foreground shadow-xl outline-none transition-[right] duration-200 ease-out"
+        >
           <div className="flex items-center justify-between gap-2">
             <div>
               <DialogPrimitive.Title className="font-heading text-base font-medium">

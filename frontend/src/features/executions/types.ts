@@ -1,3 +1,4 @@
+import type { RunUsage } from "@/lib/usage";
 export type DataType = "string" | "number" | "boolean" | "object" | "array" | "enum" | "unknown";
 export type ReducerStrategy = "overwrite" | "append" | "prepend" | "unique_append" | "merge_dict" | "sum" | "subtract" | "multiply" | "divide";
 
@@ -38,7 +39,7 @@ export interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  path?: "true" | "false"; // Used if source is a condition node
+  path?: "true" | "false";
   isConditional: boolean;
   condition?: {
     field: string;
@@ -88,19 +89,15 @@ export interface ExecutionDetails {
 }
 
 export type ExecutionResultType =
-  // Documentos y Archivos
   | "file"
   | "markdown"
   | "text"
-  // Datos y Analítica
   | "table"
   | "chart"
   | "json"
-  // Multimedia y Web
   | "image"
   | "html"
   | "url"
-  // Operaciones y Lógica
   | "terminal"
   | "boolean"
   | "error";
@@ -127,4 +124,12 @@ export interface ExecutionResultData {
   historyId?: number;
   createdAt?: number;
 }
-
+export interface RunSummary {
+  historyId: number;
+  iteration: number;
+  createdAt: number;
+  graphId: number;
+  result: unknown;
+  input: Record<string, unknown> | null;
+  usage: RunUsage | null;
+}

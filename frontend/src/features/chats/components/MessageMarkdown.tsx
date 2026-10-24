@@ -1,5 +1,6 @@
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const markdownComponents: Components = {
   h1: ({ children }) => (
@@ -45,6 +46,20 @@ const markdownComponents: Components = {
       {children}
     </pre>
   ),
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="w-full border-collapse text-xs">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-muted">{children}</thead>,
+  th: ({ children }) => (
+    <th className="border border-border px-2 py-1 text-left font-semibold">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-border px-2 py-1 align-top">{children}</td>
+  ),
   a: ({ children, href }) => (
     <a
       href={href}
@@ -64,7 +79,12 @@ export const MessageMarkdown = memo(function MessageMarkdown({
 }) {
   return (
     <div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-      <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={markdownComponents}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 });

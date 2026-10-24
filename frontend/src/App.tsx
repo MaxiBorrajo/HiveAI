@@ -11,11 +11,15 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
 import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain";
+import { ServerOptimizationDialog } from "@/features/model-settings/components/ServerOptimizationDialog";
 import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/features/models/ModelsContext";
 import { ChatsProvider, useChats } from "@/features/chats/ChatsContext";
-import { ExecutionsProvider, useExecutions } from "@/features/executions/ExecutionsContext";
+import {
+  ExecutionsProvider,
+  useExecutions,
+} from "@/features/executions/ExecutionsContext";
 import {
   DraftEditorProvider,
   useDraftEditor,
@@ -122,14 +126,17 @@ function AppContent() {
   return (
     <div className="flex h-screen relative">
       <UpdateBanner />
+      <ServerOptimizationDialog />
       <AppSidebar
         {...sidebarProps}
         actions={
           <>
-            <ViewSwitcher
-              currentView={currentView}
-              onViewChange={setCurrentView}
-            />
+            <div className="ml-2">
+              <ViewSwitcher
+                currentView={currentView}
+                onViewChange={setCurrentView}
+              />
+            </div>
             <ThemeToggle />
           </>
         }
@@ -171,11 +178,11 @@ function App() {
         <ModelsProvider>
           <ChatsProvider>
             <ExecutionsProvider>
-            <DraftEditorProvider>
+              <DraftEditorProvider>
                 <AppContent />
               </DraftEditorProvider>
             </ExecutionsProvider>
-        </ChatsProvider>
+          </ChatsProvider>
         </ModelsProvider>
 
         <ToastPortal>

@@ -1,4 +1,6 @@
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../providers/create-chat-model.ts";
+import { normalizeModelRef } from "../../providers/types.ts";
+import type { ModelSelection } from "../../providers/model-selection.ts";
 import { createDraftGraph } from "../graph-factory.ts";
 import type {
   GraphEdge,
@@ -20,6 +22,7 @@ import {
   sanitizeGraphEdges,
 } from "./graph-sanitizer.ts";
 import { configureNodes } from "./node-configuration.ts";
+import { wireLoopFeedback } from "./loop-feedback.ts";
 import { requestValidatedSkeleton } from "./skeleton-phase.ts";
 import { editExistingGraph, reconfigureTargetNode } from "./edit-graph.ts";
 import { configureEndNodeDeliverable } from "./end-node-configurator.ts";
@@ -32,9 +35,11 @@ export async function* generateIncrementalGraph(
   availablePlugins: PluginInfo[],
   currentGraph?: LangGraphAbstraction,
   targetNodeId?: string,
+  modelSelection?: ModelSelection,
 ): AsyncGenerator<IncrementalEvent, LangGraphAbstraction, unknown> {
   const pluginNames = new Set(availablePlugins.map((p) => p.name));
-  const configLlm = new ChatOllama({ model: modelName, temperature: 0.05 });
+  const orchestrator = modelSelection?.orchestrator ?? normalizeModelRef(modelName);
+  const configLlm = await createChatModel(orchestrator, { temperature: 0.05 });
 
   const existingNodes = currentGraph?.nodes.filter(
     (n) => n.type !== "start" && n.type !== "end",
@@ -43,11 +48,11 @@ export async function* generateIncrementalGraph(
   if (currentGraph && targetNodeId) {
     const target = currentGraph.nodes.find((n) => n.id === targetNodeId);
     if (!target) throw new Error(`Node "${targetNodeId}" does not exist in the graph.`);
-    return yield* reconfigureTargetNode(prompt, modelName, availablePlugins, pluginNames, configLlm, currentGraph, target);
+    return yield* reconfigureTargetNode(prompt, modelName, availablePlugins, pluginNames, configLlm, currentGraph, target, modelSelection);
   }
 
   if (currentGraph && existingNodes.length > 0) {
-    return yield* editExistingGraph(prompt, modelName, availablePlugins, pluginNames, configLlm, currentGraph);
+    return yield* editExistingGraph(prompt, modelName, availablePlugins, pluginNames, configLlm, currentGraph, modelSelection);
   }
 
   const graph: LangGraphAbstraction = createDraftGraph(
@@ -69,7 +74,15 @@ export async function* generateIncrementalGraph(
   };
 
   const { startNode, endNode, intermediateNodes, nodeDescriptions, rawEdges } =
-    yield* requestValidatedSkeleton(prompt, modelName, availablePlugins, graph);
+    yield* requestValidatedSkeleton(
+      prompt,
+      modelName,
+      availablePlugins,
+      graph,
+      undefined,
+      orchestrator,
+      modelSelection,
+    );
 
   yield {
     type: "node_added",
@@ -85,12 +98,17 @@ export async function* generateIncrementalGraph(
   yield* configureNodes(intermediateNodes, {
     prompt,
     modelName,
+    modelSelection,
     availablePlugins,
     pluginNames,
     configLlm,
     graph,
     nodeDescriptions,
   });
+
+  for (const node of wireLoopFeedback(graph)) {
+    yield { type: "node_updated", node };
+  }
 
   console.log(
     `[Visual Builder - Generator] === Phase 2.5: Configuring End Node Deliverable ===`,

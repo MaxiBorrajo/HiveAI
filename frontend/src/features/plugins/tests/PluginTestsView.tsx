@@ -80,7 +80,6 @@ export function PluginTestsView({
       const { data } = await saveTestResults({ summary, results: rows });
       if (data?.path) reportSuccess("Results saved", data.path);
     } catch {
-      // apiClient already reports the failure
     }
   };
 

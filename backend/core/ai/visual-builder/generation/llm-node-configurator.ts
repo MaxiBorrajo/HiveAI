@@ -1,4 +1,8 @@
-import { ChatOllama } from "@langchain/ollama";
+import {
+  describeCatalog,
+  modelConfigFields,
+  resolveNodeModel,
+} from "../../providers/model-selection.ts";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import {
@@ -8,6 +12,7 @@ import {
   LangGraphAbstraction,
   LlmConfig,
   LlmConfigCandidate,
+  InvocableAgent,
   LlmNodeConfiguratorContext,
   PluginInfo,
 } from "../types.ts";
@@ -22,6 +27,7 @@ import {
 export function buildLlmConfigSchema(
   availablePlugins: PluginInfo[],
   availableStateKeys: string[] = [],
+  modelChoices: string[] = [],
 ) {
   const pluginNames = availablePlugins.map((p) => p.name);
   const stateKeyField = stateKeySchema(
@@ -66,6 +72,16 @@ export function buildLlmConfigSchema(
       .record(z.string(), statePropertyDefinitionSchema)
       .optional()
       .describe("If outputKey is new, define its schema here"),
+    ...(modelChoices.length > 0
+      ? {
+          modelChoice: z
+            .string()
+            .optional()
+            .describe(
+              `Model this node should run on. Exactly one of: [${modelChoices.join(", ")}]. Omit to use the default model.`,
+            ),
+        }
+      : {}),
   });
 }
 
@@ -83,7 +99,66 @@ function nodeFeedsIntoCondition(
 function buildAgentToolHint(nodePlugins: string[]): string {
   if (nodePlugins.length === 0) return "";
   return `\nNOTE: This LLM node is an autonomous agent equipped with tools: [${nodePlugins.join(", ")}].
-Instruct it in systemPrompt to use its tools iteratively (e.g. searching the web, reading multiple relevant URLs, extracting details, saving files) to compile a rich, thorough response before concluding.`;
+Instruct it in systemPrompt to use its tools iteratively (e.g. searching the web, reading multiple relevant URLs, extracting details, saving files) to compile a rich, thorough response before concluding.
+DATA HANDOFF: later nodes see ONLY this node's final answer text — never temp files, shell variables or paths it created. If the next node needs data, instruct the agent to include the actual data in its final answer (not a path or a count summary). Keep that answer bounded in size: when the raw data can be large (logs, many files, long pages), tell the agent to reduce it first with tools (filter, dedupe, aggregate — e.g. normalize numbers/ids and use sort | uniq -c | sort -rn | head -N) and return the reduced result with counts.
+FILES: if this agent writes a file, its final answer only confirms the path and size (and, if useful, a short summary). It must NOT paste the file content back: that pays for the same output twice.`;
+}
+
+function localModelsInUse(
+  selection: NonNullable<LlmNodeConfiguratorContext["modelSelection"]>,
+  graph: LangGraphAbstraction,
+  currentNodeId: string,
+): string[] {
+  const ids = new Set<string>();
+  for (const n of graph.nodes) {
+    const model = n.config?.model as string | undefined;
+    if (n.id === currentNodeId || n.type !== "llm" || !model) continue;
+    const provider = n.config?.provider as string | undefined;
+    const match = selection.catalog.find(
+      (o) =>
+        o.location === "local" &&
+        o.ref.model === model &&
+        (!provider || o.ref.provider === provider),
+    );
+    if (match) ids.add(match.id);
+  }
+  return [...ids];
+}
+
+function buildLocalReuseHint(inUse: string[]): string {
+  const inUseText = inUse.length > 0
+    ? `Local models already chosen by other nodes of this workflow: ${inUse.join(", ")}. `
+    : "";
+  return `LOCAL MODEL REUSE: loading and unloading a local model is very slow and heavy on the user's machine. ${inUseText}When this node goes local, reuse the SAME local model that the other nodes use (or the first one you pick) and do not switch to a different local model, unless there is a really good reason: this node needs [tools] and that model lacks them, or its context is clearly too small for this node's data, or this node needs a capability (e.g. vision) that model does not have. A slightly better fit is NOT a good reason. When two local models would both work, pick the one already in use.
+`;
+}
+
+function buildModelHint(
+  selection: LlmNodeConfiguratorContext["modelSelection"],
+  graph: LangGraphAbstraction,
+  nodeDescriptions: Map<string, string>,
+  currentNodeId: string,
+): string {
+  if (!selection || selection.catalog.length < 2) return "";
+  const localReuse = selection.catalog.some((o) => o.location === "local")
+    ? buildLocalReuseHint(localModelsInUse(selection, graph, currentNodeId))
+    : "";
+  const flow = graph.nodes
+    .filter((n) => n.type !== "start" && n.type !== "end")
+    .map((n) => `- ${n.name}: ${nodeDescriptions.get(n.id) || n.type}`)
+    .join("\n");
+  return `\nMODEL CHOICE: pick 'modelChoice' for this node from the models below. Default (omit) is ${selection.orchestrator.provider}:${selection.orchestrator.model}, the strongest model. The goal is to fulfil the objective while spending as little cloud budget as possible, and none of the strongest model unless a step needs it. Local models are free and run on the user's machine; every cloud model, even a "light" one like Haiku or Flash, costs money. So the light cloud models are NOT the default for simple steps: a capable local model is.
+Decide in this order:
+1. Orchestrator step (planning or decomposing a complex objective, deciding what other nodes must do, reconciling the outputs of several nodes, judging quality and deciding whether work must be redone, integrating many pieces into a coherent whole): keep the default (strongest) model.
+2. Otherwise it is an executor step (a well-scoped task with clear instructions: moving or formatting data, extracting, classifying, summarizing or drafting from given material, writing one section or one piece of code/HTML, researching one concrete topic with search/read tools, saving files, running commands). Pick the BEST-FITTING LOCAL model that has the capabilities the node needs ([tools] if the node has plugins) and whose context comfortably fits the input and output of the node. Small models do well on narrow, specific tasks, so a clear single-purpose instruction is a reason to go local, not a reason to pay.
+3. Only fall back to a light cloud model when no local model qualifies (missing [tools], context too small for the data flowing in, or the node must coordinate a long chain of dependent tool calls where a mistake would break the flow). Say so by choosing it; do not choose it just because it is familiar or "safer".
+- Tool outputs accumulate in an agent's context for the whole loop: reading one web page costs about 5k tokens, a file or shell output up to a few thousand. Add them up for the node (pages to read x 5k + the notes it writes) and compare with the model's context; local models run with at most 16k. An agent that must read many pages or large outputs does not fit a local model, so use a cloud model for it or keep the local model for nodes with small inputs.
+- Very small local models (under ~7B) only for nodes without tools that do a single simple operation; for anything bigger use the largest local model that has the capabilities.
+${localReuse}- A model marked [tools: unverified] has not been confirmed to support tool calling. For a node with plugins, choose a model with [tools] when one fits; pick an unverified one only when no verified model does.
+Workflow nodes, for relative comparison:
+${flow}
+Available models:
+${describeCatalog(selection)}`;
 }
 
 function buildConditionPromptHint(feedsIntoCondition: boolean): string {
@@ -271,9 +346,27 @@ function applyLlmConfigCandidate(
     nodeRole,
   );
   const finalPlugins = resolveFinalPlugins(config, nodePlugins, availablePlugins, pluginNames);
-
+  
+  const existingModel = node.config?.model
+    ? {
+        model: node.config.model as string,
+        ...(node.config.provider ? { provider: node.config.provider as string } : {}),
+        ...(node.config.keyId ? { keyId: node.config.keyId as string } : {}),
+      }
+    : undefined;
+  const modelChoice = (config as { modelChoice?: string }).modelChoice;
+  const nodeModel = resolveNodeModel(modelChoice, ctx.modelSelection);
+  if (nodeModel) {
+    console.log(
+      `[Visual Builder - Generator] Node "${node.name}" model: ${nodeModel.provider}:${nodeModel.model}${nodeModel === ctx.modelSelection?.orchestrator ? " (default)" : ""}`,
+    );
+  }
   const llmConfig: LlmConfig = {
-    model: modelName,
+    ...(modelChoice || !existingModel
+      ? nodeModel
+        ? modelConfigFields(nodeModel)
+        : { model: modelName }
+      : existingModel),
     temperature: 0.1,
     systemPrompt: buildFinalSystemPrompt(
       config,
@@ -323,8 +416,9 @@ function applyFallbackLlmConfig(
     ? `${node.id}_is_approved`
     : `${node.id}_result`;
 
+  const fallbackModel = resolveNodeModel(undefined, ctx.modelSelection);
   const llmConfig: LlmConfig = {
-    model: modelName,
+    ...(fallbackModel ? modelConfigFields(fallbackModel) : { model: modelName }),
     temperature: 0.1,
     systemPrompt: feedsIntoCondition
       ? `Evaluate if the input meets the required criteria. Return true if approved/satisfied, or false otherwise.`
@@ -346,6 +440,33 @@ function applyFallbackLlmConfig(
   };
 }
 
+class InvalidModelChoiceError extends Error {
+  constructor(
+    public readonly candidate: LlmConfigCandidate,
+    choice: string,
+  ) {
+    super(`Model '${choice}' is not one of the available models.`);
+  }
+}
+
+function withModelChoiceCheck(
+  agent: InvocableAgent,
+  ctx: LlmNodeConfiguratorContext,
+): InvocableAgent {
+  const valid = new Set(ctx.modelSelection?.catalog.map((o) => o.id) ?? []);
+  if (valid.size === 0) return agent;
+  return {
+    invoke: async (input, config) => {
+      const result = await agent.invoke(input, config);
+      const choice = (result as { modelChoice?: string }).modelChoice?.trim();
+      if (choice && !valid.has(choice)) {
+        throw new InvalidModelChoiceError(result, choice);
+      }
+      return result;
+    },
+  };
+}
+
 export async function configureLlmNode(
   node: GraphNode,
   ctx: LlmNodeConfiguratorContext,
@@ -364,6 +485,7 @@ export async function configureLlmNode(
   const dynamicLlmConfigSchema = buildLlmConfigSchema(
     availablePlugins,
     currentStateKeysForLlm,
+    ctx.modelSelection?.catalog.map((o) => o.id) ?? [],
   );
   const llmAgent = configLlm.withStructuredOutput(dynamicLlmConfigSchema, {
     name: "LLMConfig",
@@ -381,7 +503,8 @@ export async function configureLlmNode(
     {
       branchHint: buildBranchHint(incomingEdge),
       neighborHint,
-      agentToolHint: buildAgentToolHint(nodePlugins),
+      agentToolHint:
+        buildAgentToolHint(nodePlugins) + buildModelHint(ctx.modelSelection, graph, nodeDescriptions, node.id),
       conditionPromptHint: buildConditionPromptHint(feedsIntoCondition),
     },
     graphStateText,
@@ -396,7 +519,7 @@ export async function configureLlmNode(
 
   await runConfigStep<LlmConfigCandidate, void>({
     label: "LLM/Agent Node Configurator",
-    agent: llmAgent,
+    agent: withModelChoiceCheck(llmAgent, ctx),
     messages: builderMessages,
     onSuccess: (config) => {
       applyLlmConfigCandidate(
@@ -408,7 +531,21 @@ export async function configureLlmNode(
         nodePlugins,
       );
     },
-    onFallback: () => {
+    onFallback: (err) => {
+      if (err instanceof InvalidModelChoiceError) {
+        console.warn(
+          `[Visual Builder - Generator] ${err.message} Using the default model for ${node.id}.`,
+        );
+        applyLlmConfigCandidate(
+          { ...err.candidate, modelChoice: undefined } as LlmConfigCandidate,
+          node,
+          nodeRole,
+          feedsIntoCondition,
+          ctx,
+          nodePlugins,
+        );
+        return;
+      }
       applyFallbackLlmConfig(node, ctx, feedsIntoCondition, nodePlugins);
     },
   });

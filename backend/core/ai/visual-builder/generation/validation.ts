@@ -1,3 +1,4 @@
+import { BUILTIN_STATE_KEYS } from "../constants.ts";
 import type { InputMappingViolation, LangGraphAbstraction, PluginParameterInfo } from "../types.ts";
 
 
@@ -64,13 +65,11 @@ function extractBareVarName(value: unknown): string[] {
   return [value];
 }
 
-const BUILTIN_RUNTIME_KEYS = new Set(["input", "cwd", "os"]);
-
 export function validateGraphVariableReferences(
   graph: LangGraphAbstraction,
 ): InputMappingViolation[] {
   const violations: InputMappingViolation[] = [];
-  const knownKeys = new Set(BUILTIN_RUNTIME_KEYS);
+  const knownKeys = new Set(BUILTIN_STATE_KEYS);
   for (const node of graph.nodes) {
     const outputKey = node.config?.outputKey;
     if (typeof outputKey === "string" && outputKey.length > 0) {
@@ -189,7 +188,11 @@ export function validateGraphAgentToolMentions(
     const normalizedPrompt = normalizePluginMention(systemPrompt);
     for (const plugin of availablePlugins) {
       const normalizedName = normalizePluginMention(plugin.name);
-      if (!normalizedPrompt.includes(normalizedName)) continue;
+      // Whole-token match only: "counter" must not fire on "encountered".
+      const mention = new RegExp(
+        `(?<![a-z0-9])${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z0-9])`,
+      );
+      if (!mention.test(normalizedPrompt)) continue;
       if (equipped.has(normalizedName)) continue;
 
       violations.push({

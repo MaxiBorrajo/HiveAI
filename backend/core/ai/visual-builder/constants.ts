@@ -21,4 +21,4 @@ export const CONDITION_OPERATORS = [
 
 export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
 
-export const BUILTIN_STATE_KEYS = ["input", "cwd", "os"];
+export const BUILTIN_STATE_KEYS = ["input", "cwd", "os", "attachments"];

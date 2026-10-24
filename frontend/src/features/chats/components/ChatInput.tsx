@@ -1,16 +1,30 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2Icon, SquareIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  Loader2Icon,
+  PaperclipIcon,
+  SquareIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { PluginsManager } from "../../plugins/components/PluginsManager.tsx";
-import { ModesManager } from "../../modes/components/ModesManager.tsx";
+import { ThinkingToggle } from "../../model-settings/components/ThinkingToggle.tsx";
+import { ModelSettingsMenu } from "../../model-settings/components/ModelSettingsMenu.tsx";
 import { ModelsManager } from "../../models/components/ModelsManager.tsx";
 import { useModels } from "@/features/models/ModelsContext";
+import { isCloud } from "@/features/models/lib/modelChoices";
 import {
   pullEmbeddingModel,
   type PullProgress,
 } from "@/features/models/api/pullEmbeddingModel";
 import { reportError } from "@/lib/toastManager";
+import { AttachmentsList } from "./AttachmentsList.tsx";
+import {
+  ACCEPTED_ATTACHMENT_TYPES,
+  uploadChatAttachment,
+  type AttachmentDto,
+} from "../api/attachments.ts";
+import { getErrorMessage } from "@/lib/errors";
 
 interface ChatInputProps {
   placeholder?: string;
@@ -21,6 +35,9 @@ interface ChatInputProps {
   handleStop: () => void;
   isEmpty?: boolean;
   hidePluginsAndModes?: boolean;
+  chatId?: string | null;
+  attachments?: AttachmentDto[];
+  onAttachmentsChange?: (attachments: AttachmentDto[]) => void;
 }
 
 export function ChatInput({
@@ -29,12 +46,15 @@ export function ChatInput({
   isThinking,
   handleSend,
   handleStop,
-  isEmpty,
   hidePluginsAndModes,
   placeholder,
+  chatId = null,
+  attachments = [],
+  onAttachmentsChange,
 }: ChatInputProps) {
   const {
     hasModel,
+    current,
     hasAvailableModels,
     embeddingModelStatus,
     openManage,
@@ -48,6 +68,31 @@ export function ChatInput({
     null,
   );
   const isDownloading = downloadProgress !== null;
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  async function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0 || !onAttachmentsChange) return;
+    const files = Array.from(fileList);
+    setIsUploading(true);
+    try {
+      for (const file of files) {
+        try {
+          const response = await uploadChatAttachment(chatId, file);
+          if (response.data) {
+            onAttachmentsChange([...attachments, response.data]);
+          }
+        } catch (error) {
+          reportError([
+            getErrorMessage(error, `Could not upload '${file.name}'.`),
+          ]);
+        }
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   async function handleDownloadEmbeddingModel() {
     setDownloadProgress({ status: "starting" });
@@ -164,6 +209,15 @@ export function ChatInput({
         </div>
       )}
 
+      {onAttachmentsChange && attachments.length > 0 && (
+        <AttachmentsList
+          attachments={attachments}
+          onRemove={(id) =>
+            onAttachmentsChange(attachments.filter((a) => a.id !== id))
+          }
+        />
+      )}
+
       <div className="relative flex w-full flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring">
         <Textarea
           value={input}
@@ -182,11 +236,41 @@ export function ChatInput({
           <div className="flex gap-2">
             {!hidePluginsAndModes && (
               <>
-                <PluginsManager forceOpenDownward={isEmpty} />
-                <ModesManager />
+                <PluginsManager />
+                {!isCloud(current.provider) && <ModelSettingsMenu />}
               </>
             )}
-            <ModelsManager forceOpenDownward={isEmpty} />
+            <ModelsManager />
+            {!hidePluginsAndModes && <ThinkingToggle />}
+            {onAttachmentsChange && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ACCEPTED_ATTACHMENT_TYPES}
+                  className="hidden"
+                  onChange={(event) => {
+                    handleFilesSelected(event.target.files);
+                    event.target.value = "";
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files"
+                >
+                  {isUploading ? (
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                  ) : (
+                    <PaperclipIcon className="size-3.5" />
+                  )}
+                </Button>
+              </>
+            )}
           </div>
           {isThinking ? (
             <Button variant="secondary" onClick={handleStop} title="Stop">

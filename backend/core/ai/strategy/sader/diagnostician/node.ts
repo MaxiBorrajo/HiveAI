@@ -1,6 +1,6 @@
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../../providers/create-chat-model.ts";
 import z from "zod";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { HiveAIState, type ChatStep } from "../graph.ts";
@@ -28,7 +28,10 @@ export const Diagnostician: GraphNode<typeof HiveAIState> = async (state) => {
     format: z.toJSONSchema(DiagnosticianResponse),
     ...state.modelOptions,
   };
-  const diagnosticianModel = new ChatOllama(diagnosticianOptions);
+  const diagnosticianModel = await createChatModel(
+    { provider: "ollama", model: state.model },
+    (diagnosticianOptions),
+  );
 
   console.log(
     `[SADER - Diagnostician] Effective Ollama options:`,

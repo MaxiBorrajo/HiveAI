@@ -1,4 +1,4 @@
-import { ChatOllama } from "@langchain/ollama";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import {
@@ -109,7 +109,7 @@ async function* correctPluginInputMapping(
   nodeViolations: InputMappingViolation[],
   ctx: {
     availablePlugins: PluginInfo[];
-    configLlm: ChatOllama;
+    configLlm: BaseChatModel;
     graph: LangGraphAbstraction;
     nodeDescriptions: Map<string, string>;
     graphStateText: string;

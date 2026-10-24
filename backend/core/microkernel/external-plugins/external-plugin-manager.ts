@@ -41,6 +41,7 @@ export class ExternalPluginManager {
         ...t,
         expect: () => true,
       })) as ExecutionTestCase[],
+      configFields: record.metadata.configFields,
       initialize: async () => {},
       process: async () => {
         throw new Error(
@@ -114,6 +115,7 @@ export class ExternalPluginManager {
       executionTests: probe.plugin.executionTests.map(
         ({ expect: _expect, ...rest }) => rest,
       ),
+      configFields: probe.plugin.configFields,
     };
     await probe.stop();
 

@@ -1,6 +1,6 @@
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
-import { ChatOllama } from "@langchain/ollama";
+import { createChatModel } from "../../../providers/create-chat-model.ts";
 import z from "zod";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
 import { parseModelJSON } from "../../shared/utils.ts";
@@ -43,7 +43,10 @@ export const AbstentionVerificator: GraphNode<typeof HiveAIState> = async (
     format: z.toJSONSchema(AbstentionVerificatorResponse),
     ...state.modelOptions,
   };
-  const verificatorModel = new ChatOllama(verificatorOptions);
+  const verificatorModel = await createChatModel(
+    { provider: "ollama", model: state.model },
+    (verificatorOptions),
+  );
 
   console.log(
     `[SADER - AbstentionVerificator] Effective Ollama options:`,

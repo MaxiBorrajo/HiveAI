@@ -17,6 +17,18 @@ export interface ThinkingRun {
   text: string;
 }
 
+export type {
+  ConversationUsage,
+  MessageUsage,
+  ModelTotals,
+  TokenTotals,
+  UsageBucket,
+  UsageLocation,
+  UsedModel,
+} from "@/lib/usage";
+import type { MessageUsage } from "@/lib/usage";
+import type { AttachmentDto } from "./api/attachments.ts";
+
 export interface Message {
   id: string;
   role: "user" | "agent";
@@ -27,8 +39,9 @@ export interface Message {
   usedTools?: string[];
   steps?: ChatStep[];
   thinkingRuns?: ThinkingRun[];
+  usage?: MessageUsage | null;
+  attachments?: AttachmentDto[];
 }
-
 
 export interface StoredMessage {
   id: string;
@@ -40,7 +53,10 @@ export interface StoredMessage {
     usedTools: string[];
     steps: ChatStep[];
     thinkingRuns?: ThinkingRun[];
+    wasStopped?: boolean;
   } | null;
+  usage: MessageUsage | null;
+  attachments: AttachmentDto[];
 }
 
 export interface ChatSummary {

@@ -1,12 +1,6 @@
 import { join } from "node:path";
 import type { HiveMicrokernel } from "../core/microkernel/hive-microkernel.ts";
 
-/**
- * Registers every bundled plugin found in `pluginsDir`, activates those the user
- * has not turned off, then restores the external plugins imported earlier and
- * their saved active state. A bundled plugin
- * that fails to load is reported and skipped instead of aborting startup.
- */
 export async function loadPlugins(
   hive: HiveMicrokernel,
   pluginsDir: string,
@@ -20,7 +14,6 @@ export async function loadPlugins(
     }
   }
 
-  // A plugin the user turned off earlier stays off across restarts.
   for (const plugin of hive.getRegisteredPlugins()) {
     const persisted = await hive.getPersistedActiveState(plugin.name);
     if (persisted !== false) {

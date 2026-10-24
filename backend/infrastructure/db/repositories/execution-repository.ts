@@ -15,7 +15,6 @@ import {
 export class ExecutionRepository {
   constructor(private db: AppDatabase) {}
 
-  // Executions
   async findAll(): Promise<Execution[]> {
     return await this.db.select().from(executions).orderBy(desc(executions.updatedAt));
   }
@@ -44,7 +43,19 @@ export class ExecutionRepository {
     await this.db.delete(executions).where(eq(executions.id, id));
   }
 
-  // Execution Graphs
+  async findLatestGraphs(): Promise<
+    { execution: Execution; graph: ExecutionGraph }[]
+  > {
+    const all = await this.findAll();
+    const result: { execution: Execution; graph: ExecutionGraph }[] = [];
+    for (const execution of all) {
+      if (!execution.lastGraphId) continue;
+      const graph = await this.findGraphById(execution.lastGraphId);
+      if (graph) result.push({ execution, graph });
+    }
+    return result;
+  }
+
   async findGraphById(id: number): Promise<ExecutionGraph | undefined> {
     const [graph] = await this.db.select().from(executionGraphs).where(eq(executionGraphs.id, id));
     return graph;
@@ -58,7 +69,6 @@ export class ExecutionRepository {
     return result;
   }
 
-  // Execution History
   async createHistory(history: NewExecutionHistory): Promise<ExecutionHistory> {
     const [result] = await this.db
       .insert(executionHistory)
@@ -73,6 +83,16 @@ export class ExecutionRepository {
       .from(executionHistory)
       .where(eq(executionHistory.executionId, executionId));
     return row?.total ?? 0;
+  }
+  
+  async findHistoriesByExecutionId(
+    executionId: number,
+  ): Promise<ExecutionHistory[]> {
+    return await this.db
+      .select()
+      .from(executionHistory)
+      .where(eq(executionHistory.executionId, executionId))
+      .orderBy(desc(executionHistory.iteration));
   }
 
   async findHistoryById(id: number): Promise<ExecutionHistory | undefined> {

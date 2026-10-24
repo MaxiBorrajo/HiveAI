@@ -38,6 +38,33 @@ export interface ModelFilters {
   capabilities?: string[];
 }
 
+export interface ToolSupport {
+  status: "supported" | "unsupported" | "unknown";
+  reason?: string;
+}
+
 export interface CurrentModels {
   model: string;
+  provider: ModelProvider;
+  keyId: string;
+  toolSupport?: ToolSupport;
+}
+
+export type ModelProvider = "ollama" | "anthropic" | "google";
+
+export interface ModelOption {
+  id: string;
+  ref: { provider: ModelProvider; model: string; keyId?: string };
+  label: string;
+  capabilities: string[];
+  toolSupport?: ToolSupport;
+}
+
+export interface ModelOptionGroup {
+  id: string;
+  label: string;
+  provider?: ModelProvider;
+  keyAlias?: string;
+  error?: string;
+  options: ModelOption[];
 }

@@ -25,7 +25,7 @@ export function buildStateSchema(
   const schema: Record<string, any> = {};
 
   for (const [key, def] of Object.entries(definitions)) {
-    const reducerFn = getReducerFunction(def.reducerStrategy);
+    const reducerFn = getReducerFunction(def.reducerStrategy, def.type);
 
     if (reducerFn) {
       schema[key] = {
@@ -62,8 +62,15 @@ function buildNodeRunnable(
   toolProvider?: ToolProvider,
 ): NodeExecutorFunction {
   if (node.type === "llm") {
-    return async (state: Record<string, unknown>) => {
-      return executeLlmNode(node.id, node.config, state, toolProvider);
+    return async (state: Record<string, unknown>, config?: Record<string, unknown>) => {
+      return executeLlmNode(
+        node.id,
+        node.config,
+        state,
+        toolProvider,
+        undefined,
+        { signal: config?.signal as AbortSignal | undefined },
+      );
     };
   }
 
@@ -126,11 +133,38 @@ function partitionEdges(abstraction: LangGraphAbstraction): {
 
   return { normalEdges, conditionalEdgesBySource, conditionNodesMap };
 }
+
+export const MAX_LOOP_BACKS = 3;
+
+export function findLoopBackEdgeIds(abstraction: LangGraphAbstraction): Set<string> {
+  const outgoing = new Map<string, string[]>();
+  for (const e of abstraction.edges) {
+    outgoing.set(e.source, [...(outgoing.get(e.source) ?? []), e.target]);
+  }
+  const reaches = (from: string, to: string): boolean => {
+    const seen = new Set<string>();
+    const stack = [from];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (id === to) return true;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      stack.push(...(outgoing.get(id) ?? []));
+    }
+    return false;
+  };
+  return new Set(
+    abstraction.edges.filter((e) => reaches(e.target, e.source)).map((e) => e.id),
+  );
+}
+
 function wireConditionalEdge(
   sourceId: string,
   edges: GraphEdge[],
   condNode: GraphNode | undefined,
+  loopBackIds: Set<string> = new Set(),
 ): (state: Record<string, unknown>) => string {
+  let loopBacks = 0;
   return (state: Record<string, unknown>): string => {
     if (condNode) {
       const cond = condNode.config?.condition as ConditionConfig | undefined;
@@ -138,13 +172,26 @@ function wireConditionalEdge(
       if (cond && cond.field) {
         const fieldValue = getFieldByPath(state, cond.field);
         isMatch = evaluateCondition(fieldValue, cond.operator, cond.value);
+        console.log(
+          `[Compiler] Condition '${sourceId}': ${cond.field}=${JSON.stringify(fieldValue)} ${cond.operator} ${JSON.stringify(cond.value)} -> ${isMatch}`,
+        );
       }
 
       const trueEdge = edges.find((e) => e.path === "true");
       const falseEdge = edges.find((e) => e.path === "false");
 
-      if (isMatch && trueEdge) return toTarget(trueEdge.target);
-      if (!isMatch && falseEdge) return toTarget(falseEdge.target);
+      const chosen = isMatch ? trueEdge : falseEdge;
+      if (chosen && loopBackIds.has(chosen.id)) {
+        const forward = edges.find((e) => e !== chosen && !loopBackIds.has(e.id));
+        if (loopBacks >= MAX_LOOP_BACKS && forward) {
+          console.warn(
+            `[Compiler] Loop from '${sourceId}' reached ${MAX_LOOP_BACKS} retries without passing; continuing forward with the latest result.`,
+          );
+          return toTarget(forward.target);
+        }
+        loopBacks++;
+      }
+      if (chosen) return toTarget(chosen.target);
 
       const fallback = trueEdge || falseEdge || edges[0];
       return fallback ? toTarget(fallback.target) : END;
@@ -191,6 +238,7 @@ export function compileGraph(
 
   const { normalEdges, conditionalEdgesBySource, conditionNodesMap } =
     partitionEdges(abstraction);
+  const loopBackIds = findLoopBackEdgeIds(abstraction);
 
   for (const edge of normalEdges) {
     const sourceId = toSource(edge.source);
@@ -204,7 +252,7 @@ export function compileGraph(
 
     workflow.addConditionalEdges(
       sourceId as any,
-      wireConditionalEdge(sourceId as string, edges, condNode),
+      wireConditionalEdge(sourceId as string, edges, condNode, loopBackIds),
     );
   }
 

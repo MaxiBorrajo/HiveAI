@@ -9,11 +9,6 @@ export interface EntityListItem {
 export interface EntityListCrud<T extends EntityListItem, TUpdateDto> {
   list: () => Promise<ResponseEntity<T[]>>;
   remove: (id: string) => Promise<unknown>;
-  // The server's update response doesn't need to be exactly T — e.g.
-  // ExecutionsContext's backend returns the full `Execution` entity (with a
-  // numeric `id`) while the list is typed as `ExecutionSummary` (string
-  // `id`). `mergeUpdate` only ever reads the fields it needs off it, so a
-  // structurally-compatible partial response is enough.
   update: (id: string, dto: TUpdateDto) => Promise<{ data?: Partial<T> }>;
 }
 
@@ -31,16 +26,6 @@ export interface EntityListState<T extends EntityListItem, TUpdateDto> {
   touch: (id: string) => void;
 }
 
-/**
- * Factory hook behind ChatsContext/ExecutionsContext: both providers manage
- * the exact same shape (list + active/new-item selection + CRUD against the
- * backend), differing only in the concrete item type, the update DTO, and
- * how a fetched/updated item merges an optimistic patch onto the item.
- * `mergeUpdate` lets each caller decide how the server's partial update
- * response (or a lack thereof) is applied to the locally cached item,
- * mirroring the "apply patch, or refetch if the server returned nothing"
- * behavior both contexts had inline.
- */
 export function useEntityListState<T extends EntityListItem, TUpdateDto>(
   crud: EntityListCrud<T, TUpdateDto>,
   mergeUpdate: (item: T, dto: TUpdateDto, serverItem: Partial<T> | undefined) => T,

@@ -21,6 +21,12 @@ export function createBaseStateSchema(): Record<string, StatePropertyDefinition>
       description: "Host operating system platform (e.g. linux, darwin, windows)",
       required: false,
     },
+    attachments: {
+      type: "array",
+      description:
+        "Files attached by the user when starting this run (images, PDFs, text). Read-only, provided by the system — do not set via inputMapping.",
+      required: false,
+    },
   };
 }
 

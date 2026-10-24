@@ -1,5 +1,6 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import type { ChatOllama } from "@langchain/ollama";
+import type { ModelSelection } from "../providers/model-selection.ts";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { buildLlmConfigSchema } from "./generation/llm-node-configurator.ts";
 import type z from "zod";
 import type { buildPluginConfigSchema } from "./generation/plugin-node-configurator.ts";
@@ -77,13 +78,16 @@ export interface GraphEdge {
 }
 
 export interface LlmConfig {
-  model?: string
+  model?: string;
+  provider?: string;
+  keyId?: string;
   systemPrompt?: string;
   plugins?: string[];
   pluginId?: string;
   structuredOutput?: StatePropertyDefinition;
   outputKey?: string;
   inputMapping?: Record<string, string>;
+  maxTokens?: number;
   [key: string]: unknown;
 }
 
@@ -140,6 +144,17 @@ export type IncrementalEvent =
       node: GraphNode;
       stateProperties?: Record<string, any>;
     }
+  | {
+      type: "waiting_for_user";
+      kind: "clarify" | "plan_review";
+      question: string;
+    }
+  | {
+      type: "user_answered";
+      kind: "clarify" | "plan_review";
+      question: string;
+      answer: string;
+    }
   | { type: "edge_added"; edge: GraphEdge }
   | { type: "node_deleted"; nodeId: string }
   | {
@@ -190,14 +205,14 @@ export interface PluginParameterInfo {
 
 export interface ConditionNodeConfiguratorContext {
   prompt: string;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   graphStateText: string;
 }
 
 export interface EndNodeConfiguratorContext {
   prompt: string;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   intermediateNodes: GraphNode[];
 }
@@ -209,16 +224,17 @@ export interface InvocableAgent {
 export interface InterpolationSelfCorrectionContext {
   graph: LangGraphAbstraction;
   availablePlugins: PluginInfo[];
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   nodeDescriptions: Map<string, string>;
 }
 
 export interface LlmNodeConfiguratorContext {
   prompt: string;
   modelName: string;
+  modelSelection?: ModelSelection;
   availablePlugins: PluginInfo[];
   pluginNames: Set<string>;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   intermediateNodes: GraphNode[];
   nodeDescriptions: Map<string, string>;
@@ -232,7 +248,7 @@ export interface PluginNodeConfiguratorContext {
   prompt: string;
   availablePlugins: PluginInfo[];
   pluginNames: Set<string>;
-  configLlm: ChatOllama;
+  configLlm: BaseChatModel;
   graph: LangGraphAbstraction;
   intermediateNodes: GraphNode[];
   nodeDescriptions: Map<string, string>;

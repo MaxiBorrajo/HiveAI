@@ -5,6 +5,7 @@ import type {
   SelectionTestCase,
   ExecutionTestCase,
   PluginParameter,
+  PluginConfigFieldSchema,
 } from "@/features/plugins/types";
 
 export interface BackendPlugin {
@@ -15,6 +16,7 @@ export interface BackendPlugin {
   executionTests?: ExecutionTestCase[];
   isExternal?: boolean;
   parameters?: PluginParameter[];
+  configFields?: PluginConfigFieldSchema[];
 }
 
 export function toPlugin(plugin: BackendPlugin): Plugin {
@@ -27,6 +29,7 @@ export function toPlugin(plugin: BackendPlugin): Plugin {
     executionTests: plugin.executionTests || [],
     isExternal: plugin.isExternal ?? false,
     parameters: plugin.parameters ?? [],
+    configFields: plugin.configFields,
   };
 }
 

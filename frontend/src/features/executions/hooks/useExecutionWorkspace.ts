@@ -3,6 +3,11 @@ import { useKeyedState } from "@/hooks/useKeyedState";
 import { getExecution } from "@/features/executions/api/getExecution";
 import { generateExecutionStream } from "@/features/executions/api/generateExecution";
 import { runExecutionStream } from "@/features/executions/api/runExecutionStream";
+import {
+  finishConfiguring,
+  newActivityEntry,
+  type ActivityEntry,
+} from "@/features/executions/lib/generationActivity";
 import type { LangGraphAbstraction, ExecutionResultData } from "@/features/executions/types";
 
 export interface ExecutionWorkspaceOptions {
@@ -14,15 +19,6 @@ export interface ExecutionWorkspaceOptions {
   onExecutionCreated: (id: string) => void;
 }
 
-/**
- * Owns all per-execution UI state that used to live as 10 parallel
- * `Record<string, T>` maps directly inside ExecutionsMain (isThinking,
- * isRunning, graph, activeNodeId, planningThought, logs, executionResult,
- * activeToolName — each keyed by execution id / new-execution token so
- * switching between executions doesn't lose in-flight state), plus the two
- * business-logic flows built on top of it: generating a graph (SSE) and
- * running an execution (SSE). ExecutionsMain is left to just render.
- */
 export function useExecutionWorkspace({
   key,
   activeExecutionId,
@@ -41,6 +37,7 @@ export function useExecutionWorkspace({
   const activeNodeId = useKeyedState<string | undefined>(key, undefined);
   const planningThought = useKeyedState<string | null>(key, null);
   const logs = useKeyedState<string[]>(key, []);
+  const activity = useKeyedState<ActivityEntry[]>(key, []);
   const executionResult = useKeyedState<ExecutionResultData | null>(key, null);
   const activeToolName = useKeyedState<string | null>(key, null);
 
@@ -54,6 +51,7 @@ export function useExecutionWorkspace({
       activeNodeId,
       planningThought,
       logs,
+      activity,
       executionResult,
       activeToolName,
     ].forEach((state) => state.moveKey(from, to));
@@ -83,7 +81,10 @@ export function useExecutionWorkspace({
 
   const generateAbortRef = useRef<AbortController | null>(null);
 
+  const runAbortRef = useRef<AbortController | null>(null);
+
   const handleStop = () => generateAbortRef.current?.abort();
+  const handleStopRun = () => runAbortRef.current?.abort();
 
   const handleGenerate = async (userPrompt: string) => {
     const controller = new AbortController();
@@ -94,6 +95,9 @@ export function useExecutionWorkspace({
     isThinking.set(true, currentKey);
     planningThought.set(null, currentKey);
     logs.set(["Pollinating flow: starting design..."], currentKey);
+    activity.set([], currentKey);
+    const note = (entry: Parameters<typeof newActivityEntry>[0]) =>
+      activity.set((prev) => [...prev, newActivityEntry(entry)], currentKey);
 
     if (!editing && !activeExecutionId && !selectedNodeId) {
       graph.set(null, currentKey);
@@ -120,6 +124,7 @@ export function useExecutionWorkspace({
           onPlanning: (thoughts) => {
             planningThought.set(thoughts, currentKey);
             logs.set((prev) => [...prev, ` ${thoughts}`], currentKey);
+            note({ kind: "planning", text: thoughts });
           },
           onNodeAdded: ({ node, edge, stateProperties }) => {
             planningThought.set(null, currentKey);
@@ -135,8 +140,19 @@ export function useExecutionWorkspace({
               };
             }, currentKey);
             logs.set((prev) => [...prev, `+ Built node: ${node.name} (${node.type})`], currentKey);
+            note({
+              kind: "built",
+              text: `Built ${node.name} (${node.type})`,
+              nodeId: node.id,
+            });
           },
-          onNodeConfiguring: ({ nodeName }) => {
+          onNodeConfiguring: ({ nodeId, nodeName }) => {
+            activeNodeId.set(nodeId, currentKey);
+            note({
+              kind: "configuring",
+              text: `Configuring ${nodeName}`,
+              nodeId,
+            });
             logs.set((prev) => [...prev, `⚙️ Configuring node: ${nodeName}...`], currentKey);
           },
           onNodeUpdated: ({ node, stateProperties }) => {
@@ -151,6 +167,10 @@ export function useExecutionWorkspace({
               };
             }, currentKey);
             logs.set((prev) => [...prev, `✨ Configured: ${node.name}`], currentKey);
+            activity.set(
+              (prev) => finishConfiguring(prev, node.id, node.name),
+              currentKey,
+            );
             setSelectedNodeId(null, activeExecutionId || newExecutionToken);
           },
           onNodeDeleted: ({ nodeId }) => {
@@ -163,6 +183,7 @@ export function useExecutionWorkspace({
               };
             }, currentKey);
             logs.set((prev) => [...prev, `- Removed node: ${nodeId}`], currentKey);
+            note({ kind: "removed", text: `Removed ${nodeId}`, nodeId });
           },
           onEdgeAdded: ({ edge }) => {
             graphState.set((prev) => {
@@ -170,16 +191,48 @@ export function useExecutionWorkspace({
               return { ...prev, edges: [...prev.edges, edge] };
             }, currentKey);
           },
+          onWaitingForUser: ({ kind, question }) => {
+            note({
+              kind: "waiting",
+              text:
+                kind === "plan_review"
+                  ? "Waiting for you to review the plan"
+                  : `Waiting for your answer: ${question}`,
+            });
+          },
+          onUserAnswered: ({ kind, question, answer }) => {
+            const text =
+              kind === "plan_review"
+                ? `Plan review → ${answer}`
+                : `${question} → ${answer}`;
+            activity.set((prev) => {
+              const index = prev.findLastIndex((e) => e.kind === "waiting");
+              if (index === -1) {
+                return [...prev, newActivityEntry({ kind: "answered", text })];
+              }
+              return prev.map((entry, i) =>
+                i === index ? { ...entry, kind: "answered" as const, text } : entry,
+              );
+            }, currentKey);
+          },
+          onValidationError: ({ attempt, violations }) => {
+            note({
+              kind: "correction",
+              text: `Fixing ${violations.length} issue${violations.length === 1 ? "" : "s"} (attempt ${attempt})`,
+            });
+          },
           onDone: (data) => {
             activeNodeId.set(undefined, currentKey);
             planningThought.set(null, currentKey);
             graphState.set(data.graph, currentKey);
+            note({ kind: "done", text: "Workflow ready" });
             logs.set((prev) => [...prev, "✨ Flow assembled successfully!"], currentKey);
             isThinking.set(false, currentKey);
           },
           onError: (message) => {
             planningThought.set(null, currentKey);
             logs.set((prev) => [...prev, `❌ Error: ${message}`], currentKey);
+            note({ kind: "error", text: message });
             isThinking.set(false, currentKey);
           },
         },
@@ -202,9 +255,12 @@ export function useExecutionWorkspace({
   const handleRun = async (
     inputs: Record<string, any>,
     onResult: (result: ExecutionResultData) => void,
+    attachmentIds: number[] = [],
   ) => {
     if (!activeExecutionId) return;
     const currentKey = activeExecutionId;
+    const controller = new AbortController();
+    runAbortRef.current = controller;
     isRunning.set(true, currentKey);
     logs.set((prev) => [...prev, "--- Starting Execution ---"], currentKey);
     const finalInputs = { ...inputs };
@@ -213,10 +269,11 @@ export function useExecutionWorkspace({
     });
 
     try {
-      await runExecutionStream(activeExecutionId, finalInputs, {
+      await runExecutionStream(activeExecutionId, finalInputs, attachmentIds, {
         onDone: (data) => {
           const resultData: ExecutionResultData = {
             iteration: data.iteration,
+            historyId: data.historyId,
             result: data.result,
             finalState: data.finalState,
             createdAt: Date.now(),
@@ -225,6 +282,12 @@ export function useExecutionWorkspace({
           onResult(resultData);
           logs.set(
             (prev) => [...prev, `✅ Execution completed (iteration #${data.iteration || 1})`],
+            currentKey,
+          );
+        },
+        onWarning: (messages) => {
+          logs.set(
+            (prev) => [...prev, ...messages.map((m) => `⚠️ ${m}`)],
             currentKey,
           );
         },
@@ -240,15 +303,29 @@ export function useExecutionWorkspace({
           activeToolName.set(toolName, currentKey);
           logs.set((prev) => [...prev, `🔧 [tool] ${toolName}`], currentKey);
         },
+        onToken: (nodeName, text) => {
+          const prefix = `💬 [${nodeName ?? "llm"}] `;
+          logs.set((prev) => {
+            const last = prev[prev.length - 1];
+            return last?.startsWith(prefix)
+              ? [...prev.slice(0, -1), last + text]
+              : [...prev, prefix + text];
+          }, currentKey);
+        },
         onToolEnd: (toolName) => {
           activeToolName.set(null, currentKey);
           logs.set((prev) => [...prev, `✓ [tool done] ${toolName || ""}`], currentKey);
         },
-      });
+      }, controller.signal);
     } catch (e: any) {
+      if (controller.signal.aborted) {
+        logs.set((prev) => [...prev, "⏹ Execution stopped."], currentKey);
+        return;
+      }
       logs.set((prev) => [...prev, `❌ Run error: ${e.message}`], currentKey);
       throw e;
     } finally {
+      if (runAbortRef.current === controller) runAbortRef.current = null;
       isRunning.set(false, currentKey);
       activeNodeId.set(undefined, currentKey);
       activeToolName.set(null, currentKey);
@@ -277,11 +354,13 @@ export function useExecutionWorkspace({
     activeNodeId: activeNodeId.value,
     planningThought: planningThought.value,
     logs: logs.value,
+    activity: activity.value,
     executionResult: executionResult.value,
     activeToolName: activeToolName.value,
     setExecutionResult: executionResult.set,
     handleGenerate,
     handleStop,
+    handleStopRun,
     handleRun,
   };
 }

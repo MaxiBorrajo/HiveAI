@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil } from "lucide-react";
+import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil, History, Square } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { LangGraphAbstraction } from "../types";
@@ -13,8 +13,10 @@ interface RunControlsBarProps {
   isRunning: boolean;
   hasRequiredInputs: boolean;
   onRun: () => void;
+  onStopRun: () => void;
   onOpenRunModal: () => void;
   onShowResult: () => void;
+  onShowHistory: () => void;
   onEdit: () => void;
 }
 
@@ -29,8 +31,10 @@ export function RunControlsBar({
   isRunning,
   hasRequiredInputs,
   onRun,
+  onStopRun,
   onOpenRunModal,
   onShowResult,
+  onShowHistory,
   onEdit,
 }: RunControlsBarProps) {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
@@ -65,6 +69,18 @@ export function RunControlsBar({
           )}
         </button>
 
+        {isRunning && (
+          <button
+            type="button"
+            onClick={onStopRun}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 active:bg-red-500/20 transition-all cursor-pointer"
+            title="Stop this execution"
+          >
+            <Square className="size-3.5 fill-current" />
+            <span>Stop</span>
+          </button>
+        )}
+
         {!hasRequiredInputs && !isRunning && (
           <button
             type="button"
@@ -86,6 +102,18 @@ export function RunControlsBar({
           >
             <CircleCheckBig className="size-3.5 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
             <span>Result</span>
+          </button>
+        )}
+
+        {graph && (
+          <button
+            type="button"
+            onClick={onShowHistory}
+            className={SEGMENT}
+            title="Past runs and what each one consumed"
+          >
+            <History className="size-3.5" />
+            <span>History</span>
           </button>
         )}
 
