@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { sendMessage, type LiveToolCall } from "../api/sendMessage.ts";
+import type { AttachmentDto } from "../api/attachments.ts";
 import { getChatMessages } from "../api/getChatMessages.ts";
 import { reportError } from "../../../lib/toastManager.ts";
 import { getErrorMessage } from "../../../lib/errors.ts";
@@ -65,6 +66,7 @@ function toMessage(stored: StoredMessage): Message {
     thinkingRuns: stored.metadata?.thinkingRuns,
     wasStopped: stored.metadata?.wasStopped,
     usage: stored.usage ?? null,
+    attachments: stored.attachments,
   };
 }
 
@@ -119,6 +121,7 @@ export function useChatSession() {
   async function send(
     content: string,
     onAccepted?: () => void,
+    attachments?: AttachmentDto[],
   ): Promise<boolean> {
     if (!content || thinkingState.value.isBusy) return false;
     if (!hasModel) return false;
@@ -148,6 +151,7 @@ export function useChatSession() {
       role: "user",
       content,
       timestamp: Date.now(),
+      attachments,
     });
     thinkingState.set(
       {
@@ -247,6 +251,7 @@ export function useChatSession() {
           },
         },
         abortController.signal,
+        attachments?.map((a) => a.id),
       );
     } catch (error) {
       if (abortController.signal.aborted) {

@@ -27,6 +27,7 @@ export type {
   UsedModel,
 } from "@/lib/usage";
 import type { MessageUsage } from "@/lib/usage";
+import type { AttachmentDto } from "./api/attachments.ts";
 
 export interface Message {
   id: string;
@@ -39,6 +40,7 @@ export interface Message {
   steps?: ChatStep[];
   thinkingRuns?: ThinkingRun[];
   usage?: MessageUsage | null;
+  attachments?: AttachmentDto[];
 }
 
 export interface StoredMessage {
@@ -54,6 +56,7 @@ export interface StoredMessage {
     wasStopped?: boolean;
   } | null;
   usage: MessageUsage | null;
+  attachments: AttachmentDto[];
 }
 
 export interface ChatSummary {

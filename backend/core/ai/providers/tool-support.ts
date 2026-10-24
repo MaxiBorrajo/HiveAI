@@ -33,3 +33,14 @@ export function ollamaToolSupport(capabilities: string[]): ToolSupport {
   }
   return toolsUnsupported("This model does not support tool calling.");
 }
+
+const VISION_SUPPORTED: ToolSupport = { status: "supported" };
+
+export function ollamaVisionSupport(capabilities: string[]): ToolSupport {
+  const caps = capabilities.map((c) => c.toLowerCase());
+  if (caps.length === 0) {
+    return toolsUnknown("Ollama did not report this model's capabilities.");
+  }
+  if (caps.includes("vision")) return VISION_SUPPORTED;
+  return toolsUnsupported("This model does not support image input.");
+}

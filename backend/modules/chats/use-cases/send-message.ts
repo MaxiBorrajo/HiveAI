@@ -19,6 +19,10 @@ import type { BeePlugin } from "../../../core/microkernel/bee-plugin.ts";
 import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
 import { loadChatUsage } from "../../usage/load-chat-usage.ts";
 import { ModelUsageRepository } from "../../../infrastructure/db/repositories/model-usage-repository.ts";
+import { AttachmentRepository } from "../../../infrastructure/db/repositories/attachment-repository.ts";
+import { buildAttachmentContent } from "../../../core/attachments/build-attachment-content.ts";
+import { normalizeModelRef } from "../../../core/ai/providers/types.ts";
+import { HumanMessage, type BaseMessage } from "@langchain/core/messages";
 
 const MAX_MESSAGE_LENGTH = 100_000;
 
@@ -26,7 +30,8 @@ async function persistUserMessage(
   db: AppDatabase,
   chatId: number,
   userText: string,
-) {
+  attachmentIds: number[],
+): Promise<number> {
   const chatRepo = new ChatRepository(db);
   const msgRepo = new MessageRepository(db);
 
@@ -38,7 +43,7 @@ async function persistUserMessage(
   await chatRepo.update(chat);
 
   const vector = await embedText(userText);
-  await msgRepo.create({
+  const messageId = await msgRepo.create({
     chatId: chat.id,
     role: "user",
     content: userText,
@@ -46,6 +51,15 @@ async function persistUserMessage(
     metadata: null,
     vector: JSON.stringify(vector),
   });
+
+  if (attachmentIds.length > 0) {
+    const attachmentRepo = new AttachmentRepository(db);
+    for (const id of attachmentIds) {
+      await attachmentRepo.linkToMessage(id, messageId);
+    }
+  }
+
+  return messageId;
 }
 
 async function persistAssistantMessage(
@@ -248,6 +262,7 @@ export async function sendMessage(
   model: string,
   req: Request,
   headers: Record<string, string>,
+  attachmentIds: number[] = [],
 ): Promise<Response> {
   return createSseResponse(headers, async (send) => {
     if (!userText.trim()) {
@@ -291,7 +306,7 @@ export async function sendMessage(
         .join(", ")}]`,
     );
 
-    await persistUserMessage(db, resolvedChatId, userText);
+    await persistUserMessage(db, resolvedChatId, userText, attachmentIds);
 
     send("thinking", {});
 
@@ -302,6 +317,44 @@ export async function sendMessage(
       resolvedChatId,
       userText,
     );
+
+    if (attachmentIds.length > 0) {
+      const config = hive.getConfig();
+      const modelRef = normalizeModelRef(model, {
+        provider: config.get("modelProvider"),
+        keyId: config.get("modelKeyId"),
+      });
+      let attachmentResult;
+      try {
+        attachmentResult = await buildAttachmentContent(
+          config.get("dataDir"),
+          new AttachmentRepository(db),
+          attachmentIds,
+          modelRef,
+        );
+      } catch (error) {
+        send("error", {
+          message:
+            error instanceof Error ? error.message : "Could not read an attachment.",
+        });
+        return;
+      }
+      for (const warning of attachmentResult.skipped) {
+        send("attachment_skipped", { message: warning });
+      }
+      if (attachmentResult.parts.length > 0) {
+        const lastIndex = contextMessages.length - 1;
+        const last = contextMessages[lastIndex];
+        if (last instanceof HumanMessage) {
+          contextMessages[lastIndex] = new HumanMessage({
+            content: [
+              { type: "text", text: userText },
+              ...attachmentResult.parts,
+            ] as unknown as BaseMessage["content"],
+          });
+        }
+      }
+    }
 
     const config = hive.getConfig();
     const modelProvider = config.get("modelProvider");

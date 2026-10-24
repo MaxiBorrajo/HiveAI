@@ -3,6 +3,7 @@ import { postSse } from "../../../lib/sse";
 export interface RunExecutionStreamHandlers {
   onDone?: (data: {
     iteration?: number;
+    historyId?: number;
     result: any;
     finalState?: Record<string, any>;
   }) => void;
@@ -11,18 +12,21 @@ export interface RunExecutionStreamHandlers {
   onNodeStart?: (nodeName: string) => void;
   onToolStart?: (toolName: string | null) => void;
   onToolEnd?: (toolName: string | null) => void;
+  onToken?: (nodeName: string | null, text: string) => void;
 }
 
 export async function runExecutionStream(
   executionId: string,
   input: Record<string, any>,
+  attachmentIds: number[],
   handlers: RunExecutionStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  await postSse(`/api/executions/${executionId}/run`, { input }, (eventName, data) => {
+  await postSse(`/api/executions/${executionId}/run`, { input, attachmentIds }, (eventName, data) => {
     if (eventName === "done" || data.result !== undefined) {
       handlers.onDone?.({
         iteration: data.iteration || 1,
+        historyId: data.historyId,
         result: data.result,
         finalState: data.finalState,
       });
@@ -53,6 +57,17 @@ export async function runExecutionStream(
       handlers.onToolStart?.(data.name || null);
     } else if (evtType === "on_tool_end") {
       handlers.onToolEnd?.(data.name || null);
+    } else if (evtType === "on_chat_model_stream") {
+      const content = data.data?.chunk?.kwargs?.content ?? data.data?.chunk?.content;
+      const text = Array.isArray(content)
+        ? content
+            .filter((b: { type?: string }) => b?.type === "text")
+            .map((b: { text?: string }) => b.text ?? "")
+            .join("")
+        : content;
+      if (typeof text === "string" && text) {
+        handlers.onToken?.(data.metadata?.langgraph_node || null, text);
+      }
     }
   }, signal);
 }

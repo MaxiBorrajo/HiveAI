@@ -219,6 +219,21 @@ export function LlmNodeForm({
         />
       </Field>
       <Field
+        label="Max output tokens"
+        hint="Responses stream, so long outputs are fine. Leave empty for the model default."
+      >
+        <TextInput
+          type="number"
+          min={1}
+          value={config.maxTokens ?? ""}
+          onChange={(e) =>
+            set({
+              maxTokens: e.target.value ? Number(e.target.value) : undefined,
+            })
+          }
+        />
+      </Field>
+      <Field
         label="Output variable"
         hint="State variable where the answer is stored."
       >
