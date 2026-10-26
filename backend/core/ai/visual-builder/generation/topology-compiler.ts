@@ -42,6 +42,7 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
   return z.object({
     thought: z
       .string()
+      .default("")
       .describe(
         "Explanation of the workflow architecture, steps, condition branches and loops",
       ),
@@ -76,6 +77,7 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
             ),
           description: z
             .string()
+            .default("")
             .describe("What this specific node does in the flow"),
           modified: z
             .boolean()

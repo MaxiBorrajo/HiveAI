@@ -54,6 +54,21 @@ export async function createChatModel(
   return model as ProviderChatModel;
 }
 
+function isOllamaCloudModel(model: string): boolean {
+  return /[:-]cloud$/.test(model);
+}
+
+// Ollama Cloud forwards num_predict as max_tokens and rejects the local "-1" (unlimited).
+export function withoutUnlimitedPredictForCloud(
+  model: string,
+  options: ChatModelOptions,
+): ChatModelOptions {
+  const { numPredict, ...rest } = options;
+  const unlimited = typeof numPredict === "number" && numPredict <= 0;
+  if (unlimited && isOllamaCloudModel(model)) return rest;
+  return options;
+}
+
 async function buildModel(
   ref: ModelRef,
   options: ChatModelOptions,
@@ -64,7 +79,10 @@ async function buildModel(
   }
 
   if (ref.provider === "ollama") {
-    return new ChatOllama({ ...options, model: ref.model });
+    return new ChatOllama({
+      ...withoutUnlimitedPredictForCloud(ref.model, options),
+      model: ref.model,
+    });
   }
 
   if (!isCloudProvider(ref.provider)) {

@@ -124,6 +124,17 @@ export function ExecutionsMain() {
     if (selectedEdgeId && ids.includes(selectedEdgeId)) setSelectedEdgeId(null);
   };
 
+  const handleFixWithAi = async () => {
+    const errors = editor.violations
+      .map((v) => `- ${v.nodeName !== "graph" ? `"${v.nodeName}": ` : ""}${v.reason}`)
+      .join("\n");
+    const prompt =
+      `The workflow failed validation with these errors. Fix them with the smallest possible change, keeping everything else as it is:\n${errors}`;
+    editor.closeSaveModal();
+    setSelectedNodeId(null);
+    await handleGenerate(prompt, { wholeGraph: true });
+  };
+
   const handleGenerateClick = async () => {
     if (!input.trim()) return;
     const userPrompt = input;
@@ -238,6 +249,7 @@ export function ExecutionsMain() {
         violations={editor.violations}
         errors={editor.saveErrors}
         onClose={editor.closeSaveModal}
+        onFixWithAi={handleFixWithAi}
         onSelectNode={setSelectedNodeId}
       />
 

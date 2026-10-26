@@ -120,7 +120,7 @@ export function normalizeSkeletonToGraph(
   for (const n of nodesToKeep) {
     const cleanId = makeUniqueNodeId(n.id, graph);
     idMap.set(n.id, cleanId);
-    nodeDescriptions.set(cleanId, n.description);
+    nodeDescriptions.set(cleanId, n.description || n.name);
     if (n.modified) modifiedIds.add(cleanId);
 
     const node = buildGraphNode(n, cleanId, availablePlugins);

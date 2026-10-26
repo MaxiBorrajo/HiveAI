@@ -86,7 +86,7 @@ export function useExecutionWorkspace({
   const handleStop = () => generateAbortRef.current?.abort();
   const handleStopRun = () => runAbortRef.current?.abort();
 
-  const handleGenerate = async (userPrompt: string) => {
+  const handleGenerate = async (userPrompt: string, options: { wholeGraph?: boolean } = {}) => {
     const controller = new AbortController();
     generateAbortRef.current = controller;
     let currentKey = key;
@@ -108,7 +108,7 @@ export function useExecutionWorkspace({
         {
           content: userPrompt,
           executionId: activeExecutionId ? Number(activeExecutionId) : undefined,
-          targetNodeId: editing ? (selectedNodeId ?? undefined) : undefined,
+          targetNodeId: editing && !options.wholeGraph ? (selectedNodeId ?? undefined) : undefined,
           ...(editing ? { currentGraph: draftGraph.value!, dryRun: true } : {}),
         },
         {
