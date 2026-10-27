@@ -1,4 +1,5 @@
 import { useModels } from "@/features/models/ModelsContext";
+import { useDownloads } from "@/features/models/DownloadsContext";
 import {
   buildProviderTree,
   canUse,
@@ -43,6 +44,7 @@ export function LlmNodeForm({
   plugins,
 }: NodeFormProps) {
   const { optionGroups } = useModels();
+  const { requestDownload } = useDownloads();
   const fullTree = buildProviderTree(optionGroups, { includeUnsupported: true });
   const tree = fullTree
     .map((e) => ({
@@ -203,8 +205,20 @@ export function LlmNodeForm({
         )}
         {!modelKnown && (
           <p className="mt-1 text-[11px] text-destructive">
-            This model or its API key no longer exists. The execution will not
-            start until you pick another one.
+            {provider === "ollama"
+              ? `The model '${config.model}' is not installed (it may have been deleted).`
+              : "This model or its API key no longer exists."}{" "}
+            The execution will not start until you pick another one
+            {provider === "ollama" ? " or download it again" : ""}.
+            {provider === "ollama" && (
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => requestDownload(config.model as string)}
+              >
+                Download again
+              </button>
+            )}
           </p>
         )}
       </Field>

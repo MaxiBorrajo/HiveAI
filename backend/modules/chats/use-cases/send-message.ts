@@ -9,6 +9,7 @@ import { ChatRepository } from "../../../infrastructure/db/repositories/chat-rep
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
 import { type ThinkingRun } from "../../../core/memory/types.ts";
 import { executionContextStorage } from "../../../core/microkernel/human-interaction.ts";
+import { beginModelActivity } from "../../../core/ai/activity-tracker.ts";
 import { watchModelLoad } from "../../../core/ollama/model-load.ts";
 import { resolveModelOptions } from "../../model-settings/lib/resolve-model-options.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
@@ -369,6 +370,9 @@ export async function sendMessage(
     };
     const usageGroupId = crypto.randomUUID();
     let streamResult: StreamResult;
+    const endModelActivity = modelProvider === "ollama"
+      ? beginModelActivity(model)
+      : () => {};
     const stopWatchingModelLoad =
       modelProvider === "ollama"
         ? await watchModelLoad(model, (phase) => send("status", { phase }))
@@ -414,6 +418,7 @@ export async function sendMessage(
       throw normalizeProviderError(error, modelProvider);
     } finally {
       stopWatchingModelLoad();
+      endModelActivity();
     }
     const { fullContent, steps, thinkingRuns } = streamResult;
 

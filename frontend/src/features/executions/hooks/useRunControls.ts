@@ -51,7 +51,7 @@ export function useRunControls({
     try {
       await runExecution(overrideInputs ?? runInputs, onResult, attachmentIds);
     } catch (e: any) {
-      reportError([`Stream error: ${getErrorMessage(e)}`]);
+      reportError([getErrorMessage(e)]);
     }
   };
 

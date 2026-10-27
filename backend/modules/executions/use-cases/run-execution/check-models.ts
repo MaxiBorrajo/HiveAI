@@ -18,6 +18,9 @@ export interface ModelProblem {
   nodeId: string;
   nodeName: string;
   reason: string;
+  /** set when a referenced local model is not installed, so the UI can offer to pick another or re-download */
+  code?: "model_unavailable";
+  model?: string;
 }
 
 export interface ModelCheckResult {
@@ -65,8 +68,8 @@ export async function checkGraphModels(
       provider?: string;
       keyId?: string;
     };
-    const fail = (reason: string) =>
-      problems.push({ nodeId: node.id, nodeName: node.name, reason });
+    const fail = (reason: string, extra: Partial<ModelProblem> = {}) =>
+      problems.push({ nodeId: node.id, nodeName: node.name, reason, ...extra });
 
     if (!model) {
       fail(`Node "${node.name}" has no model selected.`);
@@ -92,7 +95,10 @@ export async function checkGraphModels(
     } else {
       local ??= await deps.listLocalModels();
       if (local && !local.has(model)) {
-        fail(`Node "${node.name}" uses local model '${model}', which is not installed.`);
+        fail(`Node "${node.name}" uses local model '${model}', which is not installed. Choose another model or download it again.`, {
+          code: "model_unavailable",
+          model,
+        });
         continue;
       }
     }

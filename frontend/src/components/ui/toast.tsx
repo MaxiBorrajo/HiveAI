@@ -43,7 +43,12 @@ function ToastList() {
 
   return toasts.map((toast) => (
     <ToastRoot key={toast.id} toast={toast}>
-      <div className="flex flex-1 items-start gap-3">
+      <div
+        className={cn(
+          "flex flex-1 gap-3",
+          toast.description ? "items-start" : "items-center",
+        )}
+      >
         {toastIconByType[toast.type ?? "info"] ?? toastIconByType.info}
         <div className="flex-1 min-w-0">
           {toast.title && <ToastTitle>{toast.title}</ToastTitle>}

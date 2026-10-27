@@ -15,6 +15,7 @@ import { ServerOptimizationDialog } from "@/features/model-settings/components/S
 import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
 import { ModelsProvider } from "@/features/models/ModelsContext";
+import { DownloadsProvider } from "@/features/models/DownloadsContext";
 import { ChatsProvider, useChats } from "@/features/chats/ChatsContext";
 import {
   ExecutionsProvider,
@@ -176,13 +177,15 @@ function App() {
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
       <ToastProvider toastManager={toastManager}>
         <ModelsProvider>
-          <ChatsProvider>
-            <ExecutionsProvider>
-              <DraftEditorProvider>
-                <AppContent />
-              </DraftEditorProvider>
-            </ExecutionsProvider>
-          </ChatsProvider>
+          <DownloadsProvider>
+            <ChatsProvider>
+              <ExecutionsProvider>
+                <DraftEditorProvider>
+                  <AppContent />
+                </DraftEditorProvider>
+              </ExecutionsProvider>
+            </ChatsProvider>
+          </DownloadsProvider>
         </ModelsProvider>
 
         <ToastPortal>

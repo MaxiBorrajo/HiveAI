@@ -1,3 +1,4 @@
+import { beginModelActivity } from "../../../../core/ai/activity-tracker.ts";
 import { createSseResponse, type SseSend } from "../../../../core/api/sse.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
@@ -269,8 +270,17 @@ export async function runExecution(
     );
     const nodes = await snapshotNodes(abstraction, findKeyAlias);
 
-    return createSseResponse(headers, (send) =>
-      executionContextStorage.run({ autoApprove }, () =>
+    const localModels = new Set(
+      abstraction.nodes
+        .filter((n) => n.type === "llm" && (n.config?.provider ?? "ollama") === "ollama")
+        .map((n) => n.config?.model as string | undefined)
+        .filter((m): m is string => !!m),
+    );
+
+    return createSseResponse(headers, async (send) => {
+      const endActivity = [...localModels].map(beginModelActivity);
+      try {
+        await executionContextStorage.run({ autoApprove }, () =>
         withUsageContext(
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {
@@ -329,8 +339,11 @@ export async function runExecution(
               finalState,
             });
           },
-        ),
-      ));
+        ));
+      } finally {
+        endActivity.forEach((end) => end());
+      }
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return ResponseBuilder.error(
