@@ -1,4 +1,4 @@
-import { Database, Loader2, Save, X } from "lucide-react";
+import { Database, LayoutGrid, Loader2, Save, Undo2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EditModeBarProps {
@@ -7,6 +7,9 @@ interface EditModeBarProps {
   disabled?: boolean;
   isStateOpen: boolean;
   onToggleState: () => void;
+  canUndoArrange: boolean;
+  onArrange: () => void;
+  onUndoArrange: () => void;
   onSave: () => void;
   onDiscard: () => void;
 }
@@ -17,6 +20,9 @@ export function EditModeBar({
   disabled,
   isStateOpen,
   onToggleState,
+  canUndoArrange,
+  onArrange,
+  onUndoArrange,
   onSave,
   onDiscard,
 }: EditModeBarProps) {
@@ -38,6 +44,28 @@ export function EditModeBar({
         <Database className="size-3.5" />
         State
       </button>
+      <button
+        type="button"
+        onClick={onArrange}
+        disabled={disabled || isSaving}
+        className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        title="Arrange the nodes following the flow direction"
+      >
+        <LayoutGrid className="size-3.5" />
+        Arrange
+      </button>
+      {canUndoArrange && (
+        <button
+          type="button"
+          onClick={onUndoArrange}
+          disabled={disabled || isSaving}
+          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          title="Restore the previous node positions"
+        >
+          <Undo2 className="size-3.5" />
+          Undo
+        </button>
+      )}
       <button
         type="button"
         onClick={onSave}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Connection } from "@xyflow/react";
+import { arrangeGraph, hasOverlaps } from "../visual-builder/graphMapper";
 import { saveExecutionGraph } from "../api/saveExecutionGraph";
 import {
   addNode,
@@ -58,6 +59,8 @@ export function useGraphEditor({
     [violations],
   );
 
+  const [previousLayout, setPreviousLayout] = useState<Map<string, GraphNode["uiPosition"]> | null>(null);
+
   const clearViolations = () => {
     setViolations([]);
     setSaveErrors([]);
@@ -70,14 +73,16 @@ export function useGraphEditor({
 
   const startEditing = () => {
     if (!graph) return;
-    setDraftGraph(graph);
+    setDraftGraph(graph.nodes.length > 0 && hasOverlaps(graph) ? arrangeGraph(graph) : graph);
     clearViolations();
+    setPreviousLayout(null);
     setIsEditing(true);
   };
 
   const discard = () => {
     setDraftGraph(graph);
     clearViolations();
+    setPreviousLayout(null);
     setIsEditing(false);
   };
 
@@ -104,6 +109,27 @@ export function useGraphEditor({
   const deleteNodes = (ids: string[]) => mutate((g) => removeNodes(g, ids));
   const deleteEdges = (ids: string[]) => mutate((g) => removeEdges(g, ids));
 
+  const arrange = () => {
+    if (!draftGraph || draftGraph.nodes.length === 0) return;
+    setPreviousLayout(new Map(draftGraph.nodes.map((n) => [n.id, n.uiPosition])));
+    mutate(arrangeGraph);
+  };
+
+  const undoArrange = () => {
+    if (!previousLayout) return;
+    const saved = previousLayout;
+    setPreviousLayout(null);
+    mutate((g) => ({
+      ...g,
+      nodes: g.nodes.map((n) => {
+        if (!saved.has(n.id)) return n;
+        const { uiPosition: _current, ...rest } = n;
+        const uiPosition = saved.get(n.id);
+        return uiPosition ? { ...rest, uiPosition } : rest;
+      }),
+    }));
+  };
+
   const save = async (): Promise<boolean> => {
     if (!executionId || !draftGraph) return false;
     clearViolations();
@@ -119,6 +145,7 @@ export function useGraphEditor({
       setGraph(result.graph);
       setDraftGraph(result.graph);
       setIsEditing(false);
+      setPreviousLayout(null);
       setSaveStatus("idle");
       return true;
     } catch (error) {
@@ -146,6 +173,9 @@ export function useGraphEditor({
     editNode,
     deleteNodes,
     deleteEdges,
+    arrange,
+    undoArrange,
+    canUndoArrange: previousLayout !== null,
     save,
     closeSaveModal,
   };

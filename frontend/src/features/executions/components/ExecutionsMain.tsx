@@ -181,6 +181,9 @@ export function ExecutionsMain() {
                 disabled={isThinking}
                 isStateOpen={isStateOpen}
                 onToggleState={() => setIsStateOpen((open) => !open)}
+                canUndoArrange={editor.canUndoArrange}
+                onArrange={editor.arrange}
+                onUndoArrange={editor.undoArrange}
                 onSave={editor.save}
                 onDiscard={handleDiscard}
               />
