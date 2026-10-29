@@ -56,9 +56,14 @@ export function buildWorkflowSkeletonSchema(availablePlugins: PluginInfo[]) {
             ),
           name: z
             .string()
+            .default("")
             .describe(
               "Clear, concise title (e.g. 'Search News', 'Analyze Metrics', 'Is Anomaly Detected?'). DO NOT name 'Start' or 'End'.",
             ),
+          label: z
+            .string()
+            .optional()
+            .describe("Alias of 'name'; prefer 'name'."),
           type: z
             .enum(["plugin", "llm", "condition"])
             .describe(
@@ -264,6 +269,8 @@ export async function runTopologyCompilerPhase(
     agent: compilerAgent,
     messages,
     onSuccess: (skeleton) => {
+      // Some models return "label" instead of "name"; fall back to it (or the id).
+      for (const n of skeleton.nodes) n.name = n.name || n.label || n.id;
       console.log(
         `[Visual Builder - Generator] Architecture designed: ${skeleton.nodes.length} nodes, ${skeleton.edges.length} edges`,
       );

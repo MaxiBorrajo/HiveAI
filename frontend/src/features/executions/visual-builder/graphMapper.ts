@@ -1,7 +1,9 @@
 import Dagre from "@dagrejs/dagre";
-import { MarkerType, Position } from "@xyflow/react";
+import { MarkerType } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 import type { GraphEdge, GraphNode, LangGraphAbstraction } from "../types";
+import { DEFAULT_DIRECTION, inferDirection } from "./layoutDirection";
+import type { LayoutDirection } from "./layoutDirection";
 
 export const GHOST_NODE_ID = "__ghost_node__";
 
@@ -33,12 +35,17 @@ function getNodeSize(node: Node) {
   };
 }
 
-export function getLayoutedElements(nodes: Node[], edges: Edge[], ignoreManual = false) {
+export function getLayoutedElements(
+  nodes: Node[],
+  edges: Edge[],
+  ignoreManual = false,
+  direction: LayoutDirection = DEFAULT_DIRECTION,
+) {
   if (nodes.length === 0) return { nodes: [], edges: [] };
 
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({
-    rankdir: "LR",
+    rankdir: direction,
     align: "UL",
     nodesep: 90,
     ranksep: 120,
@@ -73,10 +80,10 @@ export function getLayoutedElements(nodes: Node[], edges: Edge[], ignoreManual =
 
 const NO_VIEW: GraphViewState = {};
 
-function toFlow(graph: Pick<LangGraphAbstraction, "nodes" | "edges">) {
+function toFlow(graph: Pick<LangGraphAbstraction, "nodes" | "edges">, view: GraphViewState = NO_VIEW) {
   return {
-    nodes: graph.nodes.map((n) => toReactFlowNode(n, NO_VIEW)),
-    edges: graph.edges.map((e) => toReactFlowEdge(e, graph.nodes, NO_VIEW)),
+    nodes: graph.nodes.map((n) => toReactFlowNode(n, view)),
+    edges: graph.edges.map((e) => toReactFlowEdge(e, graph.nodes, view)),
   };
 }
 
@@ -97,9 +104,12 @@ export function hasOverlaps(graph: Pick<LangGraphAbstraction, "nodes">): boolean
 }
 
 /** Lays out every node following the flow direction. Only touches uiPosition. */
-export function arrangeGraph<T extends Pick<LangGraphAbstraction, "nodes" | "edges">>(graph: T): T {
+export function arrangeGraph<T extends Pick<LangGraphAbstraction, "nodes" | "edges">>(
+  graph: T,
+  direction: LayoutDirection = DEFAULT_DIRECTION,
+): T {
   const { nodes, edges } = toFlow(graph);
-  const laid = getLayoutedElements(nodes, edges, true).nodes;
+  const laid = getLayoutedElements(nodes, edges, true, direction).nodes;
   const positions = new Map(
     laid.map((n) => [n.id, { x: Math.round(n.position.x), y: Math.round(n.position.y) }]),
   );
@@ -119,6 +129,7 @@ export interface GraphViewState {
   editable?: boolean;
   errorNodeIds?: ReadonlySet<string>;
   errorEdgeIds?: ReadonlySet<string>;
+  direction?: LayoutDirection;
 }
 
 function toReactFlowNode(n: GraphNode, view: GraphViewState): Node {
@@ -135,6 +146,7 @@ function toReactFlowNode(n: GraphNode, view: GraphViewState): Node {
     isSelected,
     hasError,
     manualPosition: !!n.uiPosition,
+    direction: view.direction,
   };
   const style = { zIndex: isSelected || isUpdating || isExecuting ? 10 : 1 };
 
@@ -214,6 +226,8 @@ export function buildFlowElements(
 ) {
   const currentNodes = graph?.nodes || [];
   const currentEdges = graph?.edges || [];
+  const direction = view.direction ?? inferDirection(graph);
+  view = { ...view, direction };
 
   const rfNodes = currentNodes.map((n) => toReactFlowNode(n, view));
   const rfEdges = currentEdges.map((e) => toReactFlowEdge(e, currentNodes, view));
@@ -224,9 +238,7 @@ export function buildFlowElements(
       id: GHOST_NODE_ID,
       type: "ghost",
       position: { x: 0, y: 0 },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
-      data: { label: view.planningThought || undefined },
+      data: { label: view.planningThought || undefined, direction },
     });
 
     const lastNode = [...currentNodes].reverse().find((n) => n.type !== "end");
@@ -250,5 +262,5 @@ export function buildFlowElements(
   }
 
   const ignoreManual = !view.editable && hasOverlaps({ nodes: currentNodes });
-  return getLayoutedElements(rfNodes, rfEdges, ignoreManual);
+  return getLayoutedElements(rfNodes, rfEdges, ignoreManual, direction);
 }

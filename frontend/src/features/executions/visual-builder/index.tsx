@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useStore,
   ReactFlow,
   Controls,
   Background,
@@ -16,6 +17,8 @@ import { GhostNode } from "./GhostNode";
 import { ConditionNode } from "./ConditionNode";
 import { StandardNode } from "./StandardNode";
 import { GHOST_NODE_ID, buildFlowElements } from "./graphMapper";
+import { inferDirection, isVertical } from "./layoutDirection";
+import type { LayoutDirection } from "./layoutDirection";
 
 export const NODE_DRAG_MIME = "application/x-hiveai-node";
 
@@ -30,6 +33,8 @@ interface VisualBuilderProps {
   selectedEdgeId?: string | null;
   onEdgeSelect?: (edgeId: string | null) => void;
   editable?: boolean;
+  /** Changes whenever the view must re-fit the graph (after Arrange or Undo). */
+  fitToken?: number;
   errorNodeIds?: ReadonlySet<string>;
   errorEdgeIds?: ReadonlySet<string>;
   onConnectNodes?: (connection: Connection) => void;
@@ -51,6 +56,7 @@ export function VisualBuilder({
   selectedEdgeId,
   onEdgeSelect,
   editable,
+  fitToken,
   errorNodeIds,
   errorEdgeIds,
   onConnectNodes,
@@ -65,6 +71,8 @@ export function VisualBuilder({
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
+
+  const direction = useMemo(() => inferDirection(graph), [graph]);
 
   const nodeTypes = useMemo(
     () => ({
@@ -183,6 +191,8 @@ export function VisualBuilder({
           nodesCount={nodes.length}
           isGenerating={isGenerating}
           disabled={!!editable}
+          direction={direction}
+          fitToken={fitToken}
         />
         <Controls position="bottom-left" />
         <Background gap={40} size={1} bgColor="var(--background)" />
@@ -191,25 +201,68 @@ export function VisualBuilder({
   );
 }
 
+const VERTICAL_FIT_PADDING = 40;
+
+/**
+ * Horizontal graphs are fitted whole. Vertical ones are fitted by width only and
+ * start at the top, so they read like a page that scrolls down.
+ */
+function useFitGraph(direction: LayoutDirection) {
+  const { fitView, getNodes, getNodesBounds, setViewport } = useReactFlow();
+  const viewWidth = useStore((s) => s.width);
+  const viewHeight = useStore((s) => s.height);
+
+  return useCallback(() => {
+    const nodes = getNodes();
+    if (nodes.length === 0) return;
+    if (!isVertical(direction)) {
+      fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
+      return;
+    }
+    const bounds = getNodesBounds(nodes);
+    const zoom = Math.min(1, viewWidth / (bounds.width + VERTICAL_FIT_PADDING * 2));
+    setViewport(
+      {
+        zoom,
+        x: (viewWidth - bounds.width * zoom) / 2 - bounds.x * zoom,
+        y: direction === "BT"
+          ? viewHeight - VERTICAL_FIT_PADDING - (bounds.y + bounds.height) * zoom
+          : VERTICAL_FIT_PADDING - bounds.y * zoom,
+      },
+      { duration: 400 },
+    );
+  }, [direction, fitView, getNodes, getNodesBounds, setViewport, viewHeight, viewWidth]);
+}
+
 function AutoFitOnUpdate({
   nodesCount,
   isGenerating,
   disabled,
+  direction,
+  fitToken,
 }: {
   nodesCount: number;
   isGenerating?: boolean;
   disabled?: boolean;
+  direction: LayoutDirection;
+  fitToken?: number;
 }) {
-  const { fitView } = useReactFlow();
+  const fit = useFitGraph(direction);
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
 
   useEffect(() => {
     if (nodesCount > 0 && !disabled) {
-      const timer = setTimeout(() => {
-        fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
-      }, 60);
+      const timer = setTimeout(() => fitRef.current(), 60);
       return () => clearTimeout(timer);
     }
-  }, [nodesCount, isGenerating, disabled, fitView]);
+  }, [nodesCount, isGenerating, disabled]);
+
+  useEffect(() => {
+    if (!fitToken) return;
+    const timer = setTimeout(() => fitRef.current(), 60);
+    return () => clearTimeout(timer);
+  }, [fitToken]);
 
   return null;
 }

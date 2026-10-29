@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle } from "@xyflow/react";
+import { handlePositions } from "./layoutDirection";
+import type { LayoutDirection } from "./layoutDirection";
 
 const BEE_PHRASES = [
   "Pollinating ideas...",
@@ -13,7 +15,7 @@ const BEE_PHRASES = [
   "Mapping the hive...",
 ];
 
-export function GhostNode({ data }: { data?: { label?: string } }) {
+export function GhostNode({ data }: { data?: { label?: string; direction?: LayoutDirection } }) {
   const [phraseIndex, setPhraseIndex] = useState(0);
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export function GhostNode({ data }: { data?: { label?: string } }) {
     <div className="relative group">
       <Handle
         type="target"
-        position={Position.Left}
+        position={handlePositions(data?.direction).target}
         style={{ backgroundColor: "var(--primary)" }}
         className="!w-2.5 !h-2.5 !bg-primary border-none"
       />
@@ -57,7 +59,7 @@ export function GhostNode({ data }: { data?: { label?: string } }) {
 
       <Handle
         type="source"
-        position={Position.Right}
+        position={handlePositions(data?.direction).source}
         style={{ backgroundColor: "var(--primary)" }}
         className="!w-2.5 !h-2.5 !bg-primary border-none"
       />

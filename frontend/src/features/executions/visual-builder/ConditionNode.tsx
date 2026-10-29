@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Handle, Position } from "@xyflow/react";
+import { DEFAULT_DIRECTION, handlePositions, isVertical } from "./layoutDirection";
+import type { LayoutDirection } from "./layoutDirection";
 import { GitFork } from "lucide-react";
 
 export interface ConditionNodeData {
@@ -17,6 +19,7 @@ export interface ConditionNodeData {
   isExecuting?: boolean;
   isSelected?: boolean;
   hasError?: boolean;
+  direction?: LayoutDirection;
 }
 
 function formatRule(condition?: {
@@ -63,6 +66,8 @@ export function ConditionNode({
   selected?: boolean;
 }) {
   const isSelected = selected || data.isSelected;
+  const forward = handlePositions(data.direction).source;
+  const vertical = isVertical(data.direction ?? DEFAULT_DIRECTION);
   const isUpdating = data.isUpdating;
   const isExecuting = data.isExecuting;
 
@@ -110,7 +115,7 @@ export function ConditionNode({
 
       <Handle
         type="target"
-        position={Position.Left}
+        position={handlePositions(data.direction).target}
         id="target"
         className="!w-3 !h-3 !bg-muted-foreground hover:!bg-primary !border-2 !border-card transition-colors shadow-sm z-20"
       />
@@ -190,13 +195,15 @@ export function ConditionNode({
       </div>
       <Handle
         type="source"
-        position={Position.Right}
+        position={forward}
+        style={vertical ? { left: "30%" } : undefined}
         id="true"
         className="w-3! h-3! bg-emerald-500! hover:bg-emerald-400! border-2! border-card! transition-colors shadow-sm z-20"
       />
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={vertical ? forward : Position.Bottom}
+        style={vertical ? { left: "70%" } : undefined}
         id="false"
         className="w-3! h-3! bg-red-500! hover:bg-red-400! border-2! border-card! transition-colors shadow-sm z-20"
       />

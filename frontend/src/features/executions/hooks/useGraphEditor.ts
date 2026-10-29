@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Connection } from "@xyflow/react";
 import { arrangeGraph, hasOverlaps } from "../visual-builder/graphMapper";
+import type { LayoutDirection } from "../visual-builder/layoutDirection";
 import { saveExecutionGraph } from "../api/saveExecutionGraph";
 import {
   addNode,
@@ -60,6 +61,7 @@ export function useGraphEditor({
   );
 
   const [previousLayout, setPreviousLayout] = useState<Map<string, GraphNode["uiPosition"]> | null>(null);
+  const [arrangeVersion, setArrangeVersion] = useState(0);
 
   const clearViolations = () => {
     setViolations([]);
@@ -109,16 +111,19 @@ export function useGraphEditor({
   const deleteNodes = (ids: string[]) => mutate((g) => removeNodes(g, ids));
   const deleteEdges = (ids: string[]) => mutate((g) => removeEdges(g, ids));
 
-  const arrange = () => {
+  const arrange = (direction: LayoutDirection) => {
     if (!draftGraph || draftGraph.nodes.length === 0) return;
-    setPreviousLayout(new Map(draftGraph.nodes.map((n) => [n.id, n.uiPosition])));
-    mutate(arrangeGraph);
+    // Keep the layout from before the first arrange, so Undo goes back to it even after several arranges.
+    setPreviousLayout((prev) => prev ?? new Map(draftGraph.nodes.map((n) => [n.id, n.uiPosition])));
+    setArrangeVersion((v) => v + 1);
+    mutate((g) => arrangeGraph(g, direction));
   };
 
   const undoArrange = () => {
     if (!previousLayout) return;
     const saved = previousLayout;
     setPreviousLayout(null);
+    setArrangeVersion((v) => v + 1);
     mutate((g) => ({
       ...g,
       nodes: g.nodes.map((n) => {
@@ -176,6 +181,7 @@ export function useGraphEditor({
     arrange,
     undoArrange,
     canUndoArrange: previousLayout !== null,
+    arrangeVersion,
     save,
     closeSaveModal,
   };

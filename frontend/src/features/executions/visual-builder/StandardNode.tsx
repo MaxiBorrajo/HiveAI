@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle } from "@xyflow/react";
+import { handlePositions } from "./layoutDirection";
+import type { LayoutDirection } from "./layoutDirection";
 import {
   Bot,
   Brain,
@@ -29,6 +31,7 @@ export interface StandardNodeData {
   isSelected?: boolean;
   hasError?: boolean;
   activeTool?: string | null;
+  direction?: LayoutDirection;
 }
 
 function getToolIcon(toolName: string) {
@@ -138,7 +141,7 @@ export function StandardNode({
       {data.type !== "start" && (
         <Handle
           type="target"
-          position={Position.Left}
+          position={handlePositions(data.direction).target}
           className="w-3! h-3! bg-muted-foreground! hover:bg-primary! border-2! border-card! transition-colors shadow-sm"
         />
       )}
@@ -259,7 +262,7 @@ export function StandardNode({
       {data.type !== "end" && (
         <Handle
           type="source"
-          position={Position.Right}
+          position={handlePositions(data.direction).source}
           className="w-3! h-3! bg-muted-foreground! hover:bg-primary! border-2! border-card! transition-colors shadow-sm"
         />
       )}

@@ -149,6 +149,7 @@ export function ExecutionsMain() {
           <VisualBuilder
             graph={displayGraph}
             editable={isEditing}
+            fitToken={editor.arrangeVersion}
             errorNodeIds={editor.errorNodeIds}
             errorEdgeIds={editor.errorEdgeIds}
             onConnectNodes={editor.connect}
