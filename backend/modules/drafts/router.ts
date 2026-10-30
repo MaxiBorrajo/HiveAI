@@ -8,6 +8,8 @@ import { handleValidateDraft } from "./use-cases/validate-draft.ts";
 import { handleImportDraft } from "./use-cases/import-draft.ts";
 import { handleRemoveDraft } from "./use-cases/remove-draft.ts";
 import { handleExportDraft } from "./use-cases/export-draft.ts";
+import { handleChatEditDraft } from "./use-cases/chat-edit-draft.ts";
+import { requireModelsConfigured } from "../../core/api/guards.ts";
 
 export const draftsRouter = new Hono<{
   Variables: { hive: HiveMicrokernel };
@@ -37,6 +39,22 @@ draftsRouter.put("/:name/files", (c) =>
 draftsRouter.post("/:name/validate", (c) =>
   handleValidateDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),
 );
+
+draftsRouter.post("/:name/chat", async (c) => {
+  const hive = c.get("hive");
+  const guardError = requireModelsConfigured(hive, JSON_HEADERS);
+  if (guardError) return guardError;
+
+  const body = await c.req.json().catch(() => ({}));
+  const model = hive.getConfig().get("model");
+  return handleChatEditDraft(
+    hive,
+    c.req.param("name"),
+    model,
+    body.content,
+    JSON_HEADERS,
+  );
+});
 
 draftsRouter.post("/:name/import", (c) =>
   handleImportDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),

@@ -19,6 +19,12 @@ import {
   type DraftFile,
   type DraftValidationResult,
 } from "@/features/drafts/api/drafts";
+import { chatEditDraftStream } from "@/features/drafts/api/chatEditDraft";
+import { DraftChatPanel } from "@/features/drafts/components/DraftChatPanel";
+import {
+  newActivityEntry,
+  type ActivityEntry,
+} from "@/features/drafts/lib/draftChatActivity";
 
 const ZOD_TYPES_STUB = `
 declare module "zod" {
@@ -80,6 +86,11 @@ export function DraftEditorPage({
   const justSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+
+  const [chatInput, setChatInput] = useState("");
+  const [isChatThinking, setIsChatThinking] = useState(false);
+  const [chatActivity, setChatActivity] = useState<ActivityEntry[]>([]);
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setValidation(null);
@@ -194,6 +205,67 @@ export function DraftEditorPage({
     }
   }
 
+  async function handleChatSend() {
+    if (!chatInput.trim() || isChatThinking) return;
+    const prompt = chatInput;
+    setChatInput("");
+    setIsChatThinking(true);
+    setChatActivity([]);
+
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+    const note = (entry: Parameters<typeof newActivityEntry>[0]) =>
+      setChatActivity((prev) => [...prev, newActivityEntry(entry)]);
+
+    try {
+      await chatEditDraftStream(
+        draftName,
+        prompt,
+        {
+          onThinking: (message) => note({ kind: "thinking", text: message }),
+          onWriting: (sourceCode, summary) => {
+            note({ kind: "thinking", text: summary ?? "Writing index.ts..." });
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.name === "index.ts" ? { ...f, content: sourceCode } : f,
+              ),
+            );
+            setActiveFile("index.ts");
+          },
+          onValidating: () => note({ kind: "validating", text: "Validating draft..." }),
+          onValidationError: ({ attempt, issues }) =>
+            note({
+              kind: "correction",
+              text: `Fixing ${issues.length} issue${issues.length === 1 ? "" : "s"} (attempt ${attempt}): ${issues.join("; ")}`,
+            }),
+          onDone: async ({ summary }) => {
+            note({ kind: "done", text: summary ?? "Plugin draft ready" });
+            const loaded = await getDraftFiles(draftName);
+            setFiles(loaded);
+            setActiveFile("index.ts");
+            const result = await validateDraft(draftName);
+            setValidation(result);
+          },
+          onError: (message) => note({ kind: "error", text: message }),
+        },
+        controller.signal,
+      );
+    } catch (e: any) {
+      if (controller.signal.aborted) {
+        note({ kind: "error", text: "Generation stopped." });
+      } else {
+        note({ kind: "error", text: `Streaming error: ${e.message}` });
+      }
+    } finally {
+      if (chatAbortRef.current === controller) chatAbortRef.current = null;
+      setIsChatThinking(false);
+    }
+  }
+
+  function handleChatStop() {
+    chatAbortRef.current?.abort();
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <div className="flex items-center justify-between gap-4 border-b border-border p-4">
@@ -247,24 +319,38 @@ export function DraftEditorPage({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0">
-        {current && (
-          <Editor
-            key={current.name}
-            path={`file:///${current.name}`}
-            language="typescript"
-            value={current.content}
-            onChange={activeFile === "index.ts" ? handleChange : undefined}
-            beforeMount={handleBeforeMount}
-            options={{
-              readOnly: activeFile !== "index.ts",
-              minimap: { enabled: false },
-              fontSize: 13,
-              automaticLayout: true,
-            }}
-            theme="vs-dark"
+      <div className="flex flex-1 min-h-0">
+        <div className="flex w-full max-w-sm min-h-0 flex-col overflow-y-auto border-r border-border">
+          <DraftChatPanel
+            input={chatInput}
+            setInput={setChatInput}
+            isThinking={isChatThinking}
+            isEmpty={chatActivity.length === 0}
+            activity={chatActivity}
+            onSend={handleChatSend}
+            onStop={handleChatStop}
           />
-        )}
+        </div>
+
+        <div className="flex-1 min-h-0">
+          {current && (
+            <Editor
+              key={current.name}
+              path={`file:///${current.name}`}
+              language="typescript"
+              value={current.content}
+              onChange={activeFile === "index.ts" ? handleChange : undefined}
+              beforeMount={handleBeforeMount}
+              options={{
+                readOnly: activeFile !== "index.ts",
+                minimap: { enabled: false },
+                fontSize: 13,
+                automaticLayout: true,
+              }}
+              theme="vs-dark"
+            />
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-4 border-t border-border p-4">
