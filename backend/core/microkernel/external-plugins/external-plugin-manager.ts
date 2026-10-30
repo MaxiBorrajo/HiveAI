@@ -100,15 +100,19 @@ export class ExternalPluginManager {
     }
   }
 
+  async probeLaunch(sourceDir: string): Promise<ExternalPluginHandle> {
+    const probeName = externalPluginNameFromSourceDir(sourceDir);
+    return await launchExternalPlugin(
+      probeName,
+      sourceDir,
+      this.getCallbackBaseUrl(),
+    );
+  }
+
   async importFrom(sourceDir: string): Promise<BeePlugin> {
     const callbackBaseUrl = this.getCallbackBaseUrl();
 
-    const probeName = externalPluginNameFromSourceDir(sourceDir);
-    const probe = await launchExternalPlugin(
-      probeName,
-      sourceDir,
-      callbackBaseUrl,
-    );
+    const probe = await this.probeLaunch(sourceDir);
     const metadata: ExternalPluginMetadata = {
       description: probe.plugin.description,
       selectionTests: probe.plugin.selectionTests,

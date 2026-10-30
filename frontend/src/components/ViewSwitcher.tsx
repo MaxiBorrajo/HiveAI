@@ -1,6 +1,6 @@
-import { MessageSquare, Workflow } from "lucide-react";
+import { MessageSquare, Workflow, Puzzle } from "lucide-react";
 
-export type AppView = "chat" | "executions";
+export type AppView = "chat" | "executions" | "plugin-builder";
 
 interface ViewSwitcherProps {
   currentView: AppView;
@@ -33,6 +33,18 @@ export function ViewSwitcher({ currentView, onViewChange }: ViewSwitcherProps) {
         title="Executions"
       >
         <Workflow className="size-2.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onViewChange("plugin-builder")}
+        className={`flex items-center justify-center p-1.5 rounded-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          currentView === "plugin-builder"
+            ? "bg-muted text-foreground"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        }`}
+        title="Plugin Builder"
+      >
+        <Puzzle className="size-2.5" />
       </button>
     </div>
   );

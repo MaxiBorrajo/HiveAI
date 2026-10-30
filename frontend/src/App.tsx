@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ViewSwitcher, type AppView } from "@/components/ViewSwitcher";
 import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain";
+import { PluginBuilderMain } from "@/features/plugin-builder/components/PluginBuilderMain";
 import { ServerOptimizationDialog } from "@/features/model-settings/components/ServerOptimizationDialog";
 import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
@@ -122,7 +123,12 @@ function AppContent() {
     setRenameTarget,
   );
 
-  const sidebarProps = currentView === "chat" ? chatProps : executionProps;
+  const sidebarProps =
+    currentView === "chat"
+      ? chatProps
+      : currentView === "executions"
+        ? executionProps
+        : chatProps;
 
   return (
     <div className="flex h-screen relative">
@@ -143,7 +149,13 @@ function AppContent() {
         }
       />
 
-      {currentView === "chat" ? <Chat /> : <ExecutionsMain />}
+      {currentView === "chat" ? (
+        <Chat />
+      ) : currentView === "executions" ? (
+        <ExecutionsMain />
+      ) : (
+        <PluginBuilderMain />
+      )}
 
       <DeleteConfirmationDialog
         open={!!deleteTarget}

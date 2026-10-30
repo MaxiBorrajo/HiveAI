@@ -338,6 +338,15 @@ export class HiveMicrokernel {
     return this.externalPlugins.importFrom(sourceDir);
   }
 
+  /**
+   * Launches a throwaway subprocess for the plugin at `sourceDir` without
+   * touching the external plugin registry, so callers can inspect/execute
+   * it (e.g. run its tests) before deciding to install it for real.
+   */
+  async probeExternalPlugin(sourceDir: string) {
+    return this.externalPlugins.probeLaunch(sourceDir);
+  }
+
   async loadPersistedExternalPlugins(): Promise<void> {
     await this.externalPlugins.loadPersisted();
   }

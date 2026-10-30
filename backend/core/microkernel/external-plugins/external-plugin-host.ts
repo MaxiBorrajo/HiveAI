@@ -56,6 +56,9 @@ function buildPassthroughSchema(): z.ZodType {
 export interface ExternalPluginHandle {
   plugin: BeePlugin;
   stop(): Promise<void>;
+  runExecutionTest(
+    index: number,
+  ): Promise<{ success: boolean; output?: string; error?: string }>;
 }
 
 interface SharedHost {
@@ -221,6 +224,17 @@ export async function launchExternalPlugin(
           method: "DELETE",
         },
       ).catch(() => {});
+    },
+    runExecutionTest: async (index: number) => {
+      const res = await fetch(
+        `${host.baseUrl}/plugins/${encodeURIComponent(manifest.name)}/execution-test`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ index }),
+        },
+      );
+      return await res.json();
     },
   };
 }

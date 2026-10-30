@@ -15,6 +15,7 @@ import { draftsRouter } from "../modules/drafts/router.ts";
 import { modelSettingsRouter } from "../modules/model-settings/router.ts";
 import { modelsRouter } from "../modules/models/router.ts";
 import { executionsRouter } from "../modules/executions/router.ts";
+import { pluginBuilderRouter } from "../modules/plugin-builder/router.ts";
 import { apiKeysRouter } from "../modules/api-keys/router.ts";
 import { usageRouter } from "../modules/usage/router.ts";
 import { appUpdatesRouter } from "../modules/app-updates/router.ts";
@@ -62,6 +63,7 @@ export function createApp(hive: HiveMicrokernel) {
   app.route("/api/external-plugin-callbacks", externalPluginCallbacksRouter);
   app.route("/api/drafts", draftsRouter);
   app.route("/api/executions", executionsRouter);
+  app.route("/api/plugin-builder", pluginBuilderRouter);
   app.route("/api/api-keys", apiKeysRouter);
   app.route("/api/usage", usageRouter);
   app.route("/api/app", appUpdatesRouter);
