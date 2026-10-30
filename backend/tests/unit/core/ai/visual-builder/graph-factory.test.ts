@@ -10,11 +10,17 @@ import type { LangGraphAbstraction } from "../../../../../core/ai/visual-builder
 
 Deno.test("createBaseStateSchema - always includes input, cwd and os as optional string fields", () => {
   const schema = createBaseStateSchema();
-  assertEquals(Object.keys(schema).sort(), ["cwd", "input", "os"]);
+  assertEquals(Object.keys(schema).sort(), ["attachments", "cwd", "input", "os"]);
   for (const key of ["input", "cwd", "os"]) {
     assertEquals(schema[key].type, "string");
     assertEquals(schema[key].required, false);
   }
+});
+
+Deno.test("createBaseStateSchema - always includes attachments as an optional array field", () => {
+  const schema = createBaseStateSchema();
+  assertEquals(schema.attachments.type, "array");
+  assertEquals(schema.attachments.required, false);
 });
 
 Deno.test("createBaseStateSchema - returns a fresh object each call (not a shared reference)", () => {
@@ -51,7 +57,10 @@ Deno.test("createEmptyGraph - stateSchema matches createBaseStateSchema", () => 
 Deno.test("syncStateSchema - merges in the base schema keys if missing", () => {
   const graph: LangGraphAbstraction = { nodes: [], edges: [], stateSchema: {} };
   const synced = syncStateSchema(graph);
-  assertEquals(Object.keys(synced.stateSchema).sort(), ["cwd", "input", "os"]);
+  assertEquals(
+    Object.keys(synced.stateSchema).sort(),
+    ["attachments", "cwd", "input", "os"],
+  );
 });
 
 Deno.test("syncStateSchema - preserves existing custom stateSchema entries", () => {
@@ -98,7 +107,10 @@ Deno.test("syncStateSchema - a node with no outputKey (or a non-string one) does
     stateSchema: {},
   };
   const synced = syncStateSchema(graph);
-  assertEquals(Object.keys(synced.stateSchema).sort(), ["cwd", "input", "os"]);
+  assertEquals(
+    Object.keys(synced.stateSchema).sort(),
+    ["attachments", "cwd", "input", "os"],
+  );
 });
 
 Deno.test("syncStateSchema - returns a new graph object, does not mutate the input", () => {
