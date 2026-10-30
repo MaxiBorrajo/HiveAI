@@ -1,11 +1,52 @@
 import { memo, useState } from "react";
-import { ListTreeIcon, OctagonXIcon } from "lucide-react";
+import { GitBranchIcon, ListTreeIcon, OctagonXIcon } from "lucide-react";
 import { Button } from "../../../components/ui/button.tsx";
 import type { Message } from "../types.ts";
 import { MessageMarkdown } from "./MessageMarkdown.tsx";
 import { StepsPanel } from "./StepsPanel.tsx";
 import { MessageUsageLine } from "./MessageUsageLine.tsx";
 import { AttachmentsList } from "./AttachmentsList.tsx";
+import { useChats } from "../ChatsContext.tsx";
+import { reportError, reportSuccess } from "@/lib/toastManager";
+
+function ForkButton({
+  messageId,
+  className,
+}: {
+  messageId: string;
+  className?: string;
+}) {
+  const { activeChatId, forkChat } = useChats();
+  const [isForking, setIsForking] = useState(false);
+
+  async function handleFork() {
+    if (!activeChatId || isForking) return;
+    setIsForking(true);
+    try {
+      await forkChat(activeChatId, messageId);
+      reportSuccess("Chat forked", "Continuing from this message in a new chat.");
+    } catch (error) {
+      reportError([
+        error instanceof Error ? error.message : "Could not fork the chat.",
+      ]);
+    } finally {
+      setIsForking(false);
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className={className}
+      title="Fork from here"
+      disabled={isForking}
+      onClick={handleFork}
+    >
+      <GitBranchIcon className="size-3.5" />
+    </Button>
+  );
+}
 
 export const ChatMessage = memo(function ChatMessage({
   message,
@@ -18,17 +59,19 @@ export const ChatMessage = memo(function ChatMessage({
   if (isAgent) {
     return (
       <div className="group/message w-full relative">
-        {!!message.steps?.length && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="absolute -top-1 right-0 opacity-0 transition-opacity group-hover/message:opacity-100 data-open:opacity-100"
-            title="View steps"
-            onClick={() => setStepsOpen(true)}
-          >
-            <ListTreeIcon className="size-3.5" />
-          </Button>
-        )}
+        <div className="absolute -top-1 right-0 flex items-center gap-0.5 opacity-0 transition-opacity group-hover/message:opacity-100 has-data-open:opacity-100">
+          <ForkButton messageId={message.id} />
+          {!!message.steps?.length && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="View steps"
+              onClick={() => setStepsOpen(true)}
+            >
+              <ListTreeIcon className="size-3.5" />
+            </Button>
+          )}
+        </div>
         <div
           className={`text-sm ${
             message.isError
@@ -76,7 +119,11 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   return (
-    <div className="flex w-full justify-end">
+    <div className="group/message flex w-full justify-end items-start gap-1">
+      <ForkButton
+        messageId={message.id}
+        className="mt-3 shrink-0 opacity-0 transition-opacity group-hover/message:opacity-100"
+      />
       <div className="max-w-[75%] rounded-2xl bg-card border border-border px-5 py-3 text-sm text-foreground whitespace-pre-wrap break-words">
         {!!message.attachments?.length && (
           <AttachmentsList

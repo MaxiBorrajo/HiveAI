@@ -7,6 +7,7 @@ import {
 import { listChats } from "@/features/chats/api/listChats";
 import { deleteChat } from "@/features/chats/api/deleteChat";
 import { updateChat as updateChatRequest, type UpdateChatDto } from "@/features/chats/api/updateChat";
+import { forkChat as forkChatRequest } from "@/features/chats/api/forkChat";
 import { useEntityListState } from "@/hooks/useEntityListState";
 import type { ChatSummary } from "@/features/chats/types";
 
@@ -28,6 +29,7 @@ interface ChatsContextValue {
   touchChat: (chatId: string) => void;
   unreadChatIds: Set<string>;
   markChatUnread: (chatId: string) => void;
+  forkChat: (chatId: string, messageId: string) => Promise<string>;
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
@@ -76,6 +78,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     await state.update(chatId, { title });
   }
 
+  async function forkChat(chatId: string, messageId: string): Promise<string> {
+    const { data } = await forkChatRequest(chatId, messageId);
+    if (!data) throw new Error("Could not fork the chat.");
+    state.onCreated(data.id);
+    return data.id;
+  }
+
   const value: ChatsContextValue = {
     chats: state.items,
     activeChatId: state.activeId,
@@ -91,6 +100,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     touchChat: state.touch,
     unreadChatIds,
     markChatUnread,
+    forkChat,
   };
 
   return (

@@ -59,3 +59,23 @@ export async function deleteAttachmentFile(
     if (!(error instanceof Deno.errors.NotFound)) throw error;
   }
 }
+
+/**
+ * Copies an existing attachment file to a new path with a fresh name, so the
+ * copy's lifecycle (e.g. deletion when its owning chat is deleted) is fully
+ * independent from the original's.
+ */
+export async function copyAttachmentFile(
+  dataDir: string,
+  sourceStoragePath: string,
+): Promise<string> {
+  const dir = attachmentsDir(dataDir);
+  await mkdir(dir, { recursive: true });
+
+  const ext = extname(sourceStoragePath);
+  const fileName = `${crypto.randomUUID()}${ext}`;
+  const storagePath = join("attachments", fileName);
+
+  await Deno.copyFile(join(dataDir, sourceStoragePath), join(dataDir, storagePath));
+  return storagePath;
+}

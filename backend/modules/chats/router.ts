@@ -4,6 +4,7 @@ import { listChats } from "./use-cases/list-chats.ts";
 import { getChatMessages } from "./use-cases/get-chat-messages.ts";
 import { deleteChat } from "./use-cases/delete-chat.ts";
 import { updateChat } from "./use-cases/update-chat.ts";
+import { forkChat } from "./use-cases/fork-chat.ts";
 import { sendMessage } from "./use-cases/send-message.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
@@ -75,4 +76,13 @@ chatsRouter.put("/:id", async (c) => {
   const db = getORM();
   const body = await c.req.json().catch(() => ({}));
   return updateChat(db, parseId(c.req.param("id")), body, headers);
+});
+
+chatsRouter.post("/:id/fork", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const db = getORM();
+  const dataDir = c.get("hive").getConfig().get("dataDir");
+  const body = await c.req.json().catch(() => ({}));
+  const messageId = Number(body.messageId);
+  return forkChat(db, parseId(c.req.param("id")), messageId, dataDir, headers);
 });

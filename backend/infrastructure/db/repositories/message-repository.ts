@@ -1,4 +1,4 @@
-import { eq, ne, asc, desc } from "drizzle-orm";
+import { eq, ne, and, lte, asc, desc } from "drizzle-orm";
 import {
   AIMessage,
   HumanMessage,
@@ -61,6 +61,14 @@ export class MessageRepository {
       .from(messages)
       .where(eq(messages.chatId, chatId))
       .orderBy(asc(messages.timestamp));
+  }
+
+  async findUpToId(chatId: number, maxMessageId: number): Promise<MessageRecord[]> {
+    return await this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.chatId, chatId), lte(messages.id, maxMessageId)))
+      .orderBy(asc(messages.id));
   }
 
   async create(msg: NewMessage): Promise<number> {
