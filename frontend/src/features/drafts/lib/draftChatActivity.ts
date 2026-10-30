@@ -1,14 +1,6 @@
 export interface ActivityEntry {
   id: string;
-  kind:
-    | "planning"
-    | "signature"
-    | "process"
-    | "tests"
-    | "validating"
-    | "correction"
-    | "done"
-    | "error";
+  kind: "thinking" | "validating" | "correction" | "done" | "error";
   text: string;
   startedAt: number;
 }

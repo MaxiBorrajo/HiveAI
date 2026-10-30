@@ -1,9 +1,9 @@
-import { ChatInput } from "../../chats/components/ChatInput";
-import { cn } from "../../../lib/utils";
-import { PluginBuilderActivityFeed } from "./PluginBuilderActivityFeed";
-import type { ActivityEntry } from "../lib/pluginBuilderActivity";
+import { ChatInput } from "@/features/chats/components/ChatInput";
+import { cn } from "@/lib/utils";
+import { DraftChatActivityFeed } from "./DraftChatActivityFeed";
+import type { ActivityEntry } from "../lib/draftChatActivity";
 
-interface PluginBuilderChatPanelProps {
+interface DraftChatPanelProps {
   input: string;
   setInput: (value: string) => void;
   isThinking: boolean;
@@ -13,7 +13,7 @@ interface PluginBuilderChatPanelProps {
   onStop: () => void;
 }
 
-export function PluginBuilderChatPanel({
+export function DraftChatPanel({
   input,
   setInput,
   isThinking,
@@ -21,11 +21,11 @@ export function PluginBuilderChatPanel({
   activity,
   onSend,
   onStop,
-}: PluginBuilderChatPanelProps) {
+}: DraftChatPanelProps) {
   return (
-    <div className={cn("w-full px-6 pt-12 pb-8")}>
-      <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 pointer-events-auto">
-        <PluginBuilderActivityFeed entries={activity} isActive={isThinking} />
+    <div className={cn("w-full px-4 pt-6 pb-4")}>
+      <div className="mx-auto flex max-w-xl flex-col items-center gap-2 pointer-events-auto">
+        <DraftChatActivityFeed entries={activity} isActive={isThinking} />
         <ChatInput
           input={input}
           setInput={setInput}
@@ -37,7 +37,7 @@ export function PluginBuilderChatPanel({
           placeholder="I want a plugin that sends a message to a Slack webhook..."
         />
         <p className="text-center text-xs text-muted-foreground mt-2">
-          HiveAI can make mistakes. Review the generated code and tests before installing.
+          HiveAI can make mistakes. Review the generated code before importing.
         </p>
       </div>
     </div>

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import type { ActivityEntry } from "../lib/pluginBuilderActivity";
+import type { ActivityEntry } from "../lib/draftChatActivity";
 
-interface PluginBuilderActivityFeedProps {
+interface DraftChatActivityFeedProps {
   entries: ActivityEntry[];
   isActive: boolean;
 }
@@ -13,10 +13,10 @@ function currentLabel(entries: ActivityEntry[]): string {
   return last.text;
 }
 
-export function PluginBuilderActivityFeed({
+export function DraftChatActivityFeed({
   entries,
   isActive,
-}: PluginBuilderActivityFeedProps) {
+}: DraftChatActivityFeedProps) {
   const [expanded, setExpanded] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -28,7 +28,7 @@ export function PluginBuilderActivityFeed({
     bottomRef.current?.scrollIntoView({ block: "nearest" });
   }, [entries.length]);
 
-  if (!isActive) return null;
+  if (!isActive && entries.length === 0) return null;
 
   return (
     <div className="w-full rounded-xl border border-border bg-popover/95 p-2 text-xs shadow-sm backdrop-blur-md">
@@ -37,7 +37,9 @@ export function PluginBuilderActivityFeed({
         onClick={() => setExpanded((open) => !open)}
         className="flex w-full items-center gap-2 px-1 py-0.5 text-left"
       >
-        <span className="min-w-0 flex-1 truncate animate-pulse text-muted-foreground">
+        <span
+          className={`min-w-0 flex-1 truncate text-muted-foreground ${isActive ? "animate-pulse" : ""}`}
+        >
           {currentLabel(entries)}
         </span>
         {expanded ? (

@@ -51,6 +51,15 @@ export async function validateDraftPlugin(
     return { valid: false, issues };
   }
 
+  const draftIndex = await readFile(join(draftDir, "index.ts"), "utf-8");
+  const badZodImport = draftIndex.match(/from\s+["'](npm:zod[^"']*|jsr:@?zod[^"']*|https?:\/\/[^"']*\bzod\b[^"']*)["']/);
+  if (badZodImport) {
+    issues.push(
+      `index.ts imports zod from "${badZodImport[1]}" instead of the bare "zod" specifier. This loads a second, incompatible copy of the library and will crash the plugin loader at runtime. Change it to exactly: import { z } from "zod";`,
+    );
+    return { valid: false, issues };
+  }
+
   let handle;
   try {
     handle = await launchExternalPlugin(
