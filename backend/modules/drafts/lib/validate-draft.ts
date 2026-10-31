@@ -44,7 +44,8 @@ export async function validateDraftPlugin(
     join(draftDir, "bee-plugin.ts"),
     "utf-8",
   );
-  if (coreBeePlugin.trim() !== draftBeePlugin.trim()) {
+  const normalizeEol = (text: string) => text.replace(/\r\n/g, "\n").trim();
+  if (normalizeEol(coreBeePlugin) !== normalizeEol(draftBeePlugin)) {
     issues.push(
       "bee-plugin.ts has been modified — it must match the microkernel's version exactly. Regenerate the draft or copy the original back in.",
     );

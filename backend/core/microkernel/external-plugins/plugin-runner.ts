@@ -21,7 +21,11 @@ const callIdStorage = new AsyncLocalStorage<string | undefined>();
 
 async function loadPluginModule(dir: string): Promise<BeePlugin> {
   const entryPoint = resolve(dir, "index.ts");
-  const module = await import(pathToFileURL(entryPoint).href);
+  // The host process is long-lived and Deno caches modules by URL, so without
+  // a unique query a re-validated draft would keep serving its first version.
+  const module = await import(
+    `${pathToFileURL(entryPoint).href}?v=${Date.now()}`
+  );
 
   if (typeof module.default !== "function") {
     throw new TypeError(

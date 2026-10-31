@@ -167,7 +167,8 @@ export class HiveMicrokernel {
       return;
     }
     
-    if (pluginBeeContent.trim() !== coreBeeContent.trim()) {
+    const normalizeEol = (text: string) => text.replace(/\r\n/g, "\n").trim();
+    if (normalizeEol(pluginBeeContent) !== normalizeEol(coreBeeContent)) {
       throw new Error(
         `Plugin at '${beePluginPath}' is outdated: its bee-plugin.ts does not match the microkernel's version.`,
       );
