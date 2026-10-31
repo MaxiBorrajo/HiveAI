@@ -4,8 +4,25 @@ import type { PluginInfo } from "../../../../core/ai/visual-builder/types.ts";
 
 
 export function describeActivePlugins(hive: HiveMicrokernel): PluginInfo[] {
-  return hive.getTools().map((tool) => {
-    const plugin = hive.getPlugin(tool.name);
+  return hive.getTools().map((tool) =>
+    describePlugin(hive, tool.name, tool.description)
+  );
+}
+
+/** Every installed plugin, active or not. */
+export function describeInstalledPlugins(hive: HiveMicrokernel): PluginInfo[] {
+  return hive.getRegisteredPlugins().map((plugin) =>
+    describePlugin(hive, plugin.name, plugin.description)
+  );
+}
+
+function describePlugin(
+  hive: HiveMicrokernel,
+  name: string,
+  description: string,
+): PluginInfo {
+  {
+    const plugin = hive.getPlugin(name);
     const shape = (plugin?.schema as { shape?: Record<string, z.ZodTypeAny> })
       ?.shape;
 
@@ -24,8 +41,8 @@ export function describeActivePlugins(hive: HiveMicrokernel): PluginInfo[] {
     }
 
     return {
-      name: tool.name,
-      description: tool.description,
+      name,
+      description,
       parametersDescription: parameterDescriptions.join("; "),
       parameterKeys,
       requiredKeys,
@@ -33,5 +50,5 @@ export function describeActivePlugins(hive: HiveMicrokernel): PluginInfo[] {
       returnDescription: (plugin as { returnDescription?: string } | undefined)
         ?.returnDescription,
     };
-  });
+  }
 }

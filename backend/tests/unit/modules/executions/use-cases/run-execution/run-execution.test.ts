@@ -173,7 +173,7 @@ Deno.test("runExecution - a second run on the same execution increments the iter
   assertEquals(secondDone.iteration, 2);
 });
 
-Deno.test("runExecution - a plugin node referencing an unregistered tool fails fast with a 500 (compileGraph's toolProvider.getTool throws before streaming starts)", async () => {
+Deno.test("runExecution - a plugin node referencing an unregistered tool fails fast with a 422 listing the missing plugins (checked before compiling the graph)", async () => {
   const repo = await makeRepo();
   const hive = await makeHiveWithCounter();
   const db = (repo as any).db;
@@ -209,5 +209,7 @@ Deno.test("runExecution - a plugin node referencing an unregistered tool fails f
   await repo.update(execution.id, { lastGraphId: graph.id });
 
   const res = await runExecution(db, hive, execution.id, {}, {});
-  assertEquals(res.status, 500);
+  assertEquals(res.status, 422);
+  const body = await res.json();
+  assertEquals(body.data.missingPlugins, ["does-not-exist"]);
 });

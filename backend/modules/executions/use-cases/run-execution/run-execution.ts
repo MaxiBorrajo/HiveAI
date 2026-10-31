@@ -1,3 +1,4 @@
+import { findMissingPlugins } from "../../portability/plugin-refs.ts";
 import { beginModelActivity } from "../../../../core/ai/activity-tracker.ts";
 import { createSseResponse, type SseSend } from "../../../../core/api/sse.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
@@ -247,6 +248,18 @@ export async function runExecution(
     }
 
     const { abstraction, graphId, orchestrator: recordedOrchestrator } = loaded;
+    const missingPlugins = findMissingPlugins(abstraction, hive);
+    if (missingPlugins.length > 0) {
+      return ResponseBuilder.error(
+        [
+          `This execution needs plugins that are not installed: ${
+            missingPlugins.join(", ")
+          }. Install them to run it.`,
+        ],
+        { missingPlugins },
+        { headers, status: 422 },
+      );
+    }
     applyDefaultModel(abstraction, hive);
     const { problems, warnings } = await checkGraphModels(
       abstraction,

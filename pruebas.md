@@ -122,6 +122,22 @@ Armá una ejecución de 3 nodos de IA (ej.: resumir → clasificar → redactar)
 | I3 | Ejecución solo con nodos locales | Corre igual |
 | I4 | Ejecutar sin ninguna key cargada | Todo local funciona. El menú muestra solo "Local" |
 
+## K. Exportar / importar flujos
+
+Formato en `docs/flow-format.md`. Se necesitan dos instalaciones (o dos `dataDir`).
+
+| # | Pasos | Esperado |
+|---|---|---|
+| K1 | Instalación A: crear una ejecución con un plugin externo importado, menú de la ejecución → Export | Se guarda `<nombre>.hiveai-flow.json` en Descargas. No contiene `keyId` ni keys |
+| K2 | Instalación B (sin el plugin): botón de subir en el sidebar → elegir el archivo | El diálogo lista el plugin incluido con checkbox "Install" |
+| K3 | Confirmar el import con el plugin tildado | Se crea la ejecución, el plugin queda instalado y la ejecución corre |
+| K4 | B con un plugin local modificado del mismo nombre: importar | Dice "your local version will be used"; el plugin local no cambia |
+| K5 | Importar un flujo que usa un plugin interno no instalado | Avisa los faltantes, se importa como borrador y Run falla con 422 listando el plugin |
+| K6 | Importar un archivo con texto cortado/corrupto | Mensaje "corrupted or is not valid JSON"; no se crea nada |
+| K7 | Editar `formatVersion` a 99 e importar | Mensaje "Unsupported format version 99…" |
+| K8 | Importar de nuevo el mismo archivo | Pide elegir copia o reemplazar; Cancelar no cambia nada; Reemplazar pide segunda confirmación |
+| K9 | Pegar `sk-…` en un systemPrompt y exportar | `confirm` de advertencia antes de guardar; en el import, aviso de campos sospechosos |
+
 ## J. Automáticos
 
 Desde `backend/`: `deno test -A` → **480 tests deben pasar**. Desde `frontend/`: `npx tsc --noEmit -p tsconfig.app.json` y `npm run build` sin errores.

@@ -12,6 +12,8 @@ import { updateExecution } from "./use-cases/update-execution.ts";
 import { createExecution } from "./use-cases/create-execution.ts";
 import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
 import { listRuns } from "./use-cases/list-runs.ts";
+import { exportFlow } from "./portability/export-flow.ts";
+import { importFlow, previewImport } from "./portability/import-flow.ts";
 import { runExecution } from "./use-cases/run-execution/run-execution.ts";
 
 export const executionsRouter = new Hono<{
@@ -42,6 +44,34 @@ executionsRouter.post("/generate", async (c) => {
       signal: c.req.raw.signal,
     },
   );
+});
+
+executionsRouter.post("/import/preview", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const body = await c.req.json().catch(() => undefined);
+  return previewImport(getORM(), c.get("hive"), body?.file, headers);
+});
+
+executionsRouter.post("/import", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const body = await c.req.json().catch(() => undefined);
+  return importFlow(
+    getORM(),
+    c.get("hive"),
+    body?.file,
+    {
+      conflict: body?.conflict,
+      installBundledPlugins: Array.isArray(body?.installBundledPlugins)
+        ? body.installBundledPlugins.filter((n: unknown) => typeof n === "string")
+        : [],
+    },
+    headers,
+  );
+});
+
+executionsRouter.get("/:id/export", async (c) => {
+  const headers = { "content-type": "application/json" };
+  return exportFlow(getORM(), c.get("hive"), parseId(c.req.param("id")), headers);
 });
 
 executionsRouter.post("/", async (c) => {

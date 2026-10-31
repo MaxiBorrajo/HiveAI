@@ -1,5 +1,10 @@
 import { ThemeProvider } from "next-themes";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ImportFlowDialog } from "@/features/executions/components/ImportFlowDialog";
+import { exportExecution } from "@/features/executions/api/exportExecution";
+import { downloadFile, stringifyContent } from "@/lib/download";
 import {
   ToastProvider,
   ToastPortal,
@@ -39,6 +44,8 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<AppView>("chat");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
+  const [importContent, setImportContent] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const {
     chats,
@@ -59,7 +66,32 @@ function AppContent() {
     startNewExecution,
     deleteExecution,
     renameExecution,
+    refreshExecutions,
+    selectExecution: selectImportedExecution,
   } = useExecutions();
+
+  async function handleExport(id: string) {
+    const { data } = await exportExecution(id);
+    if (!data) return;
+    if (
+      data.secretWarnings.length > 0 &&
+      !window.confirm(
+        `${data.secretWarnings.length} field(s) look like they contain a secret (API key, token...). They would be exported as they are. Export anyway?`,
+      )
+    ) {
+      return;
+    }
+    await downloadFile(data.filename, stringifyContent(data.file));
+  }
+
+  async function handleImportFileChosen(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImportContent(await file.text());
+  }
 
   if (openDraftName) {
     return (
@@ -117,6 +149,7 @@ function AppContent() {
       startNew: startNewExecution,
       deleteItem: deleteExecution,
       renameItem: renameExecution,
+      exportItem: handleExport,
     },
     setDeleteTarget,
     setRenameTarget,
@@ -138,12 +171,40 @@ function AppContent() {
                 onViewChange={setCurrentView}
               />
             </div>
+            {currentView === "executions" && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Import execution"
+                  onClick={() => importInputRef.current?.click()}
+                >
+                  <Upload size={16} />
+                </Button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={handleImportFileChosen}
+                />
+              </>
+            )}
             <ThemeToggle />
           </>
         }
       />
 
       {currentView === "chat" ? <Chat /> : <ExecutionsMain />}
+
+      <ImportFlowDialog
+        fileContent={importContent}
+        onClose={() => setImportContent(null)}
+        onImported={(id) => {
+          refreshExecutions();
+          selectImportedExecution(id);
+        }}
+      />
 
       <DeleteConfirmationDialog
         open={!!deleteTarget}
