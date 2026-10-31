@@ -44,7 +44,15 @@ export interface SidebarMenuOption {
   onClick: (item: SidebarItem) => void;
 }
 
+export interface SidebarNewOption {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+}
+
 export interface AppSidebarProps {
+  /** When set, the "+" button opens this menu instead of calling startNew. */
+  newMenuOptions?: SidebarNewOption[];
   actions?: React.ReactNode;
   list: SidebarItem[];
   activeId: string | null;
@@ -64,6 +72,7 @@ export interface AppSidebarProps {
 }
 
 export function AppSidebar({
+  newMenuOptions,
   actions,
   activeId,
   isLoading,
@@ -79,6 +88,39 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  const newButton =
+    newMenuOptions && newMenuOptions.length > 0 ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="flex size-7 shrink-0 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted data-popup-open:bg-muted"
+          title={newTitle || "New"}
+        >
+          <Plus className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="bottom" sideOffset={4} className="w-40">
+          {newMenuOptions.map((option) => (
+            <DropdownMenuItem
+              key={option.label}
+              onClick={option.onClick}
+              className="flex items-center gap-2"
+            >
+              {option.icon}
+              <span>{option.label}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={startNew}
+        title={newTitle || "New"}
+      >
+        <Plus className="size-4" />
+      </Button>
+    );
+
   if (isCollapsed) {
     return (
       <div className="flex h-screen w-12 shrink-0 flex-col items-center gap-2 border-r border-border bg-card py-3">
@@ -91,14 +133,7 @@ export function AppSidebar({
           <PanelLeftOpen className="size-4" />
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={startNew}
-          title={newTitle || "New"}
-        >
-          <Plus className="size-4" />
-        </Button>
+        {newButton}
       </div>
     );
   }
@@ -111,14 +146,7 @@ export function AppSidebar({
         </span>
         <div className="flex items-center gap-1">
           {actions}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={startNew}
-            title={newTitle || "New"}
-          >
-            <Plus className="size-4" />
-          </Button>
+          {newButton}
 
           <Button
             variant="ghost"

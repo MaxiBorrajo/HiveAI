@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil, History, Square } from "lucide-react";
+import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil, History, Download, Square } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { LangGraphAbstraction } from "../types";
@@ -18,6 +18,8 @@ interface RunControlsBarProps {
   onShowResult: () => void;
   onShowHistory: () => void;
   onEdit: () => void;
+  /** Absent while the execution has not been saved yet. */
+  onExport?: () => void;
 }
 
 const SEGMENT =
@@ -36,6 +38,7 @@ export function RunControlsBar({
   onShowResult,
   onShowHistory,
   onEdit,
+  onExport,
 }: RunControlsBarProps) {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const { copied: isCopied, copy: copyText } = useCopyFeedback();
@@ -127,6 +130,19 @@ export function RunControlsBar({
           >
             <Pencil className="size-3.5" />
             <span>Edit</span>
+          </button>
+        )}
+
+        {graph && onExport && (
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={isThinking || isRunning}
+            className={cn(SEGMENT, "disabled:cursor-not-allowed disabled:opacity-50")}
+            title="Export this execution to a file"
+          >
+            <Download className="size-3.5" />
+            <span>Export</span>
           </button>
         )}
 

@@ -1,4 +1,4 @@
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { AppSidebarProps, SidebarItem } from "@/components/AppSidebar";
 
 export interface DeleteTarget {
@@ -30,7 +30,6 @@ export interface SidebarEntityConfig<TItem extends { id: string; updatedAt: numb
   startNew: () => void;
   deleteItem: (id: string) => Promise<void>;
   renameItem: (id: string, newTitle: string) => Promise<void>;
-  exportItem?: (id: string) => Promise<void>;
 }
 export function buildSidebarProps<
   TItem extends { id: string; updatedAt: number; createdAt: number },
@@ -67,17 +66,6 @@ export function buildSidebarProps<
           });
         },
       },
-      ...(config.exportItem
-        ? [
-          {
-            label: "Export",
-            icon: <Download className="size-3.5" />,
-            onClick: (item: SidebarItem) => {
-              void config.exportItem?.(item.id);
-            },
-          },
-        ]
-        : []),
       {
         label: "Delete",
         icon: <Trash2 className="size-3.5" />,

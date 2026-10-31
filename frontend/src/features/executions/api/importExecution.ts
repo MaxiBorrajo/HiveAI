@@ -9,7 +9,12 @@ export interface ImportPreview {
   missingPlugins: string[];
   unbundledMissingPlugins: string[];
   inactivePlugins: string[];
-  bundledPlugins: { name: string; status: "missing" | "alreadyInstalled" }[];
+  bundledPlugins: {
+    name: string;
+    status: "missing" | "alreadyInstalled";
+    /** File name -> source code, so the user can review it before installing. */
+    files: Record<string, string>;
+  }[];
   violations: { nodeName: string; reason: string }[];
   secretWarnings: SecretWarning[];
 }

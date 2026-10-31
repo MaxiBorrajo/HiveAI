@@ -1,5 +1,4 @@
 import { ChatInput } from "../../chats/components/ChatInput";
-import { cn } from "../../../lib/utils";
 import { InteractionDialog } from "../../interactions/components/InteractionDialog";
 import { GenerationActivityFeed } from "./GenerationActivityFeed";
 import type { ActivityEntry } from "../lib/generationActivity";
@@ -42,13 +41,7 @@ export function ExecutionChatPanel({
         : "I want a flow that researches a topic and generates a report...";
 
   return (
-    <div
-      className={cn(
-        "w-full px-6 pt-12 pb-8",
-        isEditing && "pr-66",
-        (selectedNode || selectedEdge) && "pl-88",
-      )}
-    >
+    <div className="w-full px-6 pt-12 pb-8">
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 pointer-events-auto">
         {isEditing && (selectedNode || selectedEdge) && (
           <div className="flex items-center gap-2 px-3 py-1 bg-primary/20 border border-primary/40 rounded-full text-xs text-primary shadow">

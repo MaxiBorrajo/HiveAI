@@ -15,6 +15,7 @@ import { RunControlsBar } from "./RunControlsBar";
 import { EmptyStateHeader } from "./EmptyStateHeader";
 import { ExecutionChatPanel } from "./ExecutionChatPanel";
 import { NodePaletteSidebar } from "./edit/NodePaletteSidebar";
+import { exportAndDownload } from "../lib/exportFlow";
 import { EditModeBar } from "./edit/EditModeBar";
 import { StateCard } from "./edit/StateCard";
 import { ValidateGraphModal } from "./edit/ValidateGraphModal";
@@ -205,6 +206,11 @@ export function ExecutionsMain() {
               onShowResult={() => setIsResultSidebarOpen(true)}
               onShowHistory={() => setIsHistoryOpen(true)}
               onEdit={editor.startEditing}
+              onExport={
+                activeExecutionId
+                  ? () => void exportAndDownload(activeExecutionId)
+                  : undefined
+              }
             />
           )}
 

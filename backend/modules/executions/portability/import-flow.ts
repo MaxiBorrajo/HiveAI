@@ -76,6 +76,7 @@ export async function previewImport(
     status: hive.getPlugin(bundle.name)
       ? ("alreadyInstalled" as const)
       : ("missing" as const),
+    files: bundle.files,
   }));
   const bundledNames = new Set(file.bundledPlugins.map((b) => b.name));
 
