@@ -17,6 +17,8 @@ export interface GenerateExecutionPayload {
 
 export interface GenerateStreamHandlers {
   onExecutionCreated?: (executionId: string) => void;
+  /** The server replaced the placeholder name with one based on the flow. */
+  onExecutionRenamed?: (data: { executionId: number; name: string }) => void;
   onPlanning?: (thoughts: string) => void;
   onNodeAdded?: (data: {
     node: GraphNode;
@@ -62,6 +64,9 @@ export async function generateExecutionStream(
     switch (eventName) {
       case "execution_created":
         handlers.onExecutionCreated?.(String(data.executionId));
+        break;
+      case "execution_renamed":
+        handlers.onExecutionRenamed?.(data);
         break;
       case "planning":
         handlers.onPlanning?.(data.thoughts);

@@ -8,15 +8,16 @@ import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../infrastructure/db/repositories/execution-repository.ts";
 import { describeInstalledPlugins } from "../use-cases/generate-execution/describe-plugins.ts";
 import { persistValidatedGraph } from "../use-cases/update-execution-graph.ts";
+import { checkPluginConformance } from "../../../core/microkernel/plugin-conformance.ts";
 import {
+  type BundledPlugin,
   type FlowFile,
   MAX_PLUGIN_BYTES,
-  parseFlowFile,
+  type ParsedFlow,
+  readFlowZip,
 } from "./flow-format.ts";
 import { collectRequiredPlugins } from "./plugin-refs.ts";
 import { scanGraphForSecrets } from "./scan-secrets.ts";
-
-const REQUIRED_PLUGIN_FILES = ["index.ts", "bee-plugin.ts"];
 
 export type ConflictChoice = "new" | "overwrite";
 
@@ -48,6 +49,40 @@ function pluginsForValidation(
   return [...installed, ...stubs];
 }
 
+async function readUpload(
+  bytes: Uint8Array | undefined,
+): Promise<{ ok: true; parsed: ParsedFlow } | { ok: false; error: string }> {
+  if (!bytes) return { ok: false, error: "No flow file was uploaded." };
+  return await readFlowZip(bytes);
+}
+
+/** Writes a bundled plugin's sources to a temp dir (flat names, no bee-plugin.ts). */
+async function withBundleDir<T>(
+  bundle: BundledPlugin,
+  fn: (dir: string) => Promise<T>,
+): Promise<T> {
+  const total = Object.values(bundle.files).reduce((n, c) => n + c.length, 0);
+  if (total > MAX_PLUGIN_BYTES) throw new Error("plugin is too large");
+  if (!("index.ts" in bundle.files)) {
+    throw new Error("missing required file index.ts");
+  }
+
+  const tempDir = await Deno.makeTempDir({ prefix: "hiveai-flow-plugin-" });
+  try {
+    const root = resolve(tempDir);
+    for (const [fileName, content] of Object.entries(bundle.files)) {
+      const dest = resolve(join(root, fileName));
+      if (!dest.startsWith(root + sep)) {
+        throw new Error(`invalid file name ${fileName}`);
+      }
+      await Deno.writeTextFile(dest, content);
+    }
+    return await fn(root);
+  } finally {
+    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+  }
+}
+
 function validateImportedGraph(file: FlowFile, plugins: PluginInfo[]) {
   return validateGraph(syncStateSchema(file.graph), plugins);
 }
@@ -55,12 +90,12 @@ function validateImportedGraph(file: FlowFile, plugins: PluginInfo[]) {
 export async function previewImport(
   db: AppDatabase,
   hive: HiveMicrokernel,
-  raw: unknown,
+  bytes: Uint8Array | undefined,
   headers: Record<string, string>,
 ): Promise<Response> {
-  const parsed = parseFlowFile(raw);
-  if (!parsed.ok) return fail(headers, 400, [parsed.error]);
-  const { file } = parsed;
+  const read = await readUpload(bytes);
+  if (!read.ok) return fail(headers, 400, [read.error]);
+  const { file, bundledPlugins } = read.parsed;
 
   const repo = new ExecutionRepository(db);
   const existing = (await repo.findAll()).find((e) => e.name === file.name);
@@ -71,14 +106,28 @@ export async function previewImport(
     (n) => hive.getPlugin(n) && !hive.isActive(n),
   );
 
-  const bundled = file.bundledPlugins.map((bundle) => ({
-    name: bundle.name,
-    status: hive.getPlugin(bundle.name)
-      ? ("alreadyInstalled" as const)
-      : ("missing" as const),
-    files: bundle.files,
-  }));
-  const bundledNames = new Set(file.bundledPlugins.map((b) => b.name));
+  const bundled = [];
+  for (const bundle of bundledPlugins) {
+    const installed = !!hive.getPlugin(bundle.name);
+    let conformanceIssues: string[] = [];
+    if (!installed) {
+      try {
+        conformanceIssues = await withBundleDir(
+          bundle,
+          async (dir) => (await checkPluginConformance(dir)).issues,
+        );
+      } catch (error) {
+        conformanceIssues = [error instanceof Error ? error.message : String(error)];
+      }
+    }
+    bundled.push({
+      name: bundle.name,
+      status: installed ? ("alreadyInstalled" as const) : ("missing" as const),
+      files: bundle.files,
+      conformanceIssues,
+    });
+  }
+  const bundledNames = new Set(bundledPlugins.map((b) => b.name));
 
   const violations = validateImportedGraph(
     file,
@@ -102,44 +151,22 @@ export async function previewImport(
 
 async function installBundledPlugin(
   hive: HiveMicrokernel,
-  bundle: FlowFile["bundledPlugins"][number],
+  bundle: BundledPlugin,
 ): Promise<void> {
-  for (const required of REQUIRED_PLUGIN_FILES) {
-    if (!(required in bundle.files)) {
-      throw new Error(`missing required file ${required}`);
-    }
-  }
-  const total = Object.values(bundle.files).reduce((n, c) => n + c.length, 0);
-  if (total > MAX_PLUGIN_BYTES) throw new Error("plugin is too large");
-
-  const tempDir = await Deno.makeTempDir({ prefix: "hiveai-flow-plugin-" });
-  try {
-    const root = resolve(tempDir);
-    for (const [fileName, content] of Object.entries(bundle.files)) {
-      const dest = resolve(join(root, fileName));
-      if (!dest.startsWith(root + sep)) {
-        throw new Error(`invalid file name ${fileName}`);
-      }
-      await Deno.mkdir(dirname(dest), { recursive: true });
-      await Deno.writeTextFile(dest, content);
-    }
-    await hive.importExternalPlugin(root);
-  } finally {
-    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
-  }
+  await withBundleDir(bundle, (dir) => hive.importExternalPlugin(dir));
 }
 
 export async function importFlow(
   db: AppDatabase,
   hive: HiveMicrokernel,
-  raw: unknown,
+  bytes: Uint8Array | undefined,
   options: ImportOptions,
   headers: Record<string, string>,
 ): Promise<Response> {
   try {
-    const parsed = parseFlowFile(raw);
-    if (!parsed.ok) return fail(headers, 400, [parsed.error]);
-    const { file } = parsed;
+    const read = await readUpload(bytes);
+    if (!read.ok) return fail(headers, 400, [read.error]);
+    const { file, bundledPlugins } = read.parsed;
 
     const repo = new ExecutionRepository(db);
     const existing = (await repo.findAll()).find((e) => e.name === file.name);
@@ -170,7 +197,7 @@ export async function importFlow(
     const pluginResults: { name: string; installed: boolean; error?: string }[] =
       [];
     for (const name of options.installBundledPlugins ?? []) {
-      const bundle = file.bundledPlugins.find((b) => b.name === name);
+      const bundle = bundledPlugins.find((b) => b.name === name);
       if (!bundle || hive.getPlugin(name)) continue;
       try {
         await installBundledPlugin(hive, bundle);

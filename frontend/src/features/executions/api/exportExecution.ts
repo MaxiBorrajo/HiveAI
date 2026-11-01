@@ -7,14 +7,18 @@ export interface SecretWarning {
 }
 
 export interface ExportedExecution {
-  filename: string;
-  file: unknown;
+  /** False when secrets were found and the export waits for confirmation. */
+  saved: boolean;
+  path?: string;
   secretWarnings: SecretWarning[];
 }
 
 export async function exportExecution(
   id: string,
+  options: { confirmSecrets?: boolean } = {},
 ): Promise<ResponseEntity<ExportedExecution>> {
-  const response = await apiClient.get(`/api/executions/${id}/export`);
+  const response = await apiClient.get(`/api/executions/${id}/export`, {
+    params: options.confirmSecrets ? { confirmSecrets: 1 } : undefined,
+  });
   return response.data;
 }

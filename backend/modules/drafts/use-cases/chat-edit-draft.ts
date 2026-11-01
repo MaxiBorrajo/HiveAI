@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createSseResponse } from "../../../core/api/sse.ts";
+import { executionContextStorage } from "../../../core/microkernel/human-interaction.ts";
 import { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import { runDraftChat } from "../../../core/ai/draft-chat/draft-chat.ts";
 import type { DraftChatEvent } from "../../../core/ai/draft-chat/draft-chat.ts";
@@ -17,6 +18,9 @@ function logStreamEvent(event: DraftChatEvent): void {
   switch (event.type) {
     case "validation_error":
       console.log(`${LOG} [validation_error] attempt ${event.attempt}: ${event.issues?.join("; ")}`);
+      break;
+    case "tool_call":
+      console.log(`${LOG} [tool_call] ${event.tool}`);
       break;
     case "error":
       console.log(`${LOG} [error] ${event.message}`);
@@ -76,12 +80,19 @@ export async function handleChatEditDraft(
       record.dir,
     );
 
-    let result = await generator.next();
-    while (!result.done) {
-      logStreamEvent(result.value);
-      send(result.value.type, result.value);
-      result = await generator.next();
-    }
+    // Plugins used for research may ask the user for approval; those requests
+    // go through the shared interaction queue like in any other chat.
+    await executionContextStorage.run(
+      { autoApprove: false, interactive: true },
+      async () => {
+        let result = await generator.next();
+        while (!result.done) {
+          logStreamEvent(result.value);
+          send(result.value.type, result.value);
+          result = await generator.next();
+        }
+      },
+    );
 
     const repository = getDraftRepository(hive);
     await repository.save({ ...record, updatedAt: new Date().toISOString() });

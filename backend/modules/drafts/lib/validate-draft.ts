@@ -2,10 +2,12 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import {
-  launchExternalPlugin,
   ExternalPluginProcessError,
 } from "../../../core/microkernel/external-plugins/external-plugin-host.ts";
-import { externalPluginNameFromSourceDir } from "../../../core/microkernel/external-plugins/external-plugin-registry.ts";
+import {
+  checkPluginConformance,
+  syncBeePluginFile,
+} from "../../../core/microkernel/plugin-conformance.ts";
 
 export interface DraftValidationResult {
   valid: boolean;
@@ -28,29 +30,11 @@ export async function validateDraftPlugin(
 ): Promise<DraftValidationResult> {
   const issues: string[] = [];
 
-  const hasIndex = await fileExists(join(draftDir, "index.ts"));
-  const hasBeePlugin = await fileExists(join(draftDir, "bee-plugin.ts"));
-  if (!hasIndex) issues.push("Missing index.ts.");
-  if (!hasBeePlugin) issues.push("Missing bee-plugin.ts.");
-  if (!hasIndex || !hasBeePlugin) {
-    return { valid: false, issues };
+  if (!(await fileExists(join(draftDir, "index.ts")))) {
+    return { valid: false, issues: ["Missing index.ts."] };
   }
-
-  const coreBeePlugin = await readFile(
-    new URL("../../../core/microkernel/bee-plugin.ts", import.meta.url),
-    "utf-8",
-  );
-  const draftBeePlugin = await readFile(
-    join(draftDir, "bee-plugin.ts"),
-    "utf-8",
-  );
-  const normalizeEol = (text: string) => text.replace(/\r\n/g, "\n").trim();
-  if (normalizeEol(coreBeePlugin) !== normalizeEol(draftBeePlugin)) {
-    issues.push(
-      "bee-plugin.ts has been modified — it must match the microkernel's version exactly. Regenerate the draft or copy the original back in.",
-    );
-    return { valid: false, issues };
-  }
+  // The draft always runs against this installation's BeePlugin interface.
+  await syncBeePluginFile(draftDir);
 
   const draftIndex = await readFile(join(draftDir, "index.ts"), "utf-8");
   const badZodImport = draftIndex.match(/from\s+["'](npm:zod[^"']*|jsr:@?zod[^"']*|https?:\/\/[^"']*\bzod\b[^"']*)["']/);
@@ -61,12 +45,14 @@ export async function validateDraftPlugin(
     return { valid: false, issues };
   }
 
+  const conformance = await checkPluginConformance(draftDir);
+  if (!conformance.ok) return { valid: false, issues: conformance.issues };
+
   let handle;
   try {
-    handle = await launchExternalPlugin(
-      externalPluginNameFromSourceDir(draftDir),
-      draftDir,
-    );
+    // Goes through the hive so the subprocess gets the callback URL
+    // (plugin config and approvals work from the first load).
+    handle = await hive.probeExternalPlugin(draftDir);
   } catch (error) {
     if (error instanceof ExternalPluginProcessError) {
       issues.push(`Plugin code failed to load: ${error.message}`);

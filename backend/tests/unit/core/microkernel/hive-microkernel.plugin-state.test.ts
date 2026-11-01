@@ -118,3 +118,22 @@ Deno.test("forgetPersistedState() removes the row so a re-imported plugin with t
   await hive.forgetPersistedState(pluginName);
   assertFalse((await repository.findAll()).has(pluginName));
 });
+
+Deno.test("restorePersistedActiveState() re-applies the persisted flag to one plugin (publish after editing)", async () => {
+  const { hive, repository, pluginName } = await makeHive("restore-one");
+  const other = new CounterPlugin();
+  other.name = "restore-other";
+  await hive.register(other);
+
+  await repository.setActive(pluginName, true);
+  await repository.setActive(other.name, true);
+  assertFalse(hive.isActive(pluginName));
+
+  await hive.restorePersistedActiveState(pluginName);
+
+  assert(hive.isActive(pluginName));
+  assertFalse(hive.isActive(other.name));
+
+  // Unknown or never-persisted plugins are left alone.
+  await hive.restorePersistedActiveState("not-registered");
+});

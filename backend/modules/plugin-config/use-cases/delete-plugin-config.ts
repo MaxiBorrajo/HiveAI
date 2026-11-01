@@ -1,4 +1,4 @@
-import { AppError } from "../../../core/api/errors.ts";
+import { loadConfigFields } from "../lib.ts";
 import type { PluginConfigDeps } from "../types.ts";
 import { configId } from "./get-plugin-config.ts";
 
@@ -7,8 +7,7 @@ export async function deletePluginConfig(
   pluginName: string,
   key: string,
 ): Promise<void> {
-  const plugin = deps.hive.getPlugin(pluginName);
-  if (!plugin) throw new AppError("Plugin not found.", 404);
+  await loadConfigFields(deps, pluginName);
 
   const id = configId(pluginName, key);
   await deps.secrets.delete(id);

@@ -3,15 +3,7 @@ import { pathToFileURL } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import type { BeeContext, BeePlugin } from "../bee-plugin.ts";
-
-const REQUIRED_FIELDS = [
-  "name",
-  "description",
-  "schema",
-  "process",
-  "selectionTests",
-  "executionTests",
-] as const;
+import { assertPluginShape } from "../plugin-conformance.ts";
 
 const callbackBaseUrl = Deno.args[0] || "";
 
@@ -35,13 +27,7 @@ async function loadPluginModule(dir: string): Promise<BeePlugin> {
 
   const instance: BeePlugin = new module.default();
 
-  for (const field of REQUIRED_FIELDS) {
-    if (!(field in instance)) {
-      throw new TypeError(
-        `The plugin does not fulfill the BeePlugin contract: missing '${field}'.`,
-      );
-    }
-  }
+  assertPluginShape(instance);
 
   return instance;
 }

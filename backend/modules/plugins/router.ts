@@ -8,6 +8,9 @@ import { handleImportPlugin } from "./use-cases/import-plugin.ts";
 import { handleRemovePlugin } from "./use-cases/remove-plugin.ts";
 import { handleExportPlugin } from "./use-cases/export-plugin.ts";
 import { handleEditPlugin } from "./use-cases/edit-plugin.ts";
+import { handleGetPluginFiles } from "./use-cases/get-plugin-files.ts";
+import { handlePluginTestChat } from "../plugin-test-chat/test-chat.ts";
+import { ResponseBuilder } from "../../core/api/response.ts";
 import { handleSaveTestResults } from "./use-cases/save-test-results.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { requireModelsConfigured } from "../../core/api/guards.ts";
@@ -56,6 +59,39 @@ pluginsRouter.post("/import", (c) => {
 pluginsRouter.get("/:name/export", (c) => {
   const name = c.req.param("name");
   return handleExportPlugin(c.get("hive"), name, {});
+});
+
+pluginsRouter.get("/:name/files", (c) =>
+  handleGetPluginFiles(c.get("hive"), c.req.param("name"), {
+    "content-type": "application/json",
+  }),
+);
+
+pluginsRouter.post("/:name/test-chat", async (c) => {
+  const hive = c.get("hive");
+  const headers = { "content-type": "application/json" };
+  const guardError = requireModelsConfigured(hive, headers);
+  if (guardError) return guardError;
+
+  const dir = await hive.getExternalPluginDir(c.req.param("name"));
+  if (!dir) {
+    return ResponseBuilder.error(
+      ["Plugin not found or not an imported (external) plugin."],
+      undefined,
+      { status: 404, headers },
+    );
+  }
+  const body = await c.req.json().catch(() => ({}));
+  return handlePluginTestChat(
+    hive,
+    {
+      dir,
+      model: hive.getConfig().get("model"),
+      message: body.message,
+      history: body.history,
+    },
+    headers,
+  );
 });
 
 pluginsRouter.post("/:name/edit", (c) => {

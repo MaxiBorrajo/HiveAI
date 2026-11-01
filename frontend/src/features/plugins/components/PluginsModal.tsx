@@ -11,7 +11,7 @@ interface PluginsModalProps {
   onToggle: (plugin: Plugin, nextActive: boolean) => void;
   onToggleAll: (nextActive: boolean) => void;
   hasModel?: boolean;
-  onImportPlugin: (files: FileList) => void;
+  onImportPlugin: (file: File) => void;
   onRemovePlugin: (plugin: Plugin) => void;
   onEditPlugin: (plugin: Plugin) => void;
   onConfigurePlugin: (plugin: Plugin) => void;

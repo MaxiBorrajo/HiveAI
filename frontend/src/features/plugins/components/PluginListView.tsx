@@ -33,7 +33,7 @@ interface PluginListViewProps {
   onToggleAll: (nextActive: boolean) => void;
   onSelectPlugins: (plugins: Plugin[]) => void;
   hasModel?: boolean;
-  onImportPlugin: (files: FileList) => void;
+  onImportPlugin: (file: File) => void;
   onRemovePlugin: (plugin: Plugin) => void;
   onEditPlugin: (plugin: Plugin) => void;
   onConfigurePlugin: (plugin: Plugin) => void;
@@ -66,10 +66,8 @@ export function PluginListView({
   }
 
   function handleFilesChosen(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      onImportPlugin(files);
-    }
+    const file = event.target.files?.[0];
+    if (file) onImportPlugin(file);
     event.target.value = "";
   }
 
@@ -144,13 +142,9 @@ export function PluginListView({
         <input
           ref={fileInputRef}
           type="file"
-          multiple
+          accept=".zip,application/zip"
           className="hidden"
           onChange={handleFilesChosen}
-          {...({ webkitdirectory: "", directory: "" } as Record<
-            string,
-            string
-          >)}
         />
       </DialogHeader>
 
@@ -225,7 +219,7 @@ export function PluginListView({
                       size="sm"
                       onClick={() => onEditPlugin(plugin)}
                       className="h-8 gap-1 px-3"
-                      title="Edit"
+                      title="Open in editor"
                     >
                       <Pencil size={12} />
                     </Button>

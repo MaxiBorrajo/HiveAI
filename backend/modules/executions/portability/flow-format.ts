@@ -1,20 +1,21 @@
 import { z } from "zod";
+import {
+  pluginFilesFromEntries,
+  readZip,
+  ZipReadError,
+} from "../../../core/files/zip-folder.ts";
 import type { LangGraphAbstraction } from "../../../core/ai/visual-builder/types.ts";
 
 export const FORMAT_NAME = "hiveai-flow";
-export const CURRENT_VERSION = 1;
-export const MAX_FILE_BYTES = 10 * 1024 * 1024; //10MB
+export const CURRENT_VERSION = 2;
+export const FLOW_JSON_NAME = "flow.json";
+export const PLUGINS_DIR = "plugins";
+export const MAX_FILE_BYTES = 10 * 1024 * 1024; //10MB (whole zip, compressed or not)
 export const MAX_PLUGIN_BYTES = 5 * 1024 * 1024; //5MB
 
 const PLUGIN_FILE_NAME = /^[A-Za-z0-9_.-]+\.ts$/;
 
-const bundledPluginSchema = z.object({
-  name: z.string().min(1),
-  files: z.record(z.string(), z.string()).refine(
-    (files) => Object.keys(files).every((n) => PLUGIN_FILE_NAME.test(n)),
-    { message: "Bundled plugin file names must be flat '.ts' names." },
-  ),
-});
+const PLUGIN_NAME = /^[A-Za-z0-9_.-]+$/;
 
 const flowFileSchema = z.object({
   format: z.literal(FORMAT_NAME),
@@ -34,7 +35,6 @@ const flowFileSchema = z.object({
   requiredPlugins: z.array(
     z.object({ name: z.string().min(1), external: z.boolean() }),
   ),
-  bundledPlugins: z.array(bundledPluginSchema),
 });
 
 export interface FlowFile {
@@ -46,7 +46,17 @@ export interface FlowFile {
   graph: LangGraphAbstraction;
   orchestrator?: { provider: string; model: string } | null;
   requiredPlugins: { name: string; external: boolean }[];
-  bundledPlugins: { name: string; files: Record<string, string> }[];
+}
+
+/** Source of an external plugin carried inside a flow zip (never bee-plugin.ts). */
+export interface BundledPlugin {
+  name: string;
+  files: Record<string, string>;
+}
+
+export interface ParsedFlow {
+  file: FlowFile;
+  bundledPlugins: BundledPlugin[];
 }
 
 export type ParseFlowResult =
@@ -84,7 +94,7 @@ export function parseFlowFile(raw: unknown): ParseFlowResult {
       ok: false,
       error: `Unsupported format version ${
         String(header.formatVersion ?? "(missing)")
-      }. This version of HiveAI supports version ${CURRENT_VERSION}.`,
+      }. This version of HiveAI supports version ${CURRENT_VERSION}; re-export the flow from the app that created it.`,
     };
   }
 
@@ -98,4 +108,65 @@ export function parseFlowFile(raw: unknown): ParseFlowResult {
     };
   }
   return { ok: true, file: parsed.data as FlowFile };
+}
+
+/**
+ * Reads a `.hiveai-flow.zip`: `flow.json` at the root plus one
+ * `plugins/<name>/` folder per bundled external plugin.
+ */
+export type ReadFlowZipResult =
+  | { ok: true; parsed: ParsedFlow }
+  | { ok: false; error: string };
+
+export async function readFlowZip(
+  bytes: Uint8Array,
+): Promise<ReadFlowZipResult> {
+  if (bytes.byteLength > MAX_FILE_BYTES) {
+    return { ok: false, error: "The file is too large to be a HiveAI flow." };
+  }
+
+  let entries: Map<string, Uint8Array>;
+  try {
+    entries = await readZip(bytes, MAX_FILE_BYTES);
+  } catch (error) {
+    if (error instanceof ZipReadError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
+
+  const json = entries.get(FLOW_JSON_NAME);
+  if (!json) {
+    return {
+      ok: false,
+      error: `The zip is not a HiveAI flow (missing ${FLOW_JSON_NAME}).`,
+    };
+  }
+  const result = parseFlowFile(new TextDecoder().decode(json));
+  if (!result.ok) return result;
+
+  const decoder = new TextDecoder();
+  const names = new Set<string>();
+  for (const path of entries.keys()) {
+    const [dir, name, ...rest] = path.split("/");
+    if (dir === PLUGINS_DIR && name && rest.length > 0) names.add(name);
+  }
+
+  const bundledPlugins: BundledPlugin[] = [];
+  for (const name of names) {
+    if (!PLUGIN_NAME.test(name)) {
+      return { ok: false, error: `Invalid plugin folder name "${name}".` };
+    }
+    const raw = pluginFilesFromEntries(entries, `${PLUGINS_DIR}/${name}/`);
+    const files: Record<string, string> = {};
+    for (const [fileName, content] of Object.entries(raw)) {
+      if (!PLUGIN_FILE_NAME.test(fileName)) {
+        return { ok: false, error: `Invalid file name "${fileName}" in plugin "${name}".` };
+      }
+      files[fileName] = decoder.decode(content);
+    }
+    bundledPlugins.push({ name, files });
+  }
+
+  return { ok: true, parsed: { file: result.file, bundledPlugins } };
 }

@@ -29,6 +29,8 @@ export async function handleImportDraft(
 
   try {
     const plugin = await hive.importExternalPlugin(record.dir);
+    // A plugin that was detached for editing comes back with its old on/off state.
+    await hive.restorePersistedActiveState(plugin.name);
     await repository.remove(name);
     return ResponseBuilder.success(
       { name: plugin.name, description: plugin.description },

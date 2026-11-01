@@ -1,9 +1,14 @@
-import { dirname, join } from "node:path";
 import type { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import { ExternalPluginProcessError } from "../../../core/microkernel/external-plugins/external-plugin-host.ts";
+import { PluginConformanceError } from "../../../core/microkernel/plugin-conformance.ts";
+import {
+  pluginFilesFromPluginZip,
+  readZip,
+  writePluginFiles,
+  ZipReadError,
+} from "../../../core/files/zip-folder.ts";
 import { ResponseBuilder } from "../../../core/api/response.ts";
 
-const REQUIRED_FILES = ["index.ts", "bee-plugin.ts"];
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; //5MB
 
 export async function handleImportPlugin(
@@ -22,55 +27,34 @@ export async function handleImportPlugin(
     );
   }
 
-  const entries = Array.from(form.entries()).filter(
-    (entry): entry is [string, File] => entry[1] instanceof File,
-  );
-
-  if (entries.length === 0) {
-    return ResponseBuilder.error(["No files were uploaded."], undefined, {
+  const upload = form.get("file");
+  if (!(upload instanceof File)) {
+    return ResponseBuilder.error(["No zip file was uploaded."], undefined, {
       status: 400,
       headers,
     });
   }
 
-  let totalBytes = 0;
-  for (const [, file] of entries) totalBytes += file.size;
-  if (totalBytes > MAX_TOTAL_BYTES) {
+  if (upload.size > MAX_TOTAL_BYTES) {
     return ResponseBuilder.error(
       [
-        `Upload too large: ${(totalBytes / 1024 / 1024).toFixed(1)}MB exceeds the ${MAX_TOTAL_BYTES / 1024 / 1024}MB limit.`,
+        `Upload too large: ${(upload.size / 1024 / 1024).toFixed(1)}MB exceeds the ${MAX_TOTAL_BYTES / 1024 / 1024}MB limit.`,
       ],
       undefined,
       { status: 413, headers },
     );
   }
 
-  const tempDir = await Deno.makeTempDir({ prefix: "hiveai-plugin-import-" });
-
+  let tempDir: string | undefined;
   try {
-    const presentFiles = new Set<string>();
+    const entries = await readZip(
+      new Uint8Array(await upload.arrayBuffer()),
+      MAX_TOTAL_BYTES,
+    );
+    const files = pluginFilesFromPluginZip(entries);
 
-    for (const [relativePath, file] of entries) {
-      const withoutRoot =
-        relativePath.split("/").slice(1).join("/") || relativePath;
-      const destPath = join(tempDir, withoutRoot);
-      if (!destPath.startsWith(tempDir)) {
-        continue;
-      }
-
-      await Deno.mkdir(dirname(destPath), { recursive: true });
-      await Deno.writeFile(destPath, new Uint8Array(await file.arrayBuffer()));
-      presentFiles.add(withoutRoot);
-    }
-
-    const missing = REQUIRED_FILES.filter((f) => !presentFiles.has(f));
-    if (missing.length > 0) {
-      return ResponseBuilder.error(
-        [`Missing required file(s): ${missing.join(", ")}.`],
-        undefined,
-        { status: 400, headers },
-      );
-    }
+    tempDir = await Deno.makeTempDir({ prefix: "hiveai-plugin-import-" });
+    await writePluginFiles(tempDir, files);
 
     const plugin = await hive.importExternalPlugin(tempDir);
     return ResponseBuilder.success(
@@ -78,6 +62,18 @@ export async function handleImportPlugin(
       { headers },
     );
   } catch (error) {
+    if (error instanceof ZipReadError) {
+      return ResponseBuilder.error([error.message], undefined, {
+        status: 400,
+        headers,
+      });
+    }
+    if (error instanceof PluginConformanceError) {
+      return ResponseBuilder.error(error.issues, undefined, {
+        status: 422,
+        headers,
+      });
+    }
     if (error instanceof ExternalPluginProcessError) {
       return ResponseBuilder.error(
         [`Could not start the plugin: ${error.message}`],
@@ -92,6 +88,6 @@ export async function handleImportPlugin(
       { status: 400, headers },
     );
   } finally {
-    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+    if (tempDir) await Deno.remove(tempDir, { recursive: true }).catch(() => {});
   }
 }

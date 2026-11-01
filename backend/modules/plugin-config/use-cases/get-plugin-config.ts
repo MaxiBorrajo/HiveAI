@@ -1,4 +1,4 @@
-import { AppError } from "../../../core/api/errors.ts";
+import { loadConfigFields } from "../lib.ts";
 import type { PluginConfigDeps, PluginConfigFieldDto } from "../types.ts";
 
 export function configId(pluginName: string, key: string): string {
@@ -9,10 +9,7 @@ export async function getPluginConfig(
   deps: PluginConfigDeps,
   pluginName: string,
 ): Promise<PluginConfigFieldDto[]> {
-  const plugin = deps.hive.getPlugin(pluginName);
-  if (!plugin) throw new AppError("Plugin not found.", 404);
-
-  const fields = plugin.configFields ?? [];
+  const fields = await loadConfigFields(deps, pluginName);
   if (fields.length === 0) return [];
 
   const rows = await deps.repo.findByPlugin(pluginName);

@@ -6,16 +6,12 @@ export interface ImportPluginResult {
   description: string;
 }
 
+/** Uploads a plugin `.zip`; the server unpacks and installs it. */
 export async function importPlugin(
-  files: FileList,
+  file: File,
 ): Promise<ResponseEntity<ImportPluginResult>> {
   const form = new FormData();
-  for (const file of Array.from(files)) {
-    const relativePath =
-      (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-      file.name;
-    form.append(relativePath, file, relativePath);
-  }
+  form.append("file", file, file.name);
 
   const response = await apiClient.post("/api/plugins/import", form);
   return response.data;

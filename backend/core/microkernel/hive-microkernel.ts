@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
+import { assertPluginShape } from "./plugin-conformance.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
@@ -20,15 +21,6 @@ import type { PluginStateRepository } from "../../infrastructure/db/repositories
 import { getSecretStore } from "../secrets/index.ts";
 
 export type { TestSuiteQualityReport };
-
-const REQUIRED_FIELDS = [
-  "name",
-  "description",
-  "schema",
-  "process",
-  "selectionTests",
-  "executionTests",
-] as const;
 
 export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
@@ -61,6 +53,17 @@ export class HiveMicrokernel {
 
   setPluginStateRepository(repository: PluginStateRepository): void {
     this.pluginStateRepository = repository;
+  }
+
+  /**
+   * Re-applies the persisted active flag of one plugin, e.g. after it was
+   * detached for editing and published again. No-op if nothing was persisted.
+   */
+  async restorePersistedActiveState(name: string): Promise<void> {
+    if (!this.plugins.has(name)) return;
+    const persisted = await this.getPersistedActiveState(name);
+    if (persisted === true) await this.activate(name);
+    else if (persisted === false) await this.deactivate(name);
   }
 
   async restorePersistedActiveStates(): Promise<void> {
@@ -323,13 +326,7 @@ export class HiveMicrokernel {
 
     const pluginInstance: BeePlugin = new module.default();
 
-    for (const field of REQUIRED_FIELDS) {
-      if (!(field in pluginInstance)) {
-        throw new TypeError(
-          `The plugin does not fulfill the BeePlugin contract: missing '${field}'.`,
-        );
-      }
-    }
+    assertPluginShape(pluginInstance);
 
     await this.register(pluginInstance);
     return true;

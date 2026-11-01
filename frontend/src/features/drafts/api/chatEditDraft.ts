@@ -3,6 +3,8 @@ import { postSse } from "@/lib/sse";
 export interface ChatEditDraftHandlers {
   onThinking?: (message: string) => void;
   onWriting?: (sourceCode: string, summary?: string) => void;
+  onToolCall?: (data: { tool: string; input: unknown }) => void;
+  onToolResult?: (data: { tool: string; ok: boolean; output?: string }) => void;
   onValidating?: () => void;
   onValidationError?: (data: { attempt: number; issues: string[] }) => void;
   onDone?: (data: { sourceCode: string; summary?: string }) => void;
@@ -22,6 +24,12 @@ export async function chatEditDraftStream(
       switch (eventName) {
         case "thinking":
           handlers.onThinking?.(data.message);
+          break;
+        case "tool_call":
+          handlers.onToolCall?.(data);
+          break;
+        case "tool_result":
+          handlers.onToolResult?.(data);
           break;
         case "writing":
           handlers.onWriting?.(data.sourceCode, data.summary);

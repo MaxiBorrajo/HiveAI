@@ -4,7 +4,6 @@ import { setPluginActive } from "@/features/plugins/api/setPluginActive";
 import { setPluginsActiveBatch } from "@/features/plugins/api/setPluginsActiveBatch";
 import { importPlugin } from "@/features/plugins/api/importPlugin";
 import { removePlugin } from "@/features/plugins/api/removePlugin";
-import { editPlugin } from "@/features/plugins/api/editPlugin";
 import { toastManager } from "@/lib/toastManager";
 import type { Plugin } from "@/features/plugins/types";
 import { useModels } from "@/features/models/ModelsContext";
@@ -21,7 +20,7 @@ export function PluginsManager() {
   const [configuringPlugin, setConfiguringPlugin] = useState<string | null>(
     null,
   );
-  const { openDraft, pluginsVersion } = useDraftEditor();
+  const { openDraft, openEditor, pluginsVersion } = useDraftEditor();
 
   function refreshPlugins() {
     return getPlugins().then(({ data }) => setPlugins(data ?? []));
@@ -47,10 +46,10 @@ export function PluginsManager() {
     }
   }
 
-  async function handleImportPlugin(files: FileList) {
+  async function handleImportPlugin(file: File) {
     setIsImporting(true);
     try {
-      const { data, success } = await importPlugin(files);
+      const { data, success } = await importPlugin(file);
       if (success && data) {
         await refreshPlugins();
         toastManager.add({
@@ -73,17 +72,10 @@ export function PluginsManager() {
     }
   }
 
-  async function handleEditPlugin(plugin: Plugin) {
-    const { success } = await editPlugin(plugin.name);
-    if (success) {
-      await refreshPlugins();
-      setIsModalOpen(false);
-      openDraft(plugin.name);
-      toastManager.add({
-        type: "success",
-        title: `'${plugin.name}' moved to drafts for editing.`,
-      });
-    }
+  /** Opens the plugin in the editor (view mode); editing it moves it to drafts from there. */
+  function handleEditPlugin(plugin: Plugin) {
+    setIsModalOpen(false);
+    openEditor({ name: plugin.name, kind: "official" });
   }
 
   async function toggleAllPlugins(nextActive: boolean) {

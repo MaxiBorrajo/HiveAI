@@ -8,7 +8,10 @@ import {
   XIcon,
 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { copyToClipboard, openErrorDetails } from "@/lib/errorDetails";
+import { reportSuccess, type ToastDetails } from "@/lib/toastManager";
 
 const toastIconByType: Record<string, React.ReactNode> = {
   success: <CircleCheckIcon className="size-5 text-primary" />,
@@ -41,7 +44,9 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager();
 
-  return toasts.map((toast) => (
+  return toasts.map((toast) => {
+    const details = (toast.data as ToastDetails | undefined)?.details;
+    return (
     <ToastRoot key={toast.id} toast={toast}>
       <div
         className={cn(
@@ -53,13 +58,47 @@ function ToastList() {
         <div className="flex-1 min-w-0">
           {toast.title && <ToastTitle>{toast.title}</ToastTitle>}
           {toast.description && (
-            <ToastDescription>{toast.description}</ToastDescription>
+            <ToastDescription
+              className={details ? "break-words line-clamp-3" : undefined}
+            >
+              {toast.description}
+            </ToastDescription>
+          )}
+          {details && (
+            <div className="mt-2 flex gap-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                onClick={() =>
+                  openErrorDetails({
+                    title: toast.title ?? "Error details",
+                    text: details,
+                  })
+                }
+              >
+                View details
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                onClick={async () => {
+                  if (await copyToClipboard(details)) {
+                    reportSuccess("Error copied to the clipboard");
+                  }
+                }}
+              >
+                Copy
+              </Button>
+            </div>
           )}
         </div>
         <ToastClose />
       </div>
     </ToastRoot>
-  ));
+    );
+  });
 }
 
 function ToastRoot({ className, ...props }: ToastPrimitive.Root.Props) {

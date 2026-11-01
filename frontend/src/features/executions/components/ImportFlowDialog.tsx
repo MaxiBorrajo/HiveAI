@@ -16,14 +16,14 @@ import {
 import { reportSuccess, reportWarning } from "@/lib/toastManager";
 
 interface ImportFlowDialogProps {
-  /** Parsed file content, or the raw text when it is not valid JSON. */
-  fileContent: string | null;
+  /** The chosen .hiveai-flow.zip, or null while the dialog is closed. */
+  file: File | null;
   onClose: () => void;
   onImported: (executionId: string) => void;
 }
 
 export function ImportFlowDialog({
-  fileContent,
+  file,
   onClose,
   onImported,
 }: ImportFlowDialogProps) {
@@ -44,10 +44,10 @@ export function ImportFlowDialog({
     setErrors([]);
     setConfirmOverwrite(false);
     setConflict("new");
-    if (fileContent === null) return;
+    if (file === null) return;
     let cancelled = false;
     setIsBusy(true);
-    previewImport(fileContent).then((outcome) => {
+    previewImport(file).then((outcome) => {
       if (cancelled) return;
       setIsBusy(false);
       if (!outcome.ok) return setErrors(outcome.errors);
@@ -63,7 +63,7 @@ export function ImportFlowDialog({
     return () => {
       cancelled = true;
     };
-  }, [fileContent]);
+  }, [file]);
 
   function togglePlugin(name: string) {
     setInstallPlugins((current) => {
@@ -75,13 +75,13 @@ export function ImportFlowDialog({
   }
 
   async function handleImport() {
-    if (!preview || fileContent === null) return;
+    if (!preview || file === null) return;
     if (preview.nameConflict && conflict === "overwrite" && !confirmOverwrite) {
       setConfirmOverwrite(true);
       return;
     }
     setIsBusy(true);
-    const outcome = await importExecution(fileContent, {
+    const outcome = await importExecution(file, {
       conflict: preview.nameConflict ? conflict : undefined,
       installBundledPlugins: [...installPlugins],
     });
@@ -109,7 +109,7 @@ export function ImportFlowDialog({
   const blocking = errors.length > 0 || (preview?.violations.length ?? 0) > 0;
 
   return (
-    <Dialog open={fileContent !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={file !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Import execution</DialogTitle>
@@ -154,7 +154,9 @@ export function ImportFlowDialog({
                 <label className="flex items-start gap-2">
                   <input
                     type="checkbox"
+                    className="mt-1 size-4 shrink-0"
                     checked={installPlugins.has(plugin.name)}
+                    disabled={plugin.conformanceIssues.length > 0}
                     onChange={() => togglePlugin(plugin.name)}
                   />
                   <span>
@@ -163,6 +165,11 @@ export function ImportFlowDialog({
                     trust.
                   </span>
                 </label>
+                {plugin.conformanceIssues.length > 0 && (
+                  <pre className="whitespace-pre-wrap rounded border border-destructive/50 p-2 text-xs text-destructive">
+                    {plugin.conformanceIssues.join("\n")}
+                  </pre>
+                )}
                 <div className="flex items-center justify-between gap-2 rounded border px-2 py-1">
                   <span className="font-mono text-xs">
                     {plugin.name}{" "}

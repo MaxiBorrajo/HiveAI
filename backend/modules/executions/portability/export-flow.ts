@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ResponseBuilder } from "../../../core/api/response.ts";
 import type {
@@ -8,12 +8,17 @@ import type {
 import type { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../infrastructure/db/repositories/execution-repository.ts";
+import { saveToDownloads } from "../../../core/files/save-to-downloads.ts";
+import { listExportablePluginFiles } from "../../../core/files/zip-folder.ts";
+import { BlobWriter, ZipWriter } from "@zip-js/zip-js";
 import { parseMaybeJson } from "../parse-maybe-json.ts";
 import {
   CURRENT_VERSION,
+  FLOW_JSON_NAME,
   FORMAT_NAME,
   type FlowFile,
   MAX_PLUGIN_BYTES,
+  PLUGINS_DIR,
 } from "./flow-format.ts";
 import { collectRequiredPlugins } from "./plugin-refs.ts";
 import { scanGraphForSecrets } from "./scan-secrets.ts";
@@ -29,18 +34,18 @@ function stripKeyIds(nodes: GraphNode[]): GraphNode[] {
   });
 }
 
-async function readPluginFiles(dir: string): Promise<Record<string, string>> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: Record<string, string> = {};
+async function readPluginFiles(
+  dir: string,
+): Promise<Record<string, Uint8Array>> {
+  const files: Record<string, Uint8Array> = {};
   let total = 0;
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
-    const content = await readFile(join(dir, entry.name), "utf-8");
-    total += content.length;
+  for (const name of await listExportablePluginFiles(dir)) {
+    const content = new Uint8Array(await readFile(join(dir, name)));
+    total += content.byteLength;
     if (total > MAX_PLUGIN_BYTES) {
       throw new Error("A plugin is too large to be bundled in a flow file.");
     }
-    files[entry.name] = content;
+    files[name] = content;
   }
   return files;
 }
@@ -50,7 +55,7 @@ export function safeFlowFilename(name: string): string {
     .replace(/[^A-Za-z0-9._-]+/g, "_")
     .slice(0, MAX_FILENAME_STEM)
     .replace(/^_+|_+$/g, "");
-  return `${stem || "flow"}.hiveai-flow.json`;
+  return `${stem || "flow"}.hiveai-flow.zip`;
 }
 
 export async function exportFlow(
@@ -58,6 +63,11 @@ export async function exportFlow(
   hive: HiveMicrokernel,
   id: number,
   headers: Record<string, string>,
+  options: {
+    confirmSecrets?: boolean;
+    /** Where the zip goes; defaults to the user's Downloads folder. */
+    save?: (filename: string, bytes: Uint8Array) => Promise<string>;
+  } = {},
 ): Promise<Response> {
   try {
     const repo = new ExecutionRepository(db);
@@ -86,12 +96,22 @@ export async function exportFlow(
       external: hive.isExternalPlugin(name),
     }));
 
-    const bundledPlugins: FlowFile["bundledPlugins"] = [];
+    // Exporting writes a file to disk, so secrets are reported first and the
+    // caller must confirm before anything is saved.
+    const secretWarnings = scanGraphForSecrets(graph);
+    if (secretWarnings.length > 0 && !options.confirmSecrets) {
+      return ResponseBuilder.success(
+        { saved: false, secretWarnings },
+        { headers },
+      );
+    }
+
+    const bundledPlugins: Record<string, Record<string, Uint8Array>> = {};
     for (const { name, external } of requiredPlugins) {
       if (!external) continue;
       const dir = await hive.getExternalPluginDir(name);
       if (!dir) continue;
-      bundledPlugins.push({ name, files: await readPluginFiles(dir) });
+      bundledPlugins[name] = await readPluginFiles(dir);
     }
 
     const orchestrator = record.orchestrator
@@ -110,15 +130,30 @@ export async function exportFlow(
       graph,
       orchestrator,
       requiredPlugins,
-      bundledPlugins,
     };
 
+    const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
+    await zipWriter.add(
+      FLOW_JSON_NAME,
+      new Blob([JSON.stringify(file, null, 2)]).stream(),
+    );
+    for (const [pluginName, files] of Object.entries(bundledPlugins)) {
+      for (const [fileName, content] of Object.entries(files)) {
+        await zipWriter.add(
+          `${PLUGINS_DIR}/${pluginName}/${fileName}`,
+          new Blob([content as Uint8Array<ArrayBuffer>]).stream(),
+        );
+      }
+    }
+    const zip = await zipWriter.close();
+
+    const path = await (options.save ?? saveToDownloads)(
+      safeFlowFilename(execution.name),
+      new Uint8Array(await zip.arrayBuffer()),
+    );
+
     return ResponseBuilder.success(
-      {
-        filename: safeFlowFilename(execution.name),
-        file,
-        secretWarnings: scanGraphForSecrets(graph),
-      },
+      { saved: true, path, secretWarnings },
       { headers },
     );
   } catch (error) {

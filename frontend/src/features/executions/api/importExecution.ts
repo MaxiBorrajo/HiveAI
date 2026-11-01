@@ -14,6 +14,8 @@ export interface ImportPreview {
     status: "missing" | "alreadyInstalled";
     /** File name -> source code, so the user can review it before installing. */
     files: Record<string, string>;
+    /** Why the plugin does not match this version's BeePlugin interface. */
+    conformanceIssues: string[];
   }[];
   violations: { nodeName: string; reason: string }[];
   secretWarnings: SecretWarning[];
@@ -34,7 +36,7 @@ export type ImportOutcome<T> =
 
 async function post<T>(
   url: string,
-  body: unknown,
+  body: FormData,
 ): Promise<ImportOutcome<T>> {
   try {
     const { data } = await apiClient.post<
@@ -57,16 +59,25 @@ async function post<T>(
   }
 }
 
-export function previewImport(file: unknown) {
-  return post<ImportPreview>("/api/executions/import/preview", { file });
+export function previewImport(file: File) {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return post<ImportPreview>("/api/executions/import/preview", form);
 }
 
 export function importExecution(
-  file: unknown,
+  file: File,
   options: {
     conflict?: "new" | "overwrite";
     installBundledPlugins: string[];
   },
 ) {
-  return post<ImportResult>("/api/executions/import", { file, ...options });
+  const form = new FormData();
+  form.append("file", file, file.name);
+  if (options.conflict) form.append("conflict", options.conflict);
+  form.append(
+    "installBundledPlugins",
+    JSON.stringify(options.installBundledPlugins),
+  );
+  return post<ImportResult>("/api/executions/import", form);
 }

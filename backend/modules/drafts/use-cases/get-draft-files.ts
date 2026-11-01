@@ -1,5 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readPluginSourceFiles } from "../../../core/files/plugin-source-files.ts";
 import type { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import { getDraftRepository } from "../lib/draft-context.ts";
 import { ResponseBuilder } from "../../../core/api/response.ts";
@@ -17,15 +16,7 @@ export async function handleGetDraftFiles(
     });
   }
 
-  const entries = await readdir(record.dir, { withFileTypes: true });
-  const files = await Promise.all(
-    entries
-      .filter((e) => e.isFile() && e.name.endsWith(".ts"))
-      .map(async (e) => ({
-        name: e.name,
-        content: await readFile(join(record.dir, e.name), "utf-8"),
-      })),
-  );
+  const files = await readPluginSourceFiles(record.dir);
 
   return ResponseBuilder.success({ files }, { headers });
 }

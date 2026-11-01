@@ -12,6 +12,7 @@ import { updateExecution } from "./use-cases/update-execution.ts";
 import { createExecution } from "./use-cases/create-execution.ts";
 import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
 import { listRuns } from "./use-cases/list-runs.ts";
+import { MAX_FILE_BYTES } from "./portability/flow-format.ts";
 import { exportFlow } from "./portability/export-flow.ts";
 import { importFlow, previewImport } from "./portability/import-flow.ts";
 import { runExecution } from "./use-cases/run-execution/run-execution.ts";
@@ -46,24 +47,47 @@ executionsRouter.post("/generate", async (c) => {
   );
 });
 
+async function readFlowUpload(
+  form: FormData | undefined,
+): Promise<Uint8Array | undefined> {
+  const upload = form?.get("file");
+  if (!(upload instanceof File) || upload.size > MAX_FILE_BYTES) {
+    return undefined;
+  }
+  return new Uint8Array(await upload.arrayBuffer());
+}
+
 executionsRouter.post("/import/preview", async (c) => {
   const headers = { "content-type": "application/json" };
-  const body = await c.req.json().catch(() => undefined);
-  return previewImport(getORM(), c.get("hive"), body?.file, headers);
+  const form = await c.req.formData().catch(() => undefined);
+  return previewImport(
+    getORM(),
+    c.get("hive"),
+    await readFlowUpload(form),
+    headers,
+  );
 });
 
 executionsRouter.post("/import", async (c) => {
   const headers = { "content-type": "application/json" };
-  const body = await c.req.json().catch(() => undefined);
+  const form = await c.req.formData().catch(() => undefined);
+  const conflict = form?.get("conflict");
+  let installBundledPlugins: string[] = [];
+  try {
+    const parsed = JSON.parse(String(form?.get("installBundledPlugins") ?? "[]"));
+    if (Array.isArray(parsed)) {
+      installBundledPlugins = parsed.filter((n: unknown) => typeof n === "string");
+    }
+  } catch {
+    // Malformed list: install nothing.
+  }
   return importFlow(
     getORM(),
     c.get("hive"),
-    body?.file,
+    await readFlowUpload(form),
     {
-      conflict: body?.conflict,
-      installBundledPlugins: Array.isArray(body?.installBundledPlugins)
-        ? body.installBundledPlugins.filter((n: unknown) => typeof n === "string")
-        : [],
+      conflict: conflict === "new" || conflict === "overwrite" ? conflict : undefined,
+      installBundledPlugins,
     },
     headers,
   );
@@ -71,7 +95,9 @@ executionsRouter.post("/import", async (c) => {
 
 executionsRouter.get("/:id/export", async (c) => {
   const headers = { "content-type": "application/json" };
-  return exportFlow(getORM(), c.get("hive"), parseId(c.req.param("id")), headers);
+  return exportFlow(getORM(), c.get("hive"), parseId(c.req.param("id")), headers, {
+    confirmSecrets: c.req.query("confirmSecrets") === "1",
+  });
 });
 
 executionsRouter.post("/", async (c) => {

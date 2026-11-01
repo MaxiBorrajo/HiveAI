@@ -17,6 +17,7 @@ export interface ExecutionWorkspaceOptions {
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null, targetKey?: string) => void;
   onExecutionCreated: (id: string) => void;
+  onExecutionRenamed?: () => void;
 }
 
 export function useExecutionWorkspace({
@@ -26,6 +27,7 @@ export function useExecutionWorkspace({
   selectedNodeId,
   setSelectedNodeId,
   onExecutionCreated,
+  onExecutionRenamed,
 }: ExecutionWorkspaceOptions) {
   const justCreatedIdRef = useRef<string | null>(null);
 
@@ -121,6 +123,7 @@ export function useExecutionWorkspace({
             currentKey = newId;
             onExecutionCreated(newId);
           },
+          onExecutionRenamed: () => onExecutionRenamed?.(),
           onPlanning: (thoughts) => {
             planningThought.set(thoughts, currentKey);
             logs.set((prev) => [...prev, ` ${thoughts}`], currentKey);

@@ -27,6 +27,7 @@ export function ExecutionsMain() {
     executions,
     activeExecutionId,
     onExecutionCreated,
+    refreshExecutions,
     newExecutionToken,
   } = useExecutions();
   const [input, setInput] = useState("");
@@ -70,6 +71,7 @@ export function ExecutionsMain() {
     selectedNodeId,
     setSelectedNodeId,
     onExecutionCreated,
+    onExecutionRenamed: refreshExecutions,
   });
 
   const editor = useGraphEditor({

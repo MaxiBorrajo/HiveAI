@@ -2,6 +2,7 @@ import { ThemeProvider } from "next-themes";
 import { useRef, useState } from "react";
 import { FilePlus, Upload } from "lucide-react";
 import { ImportFlowDialog } from "@/features/executions/components/ImportFlowDialog";
+import { ErrorDetailsDialog } from "@/components/ErrorDetailsDialog";
 import {
   ToastProvider,
   ToastPortal,
@@ -27,7 +28,7 @@ import {
   DraftEditorProvider,
   useDraftEditor,
 } from "@/features/drafts/DraftEditorContext";
-import { DraftEditorPage } from "@/features/drafts/components/DraftEditorPage";
+import { PluginEditorPage } from "@/features/drafts/components/PluginEditorPage";
 import { DeleteConfirmationDialog } from "@/components/DeleteConfirmationDialog";
 import { RenameDialog } from "@/components/RenameDialog";
 import {
@@ -37,11 +38,12 @@ import {
 } from "@/components/buildSidebarProps";
 
 function AppContent() {
-  const { openDraftName, closeDraft, notifyPluginImported } = useDraftEditor();
+  const { openPlugin, openEditor, closeDraft, notifyPluginImported } =
+    useDraftEditor();
   const [currentView, setCurrentView] = useState<AppView>("chat");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
-  const [importContent, setImportContent] = useState<string | null>(null);
+  const [importContent, setImportContent] = useState<File | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -73,15 +75,17 @@ function AppContent() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setImportContent(await file.text());
+    setImportContent(file);
   }
 
-  if (openDraftName) {
+  if (openPlugin) {
     return (
-      <DraftEditorPage
-        draftName={openDraftName}
+      <PluginEditorPage
+        key={`${openPlugin.kind}:${openPlugin.name}`}
+        plugin={openPlugin}
+        onSwitch={openEditor}
         onClose={closeDraft}
-        onImported={notifyPluginImported}
+        onPluginsChanged={notifyPluginImported}
       />
     );
   }
@@ -179,13 +183,13 @@ function AppContent() {
       <input
         ref={importInputRef}
         type="file"
-        accept=".json,application/json"
+        accept=".zip,application/zip"
         className="hidden"
         onChange={handleImportFileChosen}
       />
 
       <ImportFlowDialog
-        fileContent={importContent}
+        file={importContent}
         onClose={() => setImportContent(null)}
         onImported={(id) => {
           refreshExecutions();
@@ -235,6 +239,8 @@ function App() {
             </ChatsProvider>
           </DownloadsProvider>
         </ModelsProvider>
+
+        <ErrorDetailsDialog />
 
         <ToastPortal>
           <ToastViewport>

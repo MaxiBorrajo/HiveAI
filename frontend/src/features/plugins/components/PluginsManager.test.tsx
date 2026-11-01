@@ -141,8 +141,8 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
 
     expect(screen.queryByText(installedPlugin.name)).not.toBeInTheDocument();
 
-    const file = new File(["export default {}"], "index.ts", {
-      type: "text/plain",
+    const file = new File(["zip"], "plugin.zip", {
+      type: "application/zip",
     });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, file);

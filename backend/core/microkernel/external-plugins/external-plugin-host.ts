@@ -55,6 +55,8 @@ function buildPassthroughSchema(): z.ZodType {
 
 export interface ExternalPluginHandle {
   plugin: BeePlugin;
+  /** JSON schema of the plugin's input, as reported by its own zod schema. */
+  jsonSchema: Record<string, unknown>;
   stop(): Promise<void>;
   runExecutionTest(
     index: number,
@@ -179,6 +181,8 @@ export async function launchExternalPlugin(
     );
   }
   const manifest: Manifest = await manifestRes.json();
+  // The runner stores the plugin under the key used to load it, which is not
+  // necessarily the class's own `name` (e.g. a draft folder with another name).
 
   const plugin: BeePlugin = {
     name: manifest.name,
@@ -194,7 +198,7 @@ export async function launchExternalPlugin(
     process: async (input: unknown) => {
       const callId = getCurrentCallId();
       const res = await fetch(
-        `${host.baseUrl}/plugins/${encodeURIComponent(manifest.name)}/process`,
+        `${host.baseUrl}/plugins/${encodeURIComponent(pluginName)}/process`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -207,7 +211,7 @@ export async function launchExternalPlugin(
     },
     dispose: async () => {
       await fetch(
-        `${host.baseUrl}/plugins/${encodeURIComponent(manifest.name)}`,
+        `${host.baseUrl}/plugins/${encodeURIComponent(pluginName)}`,
         {
           method: "DELETE",
         },
@@ -217,9 +221,10 @@ export async function launchExternalPlugin(
 
   return {
     plugin,
+    jsonSchema: manifest.schema,
     stop: async () => {
       await fetch(
-        `${host.baseUrl}/plugins/${encodeURIComponent(manifest.name)}`,
+        `${host.baseUrl}/plugins/${encodeURIComponent(pluginName)}`,
         {
           method: "DELETE",
         },
@@ -227,7 +232,7 @@ export async function launchExternalPlugin(
     },
     runExecutionTest: async (index: number) => {
       const res = await fetch(
-        `${host.baseUrl}/plugins/${encodeURIComponent(manifest.name)}/execution-test`,
+        `${host.baseUrl}/plugins/${encodeURIComponent(pluginName)}/execution-test`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
