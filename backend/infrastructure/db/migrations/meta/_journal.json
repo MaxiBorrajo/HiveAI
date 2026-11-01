@@ -50,6 +50,13 @@
       "when": 1792501307012,
       "tag": "0006_stale_stark_industries",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793567890836,
+      "tag": "0007_fancy_sue_storm",
+      "breakpoints": true
     }
   ]
 }

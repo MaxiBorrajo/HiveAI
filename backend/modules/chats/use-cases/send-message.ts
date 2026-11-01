@@ -25,10 +25,19 @@ import {
   buildAttachmentContent,
   type AttachmentContentPart,
 } from "../../../core/attachments/build-attachment-content.ts";
-import { normalizeModelRef } from "../../../core/ai/providers/types.ts";
-import { HumanMessage, type BaseMessage } from "@langchain/core/messages";
+import { normalizeModelRef, type ModelRef } from "../../../core/ai/providers/types.ts";
+import { HumanMessage, SystemMessage, type BaseMessage } from "@langchain/core/messages";
 
 const MAX_MESSAGE_LENGTH = 100_000;
+
+export interface SendMessageOptions {
+  /** Answer with this model instead of the one configured for the app. */
+  modelRef?: ModelRef;
+  /** Context prepended to every turn without being stored in the chat. */
+  preamble?: string;
+  /** Title for a chat created by this message. */
+  title?: string;
+}
 
 async function persistUserMessage(
   db: AppDatabase,
@@ -267,6 +276,7 @@ export async function sendMessage(
   req: Request,
   headers: Record<string, string>,
   attachmentIds: number[] = [],
+  options: SendMessageOptions = {},
 ): Promise<Response> {
   return createSseResponse(headers, async (send) => {
     if (!userText.trim()) {
@@ -285,7 +295,7 @@ export async function sendMessage(
     let attachmentParts: AttachmentContentPart[] = [];
     if (attachmentIds.length > 0) {
       const config = hive.getConfig();
-      const modelRef = normalizeModelRef(model, {
+      const modelRef = options.modelRef ?? normalizeModelRef(model, {
         provider: config.get("modelProvider"),
         keyId: config.get("modelKeyId"),
       });
@@ -317,8 +327,8 @@ export async function sendMessage(
       }
       resolvedChatId = chatId;
     } else {
-      const generatedTitle =
-        userText.length > 50 ? userText.slice(0, 47) + "..." : userText;
+      const generatedTitle = options.title ??
+        (userText.length > 50 ? userText.slice(0, 47) + "..." : userText);
       resolvedChatId = await chatRepo.create({
         title: generatedTitle,
         createdAt: Date.now(),
@@ -361,8 +371,16 @@ export async function sendMessage(
       }
     }
 
+    if (options.preamble) {
+      contextMessages.unshift(new SystemMessage(options.preamble));
+    }
+
     const config = hive.getConfig();
-    const modelProvider = config.get("modelProvider");
+    const modelProvider = options.modelRef?.provider ?? config.get("modelProvider");
+    const modelKeyId = options.modelRef
+      ? (options.modelRef.keyId ?? "")
+      : config.get("modelKeyId");
+    if (options.modelRef) model = options.modelRef.model;
     const progress: StreamResult = {
       fullContent: "",
       steps: [],
@@ -395,7 +413,7 @@ export async function sendMessage(
                   chatId: resolvedChatId.toString(),
                   model,
                   modelProvider,
-                  modelKeyId: config.get("modelKeyId"),
+                  modelKeyId,
                   modelOptions: modelProvider === "ollama" ? modelOptions : {},
                 },
                 { streamMode: ["messages", "values"], signal: req.signal },

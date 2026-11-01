@@ -7,6 +7,7 @@ export const USAGE_CONTEXT_KINDS = [
   "chat",
   "execution",
   "graph_generation",
+  "judge",
   "other",
 ] as const;
 export type UsageContextKind = (typeof USAGE_CONTEXT_KINDS)[number];

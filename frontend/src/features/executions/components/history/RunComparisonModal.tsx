@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, TrophyIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,12 @@ import {
   type NodeRow,
   type NodeSide,
 } from "../../lib/compareRuns";
+import {
+  compareRunSet,
+  type RunScore,
+} from "../../lib/compareRunSet";
 import type { ExecutionFileArtifact, RunSummary } from "../../types";
+import { JudgePanel } from "./JudgePanel";
 
 const providerLabel = (provider: string) =>
   (PROVIDER_LABELS as Record<string, string>)[provider] ?? provider;
@@ -332,19 +337,153 @@ function ModelsTable({ rows }: { rows: ModelRow[] }) {
   );
 }
 
+const columnsStyle = (count: number) => ({
+  gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`,
+});
+
+function RunColumns({
+  count,
+  children,
+}: {
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="grid grid-cols-1 gap-3 md:[grid-template-columns:var(--cols)]"
+      style={{ "--cols": columnsStyle(count).gridTemplateColumns } as React.CSSProperties}
+    >
+      {children}
+    </div>
+  );
+}
+
+function totalTokens(run: RunSummary): number | null {
+  const buckets = run.usage ? [run.usage.local, run.usage.cloud] : [];
+  const values = buckets.flatMap((b) => [b.inputTokens, b.outputTokens]);
+  const reported = values.filter((v): v is number => v !== null);
+  return reported.length === 0 ? null : reported.reduce((x, y) => x + y, 0);
+}
+
+function modelNames(run: RunSummary): string[] {
+  const usage = run.usage;
+  if (!usage) return [];
+  const names = [
+    usage.orchestrator ? usage.orchestrator.model : null,
+    ...[...usage.local.models, ...usage.cloud.models].map((m) => m.model),
+  ].filter((n): n is string => n !== null);
+  return [...new Set(names)];
+}
+
+function GradeBlock({ score }: { score: RunScore }) {
+  const { grade } = score;
+  if (!grade) {
+    return <p className="text-xs text-muted-foreground">Not graded</p>;
+  }
+  if (grade.status === "failed" || grade.score === null) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="w-fit rounded border border-border px-1.5 py-0.5 text-[10px] font-medium">
+          Unevaluated
+        </span>
+        <p className="text-[10px] text-muted-foreground">
+          The judge failed{grade.error ? `: ${grade.error}` : "."}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-lg font-medium">{grade.score}/10</span>
+        {score.isBest && <TrophyIcon className="size-3.5" aria-label="Best score" />}
+        {score.behindBest !== null && (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            −{score.behindBest} vs best
+          </span>
+        )}
+      </div>
+      <p className="text-xs">{grade.reasoning}</p>
+      <p className="text-[10px] text-muted-foreground">
+        {grade.judge.model} · judge v{grade.judge.version} · rubric v
+        {grade.rubric.version}
+      </p>
+    </div>
+  );
+}
+
+function OverviewCard({ score }: { score: RunScore }) {
+  const { run } = score;
+  const models = modelNames(run);
+  const input = Object.entries(run.input ?? {}).filter(
+    ([, v]) => v !== undefined && v !== "",
+  );
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-3">
+      <div className="font-mono text-xs font-medium">{runLabel(run)}</div>
+      <dl className="flex flex-col gap-2 text-xs">
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</dt>
+          <dd>Completed</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Model</dt>
+          <dd className="break-all font-mono">{models.length > 0 ? models.join(", ") : NO_DATA}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Tokens</dt>
+          <dd className="font-mono">{formatTokens(totalTokens(run))}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Time</dt>
+          <dd className="font-mono">{formatDuration(run.usage?.latencyMs ?? null)}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Input</dt>
+          <dd className="max-h-24 overflow-auto break-words">
+            {run.input === null
+              ? "Not recorded"
+              : input.length === 0
+                ? "Empty"
+                : input.map(([k, v]) => (
+                    <div key={k}>
+                      <span className="font-mono text-muted-foreground">{k}: </span>
+                      {typeof v === "string" ? v : JSON.stringify(v)}
+                    </div>
+                  ))}
+          </dd>
+        </div>
+      </dl>
+      <div className="border-t border-border pt-2">
+        <GradeBlock score={score} />
+      </div>
+    </div>
+  );
+}
+
 export function RunComparisonModal({
+  executionId,
   runs,
   open,
   onOpenChange,
+  onGraded,
 }: {
-  runs: [RunSummary, RunSummary] | null;
+  executionId: string | null;
+  runs: RunSummary[] | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onGraded: () => void;
 }) {
+  const set = useMemo(() => (runs ? compareRunSet(runs) : null), [runs]);
+  const pair = runs && runs.length === 2 ? runs : null;
   const comparison = useMemo(
-    () => (runs ? compareRuns(runs[0], runs[1]) : null),
-    [runs],
+    () => (pair ? compareRuns(pair[0], pair[1]) : null),
+    [pair],
   );
+  const pairWarnings = (comparison?.warnings ?? []).filter(
+    (w) => w.code !== "differentInput" && w.code !== "inputNotRecorded",
+  );
+  const warnings = [...(set?.warnings ?? []), ...pairWarnings.map((w) => w.message)];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -352,77 +491,111 @@ export function RunComparisonModal({
         <DialogHeader>
           <DialogTitle>Compare runs</DialogTitle>
           <DialogDescription>
-            Side by side. The app does not judge quality: read the results and
-            decide.
+            Side by side. Grading with a judge is optional: read the results
+            and decide, or ask a judge model to score them.
           </DialogDescription>
         </DialogHeader>
 
-        {runs && comparison && (
+        {runs && set && (
           <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-1">
             <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
               <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
               These are tokens, not prices. Different models are shown side by
-              side and are never added into a single figure.
+              side and are never added into a single figure. Ask the judge to
+              look up prices if you want a cost comparison.
             </p>
 
-            {comparison.warnings.length > 0 && (
+            {warnings.length > 0 && (
               <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-                {comparison.warnings.map((w, i) => (
+                {warnings.map((message, i) => (
                   <li key={i} className="flex gap-2">
                     <span aria-hidden>•</span>
-                    {w.message}
+                    {message}
                   </li>
                 ))}
               </ul>
             )}
 
             <Section
-              title="Main metric"
-              hint="Tokens of the orchestrator and tokens delegated to the nodes."
+              title="Overview"
+              hint="Input, model, tokens, time, status and the judge's score for each run."
             >
-              <TwoColumns
-                left={<HeadlineCard run={runs[0]} side={comparison.a} />}
-                right={<HeadlineCard run={runs[1]} side={comparison.b} />}
-              />
-              {comparison.a && comparison.b && (
-                <p className="font-mono text-[10px] text-muted-foreground">
-                  {comparison.orchestratorDelta
-                    ? `Same orchestrator model · Δ in ${
-                        formatDelta(
-                          comparison.a.orchestratorTokens.inputTokens,
-                          comparison.b.orchestratorTokens.inputTokens,
-                        ) ?? NO_DATA
-                      } · Δ out ${
-                        formatDelta(
-                          comparison.a.orchestratorTokens.outputTokens,
-                          comparison.b.orchestratorTokens.outputTokens,
-                        ) ?? NO_DATA
-                      }`
-                    : "Different or unknown orchestrator models: tokens are not set against each other."}
-                </p>
-              )}
+              <RunColumns count={runs.length}>
+                {set.scores.map((score) => (
+                  <OverviewCard key={score.run.historyId} score={score} />
+                ))}
+              </RunColumns>
             </Section>
+
+            {pair && comparison && (
+              <Section
+                title="Main metric"
+                hint="Tokens of the orchestrator and tokens delegated to the nodes."
+              >
+                <TwoColumns
+                  left={<HeadlineCard run={pair[0]} side={comparison.a} />}
+                  right={<HeadlineCard run={pair[1]} side={comparison.b} />}
+                />
+                {comparison.a && comparison.b && (
+                  <p className="font-mono text-[10px] text-muted-foreground">
+                    {comparison.orchestratorDelta
+                      ? `Same orchestrator model · Δ in ${
+                          formatDelta(
+                            comparison.a.orchestratorTokens.inputTokens,
+                            comparison.b.orchestratorTokens.inputTokens,
+                          ) ?? NO_DATA
+                        } · Δ out ${
+                          formatDelta(
+                            comparison.a.orchestratorTokens.outputTokens,
+                            comparison.b.orchestratorTokens.outputTokens,
+                          ) ?? NO_DATA
+                        }`
+                      : "Different or unknown orchestrator models: tokens are not set against each other."}
+                  </p>
+                )}
+              </Section>
+            )}
 
             <Section title="Result">
-              <TwoColumns
-                left={<ResultColumn run={runs[0]} />}
-                right={<ResultColumn run={runs[1]} />}
-              />
+              <RunColumns count={runs.length}>
+                {runs.map((run) => (
+                  <div key={run.historyId} className="min-w-0">
+                    <ResultColumn run={run} />
+                  </div>
+                ))}
+              </RunColumns>
             </Section>
 
-            <Section
-              title="Nodes"
-              hint={`${comparison.nodeCounts.matched} matched · ${comparison.nodeCounts.onlyInA} only in the left run · ${comparison.nodeCounts.onlyInB} only in the right run`}
-            >
-              <NodesTable rows={comparison.nodes} />
-            </Section>
+            {executionId && (
+              <Section
+                title="Judge"
+                hint="Score the runs with a rubric you write, or ask the judge questions."
+              >
+                <JudgePanel
+                  executionId={executionId}
+                  runs={runs}
+                  onGraded={onGraded}
+                />
+              </Section>
+            )}
 
-            <Section
-              title="Tokens by model"
-              hint="Variation is shown only when the same model ran in both runs."
-            >
-              <ModelsTable rows={comparison.models} />
-            </Section>
+            {pair && comparison && (
+              <>
+                <Section
+                  title="Nodes"
+                  hint={`${comparison.nodeCounts.matched} matched · ${comparison.nodeCounts.onlyInA} only in the left run · ${comparison.nodeCounts.onlyInB} only in the right run`}
+                >
+                  <NodesTable rows={comparison.nodes} />
+                </Section>
+
+                <Section
+                  title="Tokens by model"
+                  hint="Variation is shown only when the same model ran in both runs."
+                >
+                  <ModelsTable rows={comparison.models} />
+                </Section>
+              </>
+            )}
           </div>
         )}
       </DialogContent>
