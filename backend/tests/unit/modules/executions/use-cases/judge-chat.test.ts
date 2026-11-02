@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { buildJudgeChatPreamble } from "../../../../../modules/executions/use-cases/judge-chat.ts";
+import { buildJudgeChatPreamble, parseJudgeFocus } from "../../../../../modules/executions/use-cases/judge-chat.ts";
 import type { RunSummary } from "../../../../../modules/executions/use-cases/list-runs.ts";
 
 function run(over: Partial<RunSummary>): RunSummary {
@@ -39,4 +39,13 @@ Deno.test("the preamble describes every run with its input, result and grade", (
   assertStringIncludes(text, "not graded");
   assertStringIncludes(text, "unevaluated");
   assertEquals(text.match(/### Run #/g)?.length, 2);
+});
+
+Deno.test("the focus steers the preamble and unknown values are ignored", () => {
+  assertEquals(parseJudgeFocus("tokens"), "tokens");
+  assertEquals(parseJudgeFocus("nope"), null);
+  const focused = buildJudgeChatPreamble("Flow", [run({})], "tokens");
+  assertStringIncludes(focused, "token usage by model");
+  const plain = buildJudgeChatPreamble("Flow", [run({})]);
+  assertEquals(plain.includes("The user is looking at"), false);
 });

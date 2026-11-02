@@ -11,6 +11,7 @@ export interface JudgeChatBody {
   chatId?: unknown;
   historyIds?: unknown;
   judge?: GradeRunsBody["judge"];
+  focus?: unknown;
 }
 
 function asText(value: unknown): string {
@@ -43,10 +44,25 @@ function describeTokens(run: RunSummary): string {
   return `${total} tokens (local ${tokens(usage.local)}, cloud ${tokens(usage.cloud)}), ${time}`;
 }
 
+export const JUDGE_FOCUSES = ["overview", "result", "tokens", "nodes"] as const;
+export type JudgeFocus = (typeof JUDGE_FOCUSES)[number];
+
+export function parseJudgeFocus(value: unknown): JudgeFocus | null {
+  return JUDGE_FOCUSES.find((focus) => focus === value) ?? null;
+}
+
+const FOCUS_HINTS: Record<JudgeFocus, string> = {
+  overview: "The user is looking at the overview of the runs: judge them in general terms (result, cost, time, grades).",
+  result: "The user is looking at the results of the runs: base your answer on the quality of the outputs.",
+  tokens: "The user is looking at token usage by model: base your answer on tokens and models, and look up current prices with your tools if they ask about cost.",
+  nodes: "The user is looking at the node-by-node breakdown: focus on which nodes and models differ between the runs.",
+};
+
 /** The comparison as plain text, so the judge can discuss it with the user. */
 export function buildJudgeChatPreamble(
   executionName: string,
   runs: RunSummary[],
+  focus: JudgeFocus | null = null,
 ): string {
   const sections = runs.map((run) => {
     const grades = run.grades.length === 0
@@ -67,7 +83,7 @@ export function buildJudgeChatPreamble(
   });
 
   return `You are the judge helping the user compare ${runs.length} runs of the workflow "${executionName}".
-Answer their questions about the comparison. You can use your tools, for example to look up model prices, to support your answer.
+Answer their questions about the comparison. You can use your tools, for example to look up model prices, to support your answer.${focus ? `\n${FOCUS_HINTS[focus]}` : ""}
 
 ${sections.join("\n\n")}`;
 }
@@ -115,7 +131,7 @@ export async function judgeChat(
       [],
       {
         modelRef: judgeRef,
-        preamble: buildJudgeChatPreamble(execution.name, runs),
+        preamble: buildJudgeChatPreamble(execution.name, runs, parseJudgeFocus(body.focus)),
         title: `Judge · ${execution.name}`,
       },
     );

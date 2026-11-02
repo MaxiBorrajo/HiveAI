@@ -25,9 +25,11 @@ import {
   type AttachmentDto,
 } from "../api/attachments.ts";
 import { getErrorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
   placeholder?: string;
+  className?: string;
   input: string;
   setInput: (val: string) => void;
   isThinking: boolean;
@@ -48,6 +50,7 @@ export function ChatInput({
   handleStop,
   hidePluginsAndModes,
   placeholder,
+  className,
   chatId = null,
   attachments = [],
   onAttachmentsChange,
@@ -126,7 +129,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-2">
+    <div className={cn("flex w-full max-w-3xl flex-col gap-2", className)}>
       {!hasModel && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
           <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />

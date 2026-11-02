@@ -12,11 +12,9 @@ export async function getRubric(
 export async function saveRubric(
   executionId: string,
   rubric: string,
-  reference: string,
 ): Promise<ResponseEntity<{ rubric: Rubric }>> {
   const response = await apiClient.put(`/api/executions/${executionId}/rubric`, {
     rubric,
-    reference,
   });
   return response.data;
 }

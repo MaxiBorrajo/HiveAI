@@ -1,6 +1,8 @@
 import { postSse } from "../../../lib/sse";
 import type { JudgeChoice } from "../types.ts";
 
+export type JudgeFocus = "overview" | "result" | "tokens" | "nodes";
+
 export interface JudgeChatHandlers {
   onChatCreated: (chatId: number) => void;
   onToolCalls: (names: string[]) => void;
@@ -16,6 +18,7 @@ export async function judgeChat(
     chatId: number | null;
     historyIds: number[];
     judge: JudgeChoice;
+    focus?: JudgeFocus;
   },
   handlers: JudgeChatHandlers,
   signal?: AbortSignal,
