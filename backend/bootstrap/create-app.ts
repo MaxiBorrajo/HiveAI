@@ -19,6 +19,8 @@ import { apiKeysRouter } from "../modules/api-keys/router.ts";
 import { usageRouter } from "../modules/usage/router.ts";
 import { appUpdatesRouter } from "../modules/app-updates/router.ts";
 import { attachmentsRouter } from "../modules/attachments/router.ts";
+import { hardwareRouter } from "../modules/hardware/router.ts";
+import { modelDiscoveryRouter } from "../modules/model-discovery/router.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const frontendDistPath = join(__dirname, "../../frontend/dist");
@@ -66,6 +68,8 @@ export function createApp(hive: HiveMicrokernel) {
   app.route("/api/usage", usageRouter);
   app.route("/api/app", appUpdatesRouter);
   app.route("/api/downloads", downloadsRouter);
+  app.route("/api/hardware", hardwareRouter);
+  app.route("/api/model-discovery", modelDiscoveryRouter);
   app.route("/api", attachmentsRouter);
 
   app.use("/*", serveStatic({ root: frontendDistPath }));

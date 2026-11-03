@@ -61,6 +61,7 @@ export function ChatInput({
     hasAvailableModels,
     embeddingModelStatus,
     openManage,
+    openExplore,
     refreshModels,
   } = useModels();
   const embeddingModelMissing =
@@ -140,7 +141,7 @@ export function ChatInput({
             </span>
           ) : (
             <span>
-              No models downloaded. Pull a model with Ollama, then select it
+              No models downloaded. Explore and download one, then select it
               here.
             </span>
           )}
@@ -148,9 +149,9 @@ export function ChatInput({
             variant="secondary"
             size="sm"
             className="ml-auto shrink-0"
-            onClick={openManage}
+            onClick={hasAvailableModels ? openManage : openExplore}
           >
-            Select models
+            {hasAvailableModels ? "Select models" : "Explore models"}
           </Button>
         </div>
       )}

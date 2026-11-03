@@ -5,7 +5,16 @@ export interface RegistryInfo {
   sizeBytes: number | null;
 }
 
-const REGISTRY = "https://registry.ollama.ai/v2";
+const OLLAMA_REGISTRY = "https://registry.ollama.ai/v2";
+const HF_REGISTRY = "https://huggingface.co/v2";
+
+/** Models pulled as "hf.co/user/repo:quant" are served by Hugging Face, not the Ollama registry. */
+function registryUrl(repo: string, tag: string): string {
+  const hf = /^(hf\.co|huggingface\.co)\//.exec(repo);
+  return hf
+    ? `${HF_REGISTRY}/${repo.slice(hf[0].length)}/manifests/${tag}`
+    : `${OLLAMA_REGISTRY}/${repo}/manifests/${tag}`;
+}
 
 export function parseModelName(
   name: string,
@@ -36,7 +45,7 @@ export async function fetchRegistryInfo(
   if (!parsed) return { exists: false, sizeBytes: null };
   try {
     const res = await fetchFn(
-      `${REGISTRY}/${parsed.repo}/manifests/${parsed.tag}`,
+      registryUrl(parsed.repo, parsed.tag),
       {
         headers: { accept: "application/vnd.docker.distribution.manifest.v2+json" },
         signal: AbortSignal.timeout(8000),

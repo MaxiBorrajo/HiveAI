@@ -37,3 +37,13 @@ Deno.test("isModelInstalled - treats a bare name as :latest and ignores case", a
   assertEquals(isModelInstalled("qwen3", installed), false);
   assertEquals(isModelInstalled("qwen3:1.7b", installed), false);
 });
+
+Deno.test("fetchRegistryInfo - hf.co names are looked up on Hugging Face", async () => {
+  let url = "";
+  const info = await fetchRegistryInfo("hf.co/unsloth/Qwen3-8B-GGUF:Q4_K_M", (u) => {
+    url = String(u);
+    return Promise.resolve(Response.json({ config: { size: 1 }, layers: [{ size: 99 }] }));
+  });
+  assertEquals(url, "https://huggingface.co/v2/unsloth/Qwen3-8B-GGUF/manifests/Q4_K_M");
+  assertEquals(info, { exists: true, sizeBytes: 100 });
+});

@@ -3,10 +3,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Info, Trash2 } from "lucide-react";
-import { useDownloads } from "@/features/models/DownloadsContext";
-import { ModelDownloadView } from "./ModelDownloadView";
 import { DeleteModelDialog } from "./DeleteModelDialog";
 import type {
   CurrentModels,
@@ -74,16 +72,8 @@ export function ModelListView({
   onDeleteModel,
   protectedModel,
 }: ModelListViewProps) {
-  const { requestedName, downloads } = useDownloads();
   const [tab, setTab] = useState("ollama");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const activeDownloads = downloads.filter(
-    (d) => d.status === "queued" || d.status === "downloading",
-  ).length;
-
-  useEffect(() => {
-    if (requestedName) setTab("download");
-  }, [requestedName]);
 
   const active = currentChoice(current);
   const tree = buildProviderTree(groups, { includeUnsupported: true });
@@ -107,21 +97,14 @@ export function ModelListView({
               {p.label}
             </TabsTrigger>
           ))}
-          <TabsTrigger value="download">
-            Download{activeDownloads > 0 ? ` (${activeDownloads})` : ""}
-          </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="download" className="flex flex-1 min-h-0 flex-col pt-2">
-          <ModelDownloadView />
-        </TabsContent>
 
         <TabsContent value="ollama" className="flex flex-1 min-h-0 flex-col">
           <ScrollArea className="flex-1 min-h-0">
             <div className="flex flex-col gap-3">
               {models.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No models installed. Use the Download tab to get one, and make
+                  No models installed. Use the compass icon in the models menu to explore and download one, and make
                   sure Ollama is running.
                 </p>
               )}
