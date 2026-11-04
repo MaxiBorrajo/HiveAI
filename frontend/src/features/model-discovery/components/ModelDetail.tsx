@@ -6,16 +6,17 @@ import { MessageMarkdown } from "@/features/chats/components/MessageMarkdown";
 import { formatBytes } from "@/features/models/lib/formatBytes";
 import { getModelDetail } from "../api/discovery";
 import { formatContext } from "../lib/fit";
-import type { ModelDetail as ModelDetailData } from "../types";
+import type { ModelDetail as ModelDetailData, ModelSource } from "../types";
 import { CapabilityBadges, FitBadge } from "./FitBadge";
 
 interface ModelDetailProps {
   id: string;
+  source?: ModelSource;
   onBack: () => void;
   onDownload: (ollamaName: string) => void;
 }
 
-export function ModelDetail({ id, onBack, onDownload }: ModelDetailProps) {
+export function ModelDetail({ id, source = "ollama", onBack, onDownload }: ModelDetailProps) {
   const [detail, setDetail] = useState<ModelDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showReadme, setShowReadme] = useState(false);
@@ -24,7 +25,7 @@ export function ModelDetail({ id, onBack, onDownload }: ModelDetailProps) {
     let cancelled = false;
     setDetail(null);
     setError(null);
-    getModelDetail(id)
+    getModelDetail(id, source)
       .then((r) => {
         if (cancelled) return;
         if (r.data) setDetail(r.data);
@@ -34,7 +35,7 @@ export function ModelDetail({ id, onBack, onDownload }: ModelDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, source]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -81,10 +82,19 @@ export function ModelDetail({ id, onBack, onDownload }: ModelDetailProps) {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium">Quantizations</p>
+            <p className="text-sm font-medium">
+              {source === "ollama" ? "Versions" : "Quantizations"}
+            </p>
+            {source === "huggingface" && (
+              <p className="text-xs text-muted-foreground" role="note">
+                Not verified with Ollama: this model may fail to load or lack tool support.
+              </p>
+            )}
             {detail.quantizations.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                No GGUF files were found for this model.
+                {source === "ollama"
+                  ? "No downloadable versions were found for this model."
+                  : "No GGUF files were found for this model."}
               </p>
             )}
             {detail.quantizations.map(({ quant, fit }) => (

@@ -19,6 +19,7 @@ export function parseModel(model: HfModel): ModelCard {
   const template = model.gguf?.chat_template ?? "";
   const license = tags.find((t) => t.startsWith("license:"))?.slice(8) ?? null;
   return {
+    source: "huggingface",
     id: model.id,
     ollamaName: `hf.co/${model.id}`,
     paramsBillions: model.gguf?.total

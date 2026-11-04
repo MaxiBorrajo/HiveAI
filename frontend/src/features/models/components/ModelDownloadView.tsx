@@ -15,6 +15,7 @@ import { formatSpeed } from "@/features/models/lib/formatSpeed";
 import { HardwareSummary } from "@/features/model-discovery/components/HardwareSummary";
 import { ModelSearch } from "@/features/model-discovery/components/ModelSearch";
 import { ModelDetail } from "@/features/model-discovery/components/ModelDetail";
+import type { ModelSource } from "@/features/model-discovery/types";
 
 const STATUS_LABEL: Record<Download["status"], string> = {
   queued: "Queued",
@@ -142,7 +143,7 @@ export function ModelDownloadView() {
   const [info, setInfo] = useState<Preflight | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ id: string; source: ModelSource } | null>(null);
 
   useEffect(() => {
     if (requestedName) {
@@ -215,19 +216,20 @@ export function ModelDownloadView() {
       <ScrollArea className="-mx-1 flex-1 min-h-0">
         <div className="flex flex-col gap-3 px-1">
           <HardwareSummary />
-          {selectedRepo && (
+          {selected && (
             <ModelDetail
-              id={selectedRepo}
-              onBack={() => setSelectedRepo(null)}
+              id={selected.id}
+              source={selected.source}
+              onBack={() => setSelected(null)}
               onDownload={(ollamaName) => {
                 void start(ollamaName);
-                setSelectedRepo(null);
+                setSelected(null);
               }}
             />
           )}
           {/* stays mounted behind the detail so Back keeps the query, chips and loaded pages */}
-          <div hidden={selectedRepo !== null}>
-            <ModelSearch onSelect={setSelectedRepo} />
+          <div hidden={selected !== null}>
+            <ModelSearch onSelect={(id, source) => setSelected({ id, source })} />
           </div>
           {downloads.length > 0 && (
             <p className="mt-2 text-sm font-medium">Downloads</p>

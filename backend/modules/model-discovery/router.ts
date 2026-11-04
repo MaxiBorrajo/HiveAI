@@ -11,4 +11,4 @@ modelDiscoveryRouter.get("/search", (c) =>
   handleSearch(c.get("hive"), c.req.query(), json));
 
 modelDiscoveryRouter.get("/model", (c) =>
-  handleDetail(c.get("hive"), c.req.query("id"), json));
+  handleDetail(c.get("hive"), c.req.query("id"), c.req.query("source"), json));

@@ -6,11 +6,19 @@ export interface ModelCapabilities {
   reasoning: boolean;
 }
 
+/** Where a model was found. Ollama's own library is guaranteed to run on Ollama, Hugging Face is not. */
+export type ModelSource = "ollama" | "huggingface";
+
+export const MODEL_SOURCES: readonly ModelSource[] = ["ollama", "huggingface"];
+
 export interface ModelCard {
-  /** Hugging Face repo, e.g. "unsloth/Qwen3-8B-GGUF" */
+  source: ModelSource;
+  /** Library name ("qwen3") or Hugging Face repo ("unsloth/Qwen3-8B-GGUF") */
   id: string;
   /** Name Ollama pulls it by, without a quantization tag */
   ollamaName: string;
+  /** Library models only: every parameter count (in billions) the model is published in */
+  sizes?: number[];
   paramsBillions: number | null;
   architecture: string | null;
   contextLength: number | null;
@@ -53,6 +61,8 @@ export interface SearchFilters {
 }
 
 export interface SearchOptions {
+  /** defaults to the Ollama library */
+  source?: ModelSource;
   sort?: SearchSort;
   cursor?: string;
   filters?: SearchFilters;
@@ -62,7 +72,7 @@ export interface SearchResult {
   items: SearchResultItem[];
   /** cursor to request the next page with, null when the results are exhausted */
   nextCursor: string | null;
-  /** true when Hugging Face could not be reached and curated models are shown instead */
+  /** true when the source could not be reached and curated models are shown instead */
   offline: boolean;
 }
 

@@ -51,13 +51,18 @@ export function evaluateFit(
     if (requiredBytes <= vramBudget) {
       return result("fits", `Needs ~${need}, fits in ${formatBytes(profile.gpu.vramBytes)} of VRAM.`);
     }
-    if (requiredBytes <= ramBudget) {
+    // the layers that do not fit in VRAM are offloaded to RAM, so only the overflow has to fit there
+    const spill = requiredBytes - vramBudget;
+    if (spill <= ramBudget) {
       return result(
         "slow",
-        `Needs ~${need}, more than the ${formatBytes(profile.gpu.vramBytes)} of VRAM: part of the model runs on CPU.`,
+        `Needs ~${need}, more than the ${formatBytes(profile.gpu.vramBytes)} of VRAM: ~${formatBytes(spill)} runs on CPU.`,
       );
     }
-    return result("no_fit", `Needs ~${need}, only ${formatBytes(profile.availableMemBytes)} of RAM is free.`);
+    return result(
+      "no_fit",
+      `Needs ~${need}: ${formatBytes(vramBudget)} fit in VRAM but the other ${formatBytes(spill)} do not fit in the ${formatBytes(profile.availableMemBytes)} of RAM that is free.`,
+    );
   }
 
   if (requiredBytes > ramBudget) {

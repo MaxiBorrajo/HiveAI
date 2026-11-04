@@ -36,10 +36,24 @@ Deno.test("GPU profile - a 14B model spills to CPU and is slow", () => {
   assertEquals(evaluateFit(GPU_PROFILE, qwen14, CTX).status, "slow");
 });
 
-Deno.test("GPU profile - a 32B model does not fit and says why", () => {
-  const r = evaluateFit(GPU_PROFILE, qwen32, CTX);
+Deno.test("GPU profile - a model too big for VRAM plus free RAM does not fit and says why", () => {
+  const r = evaluateFit(GPU_PROFILE, { ...qwen32, sizeBytes: 40 * GB }, CTX);
   assertEquals(r.status, "no_fit");
-  assertStringIncludes(r.reason, "RAM is free");
+  assertStringIncludes(r.reason, "do not fit in the");
+});
+
+Deno.test("GPU profile - only the part that overflows VRAM has to fit in free RAM", () => {
+  const gpu8: HardwareProfile = {
+    totalMemBytes: 16 * GB,
+    availableMemBytes: 2.3 * GB,
+    gpu: { usable: true, name: "RTX 3070", vramBytes: 8 * GB, unifiedMemory: false },
+  };
+  // ~7.8 GB needed: 7.2 GB fit in VRAM and the ~0.6 GB left over fits in the free RAM
+  const r = evaluateFit(gpu8, { sizeBytes: 6.1e9, paramsBillions: 9, contextLength: 262144 }, CTX);
+  assertEquals(r.status, "slow");
+  assertStringIncludes(r.reason, "runs on CPU");
+  // a build that overflows VRAM by more than the free RAM still does not fit
+  assertEquals(evaluateFit(gpu8, { sizeBytes: 9.3e9, paramsBillions: 9, contextLength: 262144 }, CTX).status, "no_fit");
 });
 
 Deno.test("No-GPU profile - small models run on CPU, mid-size ones are slow, big ones do not fit", () => {

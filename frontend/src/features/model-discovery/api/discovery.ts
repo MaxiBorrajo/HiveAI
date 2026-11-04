@@ -1,6 +1,6 @@
 import { apiClient } from "../../../lib/apiClient";
 import type { ResponseEntity } from "../../../lib/config";
-import type { HardwareReport, ModelDetail, SearchParams, SearchResult } from "../types";
+import type { HardwareReport, ModelDetail, ModelSource, SearchParams, SearchResult } from "../types";
 
 export async function getHardwareReport(): Promise<ResponseEntity<HardwareReport>> {
   const response = await apiClient.get("/api/hardware");
@@ -8,10 +8,12 @@ export async function getHardwareReport(): Promise<ResponseEntity<HardwareReport
 }
 
 export async function searchModels(
-  { q, sort, filters, cursor }: SearchParams,
+  { source, q, sort, filters, cursor }: SearchParams,
 ): Promise<ResponseEntity<SearchResult>> {
   // only the parameters that are set are sent, the backend treats a missing one as "off"
   const params: Record<string, string> = { q, sort };
+  // the Ollama library is the backend default, so only the other source is spelled out
+  if (source !== "ollama") params.source = source;
   if (cursor) params.cursor = cursor;
   if (filters.tools) params.tools = "1";
   if (filters.vision) params.vision = "1";
@@ -21,9 +23,12 @@ export async function searchModels(
   return response.data;
 }
 
-export async function getModelDetail(id: string): Promise<ResponseEntity<ModelDetail>> {
-  const response = await apiClient.get("/api/model-discovery/model", {
-    params: { id },
-  });
+export async function getModelDetail(
+  id: string,
+  source: ModelSource = "ollama",
+): Promise<ResponseEntity<ModelDetail>> {
+  const params: Record<string, string> = { id };
+  if (source !== "ollama") params.source = source;
+  const response = await apiClient.get("/api/model-discovery/model", { params });
   return response.data;
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { searchModels } from "../api/discovery";
-import type { SearchFilters, SearchResultItem, SearchSort } from "../types";
+import type { ModelSource, SearchFilters, SearchResultItem, SearchSort } from "../types";
 
 const DEBOUNCE_MS = 400;
 
@@ -26,7 +26,12 @@ const INITIAL: State = {
  * Paginated model search. Any change of query, sort or filters starts over from page one;
  * `loadMore` appends the next page, and answers that arrive for an outdated request are dropped.
  */
-export function useModelSearch(query: string, sort: SearchSort, filters: SearchFilters) {
+export function useModelSearch(
+  source: ModelSource,
+  query: string,
+  sort: SearchSort,
+  filters: SearchFilters,
+) {
   const [state, setState] = useState<State>(INITIAL);
   const request = useRef(0);
   const { tools, vision, reasoning, fitsOnly } = filters;
@@ -36,7 +41,7 @@ export function useModelSearch(query: string, sort: SearchSort, filters: SearchF
     const q = query.trim();
     setState((s) => ({ ...s, items: [], nextCursor: null, loading: true, loadingMore: false, error: null }));
     const timer = setTimeout(() => {
-      searchModels({ q, sort, filters: { tools, vision, reasoning, fitsOnly } })
+      searchModels({ source, q, sort, filters: { tools, vision, reasoning, fitsOnly } })
         .then((r) => {
           if (id !== request.current) return;
           if (r.data) {
@@ -57,14 +62,14 @@ export function useModelSearch(query: string, sort: SearchSort, filters: SearchF
         });
     }, q ? DEBOUNCE_MS : 0);
     return () => clearTimeout(timer);
-  }, [query, sort, tools, vision, reasoning, fitsOnly]);
+  }, [source, query, sort, tools, vision, reasoning, fitsOnly]);
 
   const { nextCursor, loading, loadingMore } = state;
   const loadMore = useCallback(() => {
     if (!nextCursor || loading || loadingMore) return;
     const id = request.current;
     setState((s) => ({ ...s, loadingMore: true, error: null }));
-    searchModels({ q: query.trim(), sort, filters: { tools, vision, reasoning, fitsOnly }, cursor: nextCursor })
+    searchModels({ source, q: query.trim(), sort, filters: { tools, vision, reasoning, fitsOnly }, cursor: nextCursor })
       .then((r) => {
         if (id !== request.current) return;
         if (r.data) {
@@ -85,7 +90,7 @@ export function useModelSearch(query: string, sort: SearchSort, filters: SearchF
       .catch((e: Error) => {
         if (id === request.current) setState((s) => ({ ...s, loadingMore: false, error: e.message }));
       });
-  }, [nextCursor, loading, loadingMore, query, sort, tools, vision, reasoning, fitsOnly]);
+  }, [nextCursor, loading, loadingMore, source, query, sort, tools, vision, reasoning, fitsOnly]);
 
   return { ...state, hasMore: state.nextCursor !== null, loadMore };
 }

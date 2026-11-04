@@ -55,6 +55,7 @@ const NO_GPU_REPORT: HardwareReport = {
 };
 
 const card = (id: string, paramsBillions: number): ModelCard => ({
+  source: "huggingface",
   id,
   ollamaName: `hf.co/${id}`,
   paramsBillions,
@@ -127,7 +128,7 @@ describe("ModelSearch", () => {
     expect(screen.getByText(/only 5.7 GB of RAM is free/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("unsloth/Qwen3-8B-GGUF"));
-    expect(onSelect).toHaveBeenCalledWith("unsloth/Qwen3-8B-GGUF");
+    expect(onSelect).toHaveBeenCalledWith("unsloth/Qwen3-8B-GGUF", "huggingface");
   });
 
   test("typing queries the backend", async () => {
@@ -168,13 +169,62 @@ describe("ModelSearch filters and paging", () => {
     render(<ModelSearch onSelect={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "true");
 
-    await userEvent.click(screen.getByRole("button", { name: "Trending" }));
+    await userEvent.click(screen.getByRole("button", { name: "Newest" }));
     await userEvent.click(screen.getByRole("button", { name: "Tools" }));
     await userEvent.click(screen.getByRole("button", { name: "Fits my hardware" }));
 
-    expect(screen.getByRole("button", { name: "Trending" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Newest" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "false");
-    await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "trending", tools: "1", fits: "1" }));
+    await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "updated", tools: "1", fits: "1" }));
+  });
+
+  test("defaults to the Ollama library; Hugging Face is opt-in, warns, and offers more sorts", async () => {
+    setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [] }))]);
+    render(<ModelSearch onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Ollama library" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Trending" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(lastParams()).toEqual({ q: "", sort: "recommended" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Hugging Face" }));
+    expect(screen.getByRole("button", { name: "Trending" })).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("not verified with Ollama");
+    await waitFor(() => expect(lastParams()).toEqual({ source: "huggingface", q: "", sort: "recommended" }));
+  });
+
+  test("a sort only Hugging Face has falls back to Recommended when switching back to the library", async () => {
+    setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [] }))]);
+    render(<ModelSearch onSelect={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Hugging Face" }));
+    await userEvent.click(screen.getByRole("button", { name: "Trending" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ollama library" }));
+    expect(screen.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "recommended" }));
+  });
+
+  test("library results show the published sizes and report the library source", async () => {
+    const libraryCard = {
+      ...card("qwen3", 8),
+      source: "ollama" as const,
+      ollamaName: "qwen3",
+      sizes: [0.6, 8, 32],
+    };
+    setRoutes([route(() =>
+      ok({
+        offline: false,
+        nextCursor: null,
+        items: [{
+          card: libraryCard,
+          estimatedQ4Bytes: 5 * GB,
+          fit: { status: "fits", reason: "ok", requiredBytes: 0, usableContext: 8000 },
+        }],
+      })
+    )]);
+    const onSelect = vi.fn();
+    render(<ModelSearch onSelect={onSelect} />);
+    expect(await screen.findByText("0.6B · 8B · 32B")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("qwen3"));
+    expect(onSelect).toHaveBeenCalledWith("qwen3", "ollama");
   });
 
   test("Load more appends the next page using the cursor", async () => {

@@ -13,9 +13,15 @@ export interface ModelCapabilities {
   reasoning: boolean;
 }
 
+/** Ollama's own library is guaranteed to run on Ollama; Hugging Face repos are not verified. */
+export type ModelSource = "ollama" | "huggingface";
+
 export interface ModelCard {
+  source: ModelSource;
   id: string;
   ollamaName: string;
+  /** library models: every parameter count (billions) the model is published in */
+  sizes?: number[];
   paramsBillions: number | null;
   architecture: string | null;
   contextLength: number | null;
@@ -61,6 +67,7 @@ export const NO_FILTERS: SearchFilters = {
 };
 
 export interface SearchParams {
+  source: ModelSource;
   q: string;
   sort: SearchSort;
   filters: SearchFilters;

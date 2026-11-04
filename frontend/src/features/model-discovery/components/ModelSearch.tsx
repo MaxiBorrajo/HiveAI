@@ -6,13 +6,21 @@ import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/features/models/lib/formatBytes";
 import { formatContext, formatCount } from "../lib/fit";
 import { useModelSearch } from "../lib/useModelSearch";
-import { NO_FILTERS, type SearchFilters, type SearchSort } from "../types";
+import { type ModelSource, NO_FILTERS, type SearchFilters, type SearchSort } from "../types";
 import { CapabilityBadges, FitBadge } from "./FitBadge";
 import { FilterChip } from "./FilterChip";
 
 interface ModelSearchProps {
-  onSelect: (id: string) => void;
+  onSelect: (id: string, source: ModelSource) => void;
 }
+
+const SOURCE_CHIPS: { source: ModelSource; label: string }[] = [
+  { source: "ollama", label: "Ollama library" },
+  { source: "huggingface", label: "Hugging Face" },
+];
+
+/** ollama.com only orders by popularity and by date */
+const LIBRARY_SORTS: SearchSort[] = ["recommended", "downloads", "updated"];
 
 const SORT_CHIPS: { sort: SearchSort; label: string }[] = [
   { sort: "recommended", label: "Recommended" },
@@ -30,12 +38,18 @@ const FILTER_CHIPS: { key: keyof SearchFilters; label: string }[] = [
 ];
 
 export function ModelSearch({ onSelect }: ModelSearchProps) {
+  const [source, setSource] = useState<ModelSource>("ollama");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SearchSort>("recommended");
   const [filters, setFilters] = useState<SearchFilters>(NO_FILTERS);
+  const sortChips = source === "ollama"
+    ? SORT_CHIPS.filter((c) => LIBRARY_SORTS.includes(c.sort))
+    : SORT_CHIPS;
+  const sortAllowed = sortChips.some((c) => c.sort === sort) ? sort : "recommended";
   // "Recommended" is the curated list: it only applies while the search box is empty
-  const effectiveSort = query.trim() && sort === "recommended" ? "downloads" : sort;
+  const effectiveSort = query.trim() && sortAllowed === "recommended" ? "downloads" : sortAllowed;
   const { items, loading, loadingMore, hasMore, error, offline, loadMore } = useModelSearch(
+    source,
     query,
     effectiveSort,
     filters,
@@ -74,8 +88,15 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort">
-          {SORT_CHIPS.map(({ sort: value, label }) => (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Source">
+          {SOURCE_CHIPS.map(({ source: value, label }) => (
+            <FilterChip key={value} active={source === value} onClick={() => setSource(value)}>
+              {label}
+            </FilterChip>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort">
+          {sortChips.map(({ sort: value, label }) => (
             <FilterChip
               key={value}
               active={effectiveSort === value}
@@ -98,10 +119,16 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
         </div>
       </div>
 
+      {source === "huggingface" && (
+        <p className="text-xs text-muted-foreground" role="note">
+          These models are not verified with Ollama: they may fail to load or lack tool support.
+          Models from the Ollama library are guaranteed to run.
+        </p>
+      )}
       {offline && (
         <p className="text-xs text-muted-foreground">
-          Hugging Face is not reachable, so only a few recommended models are
-          shown (sizes are estimates).
+          {source === "ollama" ? "ollama.com" : "Hugging Face"} is not reachable, so only a few
+          recommended models are shown (sizes are estimates).
         </p>
       )}
       {loading && <p className="text-xs text-muted-foreground">Searching…</p>}
@@ -124,7 +151,7 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
           <li key={card.id}>
             <button
               type="button"
-              onClick={() => onSelect(card.id)}
+              onClick={() => onSelect(card.id, card.source)}
               className="flex w-full flex-col gap-1.5 rounded-lg border border-border bg-card p-3 text-left hover:bg-muted/50"
             >
               <div className="flex items-center gap-2">
@@ -134,12 +161,18 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
                 <FitBadge fit={fit} />
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                {card.paramsBillions !== null && (
+                {card.sizes && card.sizes.length > 0 ? (
+                  <Badge variant="secondary">{card.sizes.map((z) => `${z}B`).join(" · ")}</Badge>
+                ) : card.paramsBillions !== null && (
                   <Badge variant="secondary">{card.paramsBillions}B params</Badge>
                 )}
                 <CapabilityBadges capabilities={card.capabilities} />
                 {estimatedQ4Bytes !== null && (
-                  <span>~{formatBytes(estimatedQ4Bytes)} at 4-bit</span>
+                  <span>
+                    {card.sizes && card.sizes.length > 1 && card.paramsBillions !== null
+                      ? `${card.paramsBillions}B: `
+                      : ""}~{formatBytes(estimatedQ4Bytes)} at 4-bit
+                  </span>
                 )}
                 {formatContext(card.contextLength) && (
                   <span>· {formatContext(card.contextLength)}</span>
