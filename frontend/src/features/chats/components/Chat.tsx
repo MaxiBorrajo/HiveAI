@@ -23,13 +23,14 @@ function ChatDisclaimer({ className }: { className?: string }) {
 }
 
 function statusLabel(
-  phase: "processing" | "loading_model",
+  phase: "processing" | "loading_model" | "compacting",
   text: string,
   liveSteps: ChatStep[],
   toolsRunning: boolean,
 ) {
   if (phase === "loading_model") return "Loading the model into memory...";
   if (toolsRunning) return "Waiting for the tools...";
+  if (phase === "compacting" && !text) return "Compacting the conversation context...";
   if (text) return "Reasoning...";
   const last = liveSteps[liveSteps.length - 1];
   if (last) return "Working on the next step...";
@@ -58,7 +59,7 @@ function ThinkingIndicator({
   liveTools,
 }: {
   text: string;
-  phase: "processing" | "loading_model";
+  phase: "processing" | "loading_model" | "compacting";
   liveSteps: ChatStep[];
   liveTools: LiveToolCall[];
 }) {

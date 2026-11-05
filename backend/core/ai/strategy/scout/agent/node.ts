@@ -3,6 +3,7 @@ import {
   BaseMessage,
   HumanMessage,
   SystemMessage,
+  ToolMessage,
 } from "@langchain/core/messages";
 import { GraphNode } from "@langchain/langgraph/web";
 import { END } from "@langchain/langgraph";
@@ -13,6 +14,7 @@ import {
   isThinkingRejection,
   markThinkingUnsupported,
   shouldRequestThinking,
+  stripThinkingBlocks,
 } from "../../../providers/thinking.ts";
 import { normalizeProviderError } from "../../../providers/errors.ts";
 import { HiveMicrokernel } from "../../../../microkernel/hive-microkernel.ts";
@@ -23,6 +25,7 @@ import {
   AGENT_EMPTY_RESPONSE_PROMPT,
 } from "./prompt.ts";
 import { MAX_AGENT_ITERATIONS, MAX_AGENT_DURATION_MS } from "../constants.ts";
+import { resolveTokenSavings } from "../../../token-savings/config.ts";
 import { buildNativeTools } from "../../shared/native-tools.ts";
 
 export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
@@ -41,8 +44,14 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     keyId: state.modelKeyId,
   });
   const isCloud = isCloudProvider(modelRef.provider);
+  // Follow-up iterations of a tool loop (the last message is a tool result) are
+  // simple continuations: thinking there is billed as output but rarely worth it.
+  const lastMessage = state.messages[state.messages.length - 1];
+  const skipThinking = isCloud &&
+    resolveTokenSavings().thinkingControl &&
+    ToolMessage.isInstance(lastMessage);
   const agentOptions = isCloud
-    ? { think: shouldRequestThinking(modelRef) }
+    ? { think: shouldRequestThinking(modelRef) && !skipThinking }
     : { think: true, ...state.modelOptions };
   let agentModel = await createChatModel(modelRef, agentOptions);
 
@@ -55,7 +64,7 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
   );
 
   const systemMessages = [
-    new SystemMessage(buildAgentSystemPrompt()),
+    new SystemMessage(buildAgentSystemPrompt({ isCloud })),
     ...(outOfIterations
       ? [new HumanMessage(AGENT_OUT_OF_ITERATIONS_PROMPT)]
       : []),
@@ -88,7 +97,12 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     }
   };
 
-  let response = await invoke([...systemMessages, ...state.messages]);
+  // Thinking blocks are signed against the request that produced them; drop
+  // them when this request runs without thinking.
+  const history = skipThinking
+    ? stripThinkingBlocks(state.messages)
+    : state.messages;
+  let response = await invoke([...systemMessages, ...history]);
 
   console.log(`[SCOUT - Agent] Raw model response:`, response.content);
   console.log(`[SCOUT - Agent] Tool calls requested:`, response.tool_calls);
@@ -99,7 +113,7 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
     );
     response = await invoke([
       ...systemMessages,
-      ...state.messages,
+      ...history,
       response,
       new HumanMessage(AGENT_EMPTY_RESPONSE_PROMPT),
     ]);

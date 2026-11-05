@@ -25,6 +25,8 @@ import {
   buildAttachmentContent,
   type AttachmentContentPart,
 } from "../../../core/attachments/build-attachment-content.ts";
+import { boundHistoryForCloud } from "../../../core/ai/token-savings/bounded-history.ts";
+import { withCompactionListener } from "../../../core/ai/token-savings/notice.ts";
 import { normalizeModelRef, type ModelRef } from "../../../core/ai/providers/types.ts";
 import { HumanMessage, SystemMessage, type BaseMessage } from "@langchain/core/messages";
 
@@ -353,7 +355,7 @@ export async function sendMessage(
     const modelOptions = await resolveModelOptions();
 
     const msgRepo = new MessageRepository(db);
-    const contextMessages = await msgRepo.buildTurnContext(
+    let contextMessages = await msgRepo.buildTurnContext(
       resolvedChatId,
       userText,
     );
@@ -381,6 +383,7 @@ export async function sendMessage(
       ? (options.modelRef.keyId ?? "")
       : config.get("modelKeyId");
     if (options.modelRef) model = options.modelRef.model;
+    contextMessages = boundHistoryForCloud(contextMessages, modelProvider);
     const progress: StreamResult = {
       fullContent: "",
       steps: [],
@@ -407,6 +410,9 @@ export async function sendMessage(
           return await executionContextStorage.run(
             { autoApprove: false, signal: req.signal },
             async () => {
+              return await withCompactionListener(
+                () => send("status", { phase: "compacting" }),
+                async () => {
               const streamIterable = await Scout.stream(
                 {
                   messages: contextMessages,
@@ -423,6 +429,8 @@ export async function sendMessage(
                 "Agent",
                 send,
                 progress,
+              );
+                },
               );
             },
           );

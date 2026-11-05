@@ -741,7 +741,7 @@ function formatResults(
 export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
   name = "web_search";
   description =
-    "Searches the web and returns a list of results, each with a title, URL, optional date and a short snippet. IMPORTANT: it does NOT return the full content of any page: to read a page, call a page-reading tool on its URL. Supports search operators: \"exact phrase\", site:domain.com (also site:reddit.com/r/name), and -excluded. Use time_range ('year', 'month'...) to restrict to recent pages instead of putting dates in the query. Make searches ONE AT A TIME, not in parallel: the search backend is rate limited and parallel bursts get blocked. If a search fails or is blocked, do not repeat the same query: rephrase it or use another site: operator. Prefer this tool over your own knowledge for anything that changes over time (news, prices, 'latest', 'current', any specific recent year) and for discovering what people say online; do NOT use it for timeless facts.";
+    "Searches the web and returns results with title, URL, optional date and a short snippet. It does NOT return page content: read a page with a page-reading tool on its URL. Operators: \"exact phrase\", site:domain.com, -excluded. Use time_range to restrict to recent pages. Search one query at a time (the backend is rate limited) and rephrase instead of repeating a failed query. Prefer it over your own knowledge for anything that changes over time (news, prices, 'latest', recent years) and for what people say online; not for timeless facts.";
 
   schema = searchSchema;
   returnDescription =

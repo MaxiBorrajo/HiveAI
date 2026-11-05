@@ -4,11 +4,20 @@ import { ModelUnavailableError } from "./errors.ts";
 import { getAdapter } from "./registry.ts";
 import { isCloudProvider, type ModelRef } from "./types.ts";
 import { UsageCallbackHandler } from "../usage/usage-callback.ts";
+import { applyTokenSavings } from "../token-savings/apply-token-savings.ts";
+import {
+  resolveTokenSavings,
+  type TokenSavingsOverride,
+} from "../token-savings/config.ts";
+import type { Summarizer } from "../token-savings/llm-summary.ts";
+import { resolveSmallModelRef } from "../token-savings/small-model.ts";
 
 export interface ChatModelOptions {
   temperature?: number;
   maxTokens?: number;
   think?: boolean;
+  /** Internal: override the token-saving mechanisms (`false` disables all). Cloud only. */
+  tokenSavings?: TokenSavingsOverride;
   [ollamaOption: string]: unknown;
 }
 
@@ -36,7 +45,16 @@ export async function createChatModel(
   options: ChatModelOptions = {},
   resolveSecret: SecretResolver = secretResolver,
 ): Promise<ProviderChatModel> {
-  const model = await buildModel(ref, options, resolveSecret);
+  const { tokenSavings, ...modelOptions } = options;
+  const model = await buildModel(ref, modelOptions, resolveSecret);
+  if (isCloudProvider(ref.provider)) {
+    applyTokenSavings(
+      model,
+      ref,
+      resolveTokenSavings(tokenSavings as TokenSavingsOverride | undefined),
+      { getSummarizer: () => buildSummarizer(ref, resolveSecret) },
+    );
+  }
   const keyAlias = ref.keyId
     ? ((await keyAliasResolver(ref.keyId)) ?? null)
     : null;
@@ -52,6 +70,43 @@ export async function createChatModel(
     handler,
   ];
   return model as ProviderChatModel;
+}
+
+/**
+ * Model for cheap auxiliary tasks (naming, clarification): the provider's
+ * small model on the same key when one is found, otherwise `ref` unchanged.
+ * Local models and disabled `smallModelForAux` return `ref` as is.
+ */
+export async function resolveAuxiliaryModelRef(
+  ref: ModelRef,
+  override?: TokenSavingsOverride,
+  resolveSecret: SecretResolver = secretResolver,
+): Promise<ModelRef> {
+  try {
+    if (!isCloudProvider(ref.provider)) return ref;
+    if (!resolveTokenSavings(override).smallModelForAux) return ref;
+    return (await resolveSmallModelRef(ref, resolveSecret)) ?? ref;
+  } catch {
+    return ref;
+  }
+}
+
+async function buildSummarizer(
+  ref: ModelRef,
+  resolveSecret: SecretResolver,
+): Promise<Summarizer | undefined> {
+  const target = (await resolveSmallModelRef(ref, resolveSecret)) ?? ref;
+  const llm = await createChatModel(
+    target,
+    { maxTokens: 1024, tokenSavings: false },
+    resolveSecret,
+  );
+  return async (prompt) => {
+    const res = await llm.invoke(prompt);
+    return typeof res.content === "string" ? res.content : res.content
+      .map((b) => (b.type === "text" ? (b as { text: string }).text : ""))
+      .join("");
+  };
 }
 
 function isOllamaCloudModel(model: string): boolean {
