@@ -142,6 +142,7 @@ export function PluginListView({
         <input
           ref={fileInputRef}
           type="file"
+          aria-label="Plugin .zip file"
           accept=".zip,application/zip"
           className="hidden"
           onChange={handleFilesChosen}
@@ -159,6 +160,8 @@ export function PluginListView({
           {plugins.map((plugin) => (
             <div
               key={plugin.id}
+              role="group"
+              aria-label={plugin.name}
               className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4"
             >
               <div className="flex items-start gap-3">
@@ -167,6 +170,7 @@ export function PluginListView({
                     <Switch
                       checked={plugin.active}
                       onCheckedChange={(checked) => onToggle(plugin, checked)}
+                      aria-label="Active"
                       className="mt-0.5"
                     />{" "}
                     {plugin.name}
@@ -241,6 +245,7 @@ export function PluginListView({
                       size="sm"
                       onClick={() => onRemovePlugin(plugin)}
                       className="h-8 gap-1 px-3 text-destructive hover:text-destructive"
+                      title="Uninstall"
                     >
                       <Trash2 size={12} />
                     </Button>

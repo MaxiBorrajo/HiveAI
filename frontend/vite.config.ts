@@ -41,6 +41,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/setupTests.ts"],
     css: false,
+    // The first test in each file pays for the cold import of the whole UI
+    // tree: 3-4s warm, 8-15s on a fresh CI runner or a busy machine (e.g.
+    // while Ollama is running a model), far past the 5s default.
+    testTimeout: 30000,
     coverage: {
       exclude: [
         "./src/main.tsx",

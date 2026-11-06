@@ -14,6 +14,7 @@ import { saveTestResults } from "@/features/plugins/api/saveTestResults";
 import { buildPluginTestGroups } from "@/features/plugins/tests/testRunner";
 import { reportSuccess } from "@/lib/toastManager";
 import { toggleInSet } from "@/lib/toggleInSet";
+import { InteractionDialog } from "@/features/interactions/components/InteractionDialog";
 import { TestCardItem } from "./TestCardItem";
 import { TestSummaryPanel } from "./TestSummaryPanel";
 import { usePluginTestRunner } from "./usePluginTestRunner";
@@ -174,6 +175,10 @@ export function PluginTestsView({
 
       <ScrollArea className="flex-1 p-6 pt-4 bg-muted/10">
         <div className="flex flex-col gap-4">
+          {/* Execution tests run the real plugin, which may ask for approval;
+              without this the request would wait forever with nothing to answer it. */}
+          {isRunning && <InteractionDialog />}
+
           {summary && (
             <TestSummaryPanel
               summary={summary}
