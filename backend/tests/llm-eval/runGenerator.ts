@@ -12,6 +12,7 @@ import { generateIncrementalGraph } from "../../core/ai/visual-builder/generatio
 import { validateGraphAgentToolMentions, validateGraphInterpolationGrammar, validateGraphPluginParameters, validateGraphVariableReferences } from "../../core/ai/visual-builder/generation/validation.ts";
 import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
+import { reportCaseStart } from "./progress.ts";
 import type { EvalVerdict, EvalLang } from "./metrics.ts";
 
 const ALL_PLUGINS = [WebSearchPlugin, WebReadPlugin, FileOpsPlugin, CurrentDatetimePlugin, CounterPlugin];
@@ -160,8 +161,8 @@ export async function runGeneratorSuite(
   const label = modelRefLabel(executorRef);
 
   const verdicts: EvalVerdict[] = [];
-  for (const testCase of generatorEvalCases) {
-    console.log(`\nRunning: ${testCase.name}`);
+  for (const [index, testCase] of generatorEvalCases.entries()) {
+    reportCaseStart("generation", index, generatorEvalCases.length, testCase.name);
     const outcome = await runCase(executorRef, availablePlugins, testCase, lang);
     console.log(`  ${outcome.pass ? "PASS" : "FAIL"}`);
     if (!outcome.pass) {

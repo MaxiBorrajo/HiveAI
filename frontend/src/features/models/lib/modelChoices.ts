@@ -39,6 +39,21 @@ export function sameChoice(a: ModelChoice, b: ModelChoice) {
   );
 }
 
+/** Same model regardless of which API key reaches it. */
+export function sameModel(a: Pick<ModelChoice, "provider" | "model">, b: Pick<ModelChoice, "provider" | "model">) {
+  return a.provider === b.provider && a.model === b.model;
+}
+
+/** Every selectable model (local and per cloud key), e.g. to pick a judge. */
+export function allModelChoices(groups: ModelOptionGroup[]): { choice: ModelChoice; label: string }[] {
+  return groups.flatMap((group) =>
+    group.options.map((option) => ({
+      choice: toChoice(option),
+      label: group.keyAlias ? `${option.label} · ${group.keyAlias}` : option.label,
+    })),
+  );
+}
+
 export function currentChoice(current: CurrentModels): ModelChoice {
   return {
     provider: current.provider ?? "ollama",
