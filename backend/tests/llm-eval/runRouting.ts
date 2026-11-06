@@ -1,6 +1,8 @@
 import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
+import { GraphRecursionError } from "@langchain/langgraph";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
+import { executionContextStorage } from "../../core/microkernel/human-interaction.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
 import CurrentDatetimePlugin from "../../plugins/current-datetime/index.ts";
 import FileReadPlugin from "../../plugins/file-read/index.ts";
@@ -16,10 +18,12 @@ import { reportCaseStart } from "./progress.ts";
 const AVAILABLE_PLUGINS = [CounterPlugin, CurrentDatetimePlugin, FileReadPlugin, WebSearchPlugin];
 const MAX_TOOL_CALLS = 5;
 const SCOUT_RECURSION_LIMIT = MAX_TOOL_CALLS * 2;
-// The eval runs unattended — tools that wait on a human (ask_user, approvals)
-// would otherwise hang forever since nobody is there to answer. This bounds
-// each case so a stuck call surfaces as a failed case, not a frozen process.
-const CASE_TIMEOUT_MS = 1000_000;
+// The eval runs unattended: tools that wait on a human (ask_user, approvals)
+// run under an already-aborted signal, so they settle at once as "the user
+// did not answer". The routing verdict only looks at the first tool call, so
+// asking is still graded. The timeout bounds anything else that gets stuck.
+const CASE_TIMEOUT_MS = 300_000;
+const NO_HUMAN = AbortSignal.abort();
 
 interface CaseOutcome {
   case: EvalCase;
@@ -71,18 +75,31 @@ async function runCase(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CASE_TIMEOUT_MS);
 
+  // Streams the graph's state so that, if the model keeps calling tools past
+  // the step limit, the case is still graded on the tool calls it already
+  // made (the verdict only looks at the first one) instead of erroring out.
   const invoke = () =>
-    Scout.invoke(
-      {
-        messages: buildMessages(testCase, lang),
-        chatId: "llm-eval",
-        model: executorRef.model,
-        modelProvider: executorRef.provider,
-        modelKeyId: executorRef.keyId ?? "",
-        modelOptions: {},
-      },
-      { recursionLimit: SCOUT_RECURSION_LIMIT, signal: controller.signal },
-    );
+    executionContextStorage.run({ autoApprove: false, signal: NO_HUMAN }, async () => {
+      let last: { messages?: unknown[] } = {};
+      try {
+        const stream = await Scout.stream(
+          {
+            messages: buildMessages(testCase, lang),
+            chatId: "llm-eval",
+            model: executorRef.model,
+            modelProvider: executorRef.provider,
+            modelKeyId: executorRef.keyId ?? "",
+            modelOptions: {},
+          },
+          { recursionLimit: SCOUT_RECURSION_LIMIT, signal: controller.signal, streamMode: "values" },
+        );
+        for await (const state of stream) last = state;
+        return { messages: last.messages ?? [], hitStepLimit: false };
+      } catch (error) {
+        if (!(error instanceof GraphRecursionError)) throw error;
+        return { messages: last.messages ?? [], hitStepLimit: true };
+      }
+    });
 
   let result, usage;
   try {
@@ -91,9 +108,19 @@ async function runCase(
     clearTimeout(timeout);
   }
 
-  const call = extractFirstToolCall(result.messages ?? []);
-  const selectedTool = call?.name ?? null;
+  const call = extractFirstToolCall(result.messages);
   const base = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, durationMs: usage.durationMs };
+  const outcome = gradeCall(testCase, call, base);
+  if (result.hitStepLimit) outcome.detail += ` (stopped at the ${SCOUT_RECURSION_LIMIT}-step limit)`;
+  return outcome;
+}
+
+function gradeCall(
+  testCase: EvalCase,
+  call: { name: string; args: Record<string, unknown> } | undefined,
+  base: Pick<CaseOutcome, "inputTokens" | "outputTokens" | "durationMs">,
+): CaseOutcome {
+  const selectedTool = call?.name ?? null;
 
   if (testCase.expectedTool === null) {
     const pass = selectedTool === null;
