@@ -5,13 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
 import type { ModelInfo } from "@/features/models/types";
 import { formatBytes } from "@/features/models/lib/formatBytes";
+import { EvalProfilePanel, type JudgeChoice } from "./EvalProfilePanel";
 
 interface ModelDetailsViewProps {
   model: ModelInfo;
   onBack: () => void;
+  judgeChoices: JudgeChoice[];
 }
 
-export function ModelDetailsView({ model, onBack }: ModelDetailsViewProps) {
+export function ModelDetailsView({ model, onBack, judgeChoices }: ModelDetailsViewProps) {
   return (
     <>
       <DialogHeader className="p-6 pb-0 flex flex-row items-center gap-2">
@@ -94,6 +96,11 @@ export function ModelDetailsView({ model, onBack }: ModelDetailsViewProps) {
               value={model.headCountKV?.toString()}
             />
           </DetailSection>
+
+          <EvalProfilePanel
+            model={{ provider: "ollama", model: model.name, keyId: "" }}
+            judgeChoices={judgeChoices}
+          />
 
           <DetailSection title="Metadata">
             <DetailRow label="Digest" value={model.digest} mono />

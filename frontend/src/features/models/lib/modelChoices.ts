@@ -39,6 +39,33 @@ export function sameChoice(a: ModelChoice, b: ModelChoice) {
   );
 }
 
+/** Same model regardless of which API key reaches it. */
+export function sameModel(a: Pick<ModelChoice, "provider" | "model">, b: Pick<ModelChoice, "provider" | "model">) {
+  return a.provider === b.provider && a.model === b.model;
+}
+
+/** Embedding-only models (e.g. nomic-embed-text) can't chat, so can't judge. */
+function canGenerateText(option: ModelOption) {
+  return !(option.capabilities.includes("embedding") && !option.capabilities.includes("completion"));
+}
+
+/**
+ * Every model that can write text (local and per cloud key), e.g. to pick a
+ * judge: labelled by model name and grouped by where it runs. An option's own
+ * `label` is a size/location hint ("8.5B local"), not a name.
+ */
+export function allModelChoices(
+  groups: ModelOptionGroup[],
+): { choice: ModelChoice; label: string; group: string }[] {
+  return groups.flatMap((group) =>
+    group.options.filter(canGenerateText).map((option) => ({
+      choice: toChoice(option),
+      label: option.ref.model,
+      group: group.label,
+    })),
+  );
+}
+
 export function currentChoice(current: CurrentModels): ModelChoice {
   return {
     provider: current.provider ?? "ollama",

@@ -8,6 +8,7 @@ import type { ModelRef } from "../../core/ai/providers/types.ts";
 import { buildExecutionCases, stripThinkTags } from "./executionCases.ts";
 import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
+import { reportCaseStart } from "./progress.ts";
 import type { EvalVerdict } from "./metrics.ts";
 
 const EXECUTION_TIMEOUT_MS = 1000_000;
@@ -56,8 +57,8 @@ export async function runExecutionSuite(
   const cases = buildExecutionCases(executorRef.model, executorRef.provider, executorRef.keyId, tempDir);
 
   const verdicts: EvalVerdict[] = [];
-  for (const testCase of cases) {
-    console.log(`Running: ${testCase.name}`);
+  for (const [index, testCase] of cases.entries()) {
+    reportCaseStart("execution", index, cases.length, testCase.name);
     try {
       const graph = testCase.buildGraph();
       const app = compileGraph(graph, buildStateSchema(graph.stateSchema), pluginRegistry, toolProvider);

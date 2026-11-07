@@ -7,6 +7,13 @@ import { getEmbeddingModelStatus } from "./use-cases/get-embedding-model-status.
 import { handlePullEmbeddingModel } from "./use-cases/pull-embedding-model.ts";
 import { deleteModel, getModelDeletionImpact } from "./use-cases/delete-model.ts";
 import { getModelOptions } from "./use-cases/build-model-options.ts";
+import {
+  getModelEvalProfile,
+  handleCancelEvalRun,
+  handleEstimateEvalRun,
+  handleExportEvalProfile,
+  handleStartEvalRun,
+} from "./use-cases/get-model-eval-profile.ts";
 import { ModelFilters } from "./types.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 
@@ -62,6 +69,36 @@ modelsRouter.delete("/", (c) => {
 
 modelsRouter.get("/:name/impact", (c) => {
   return getModelDeletionImpact(c.get("hive"), c.req.param("name"), {
+    "content-type": "application/json",
+  });
+});
+
+modelsRouter.get("/:name/eval-profile", (c) => {
+  return getModelEvalProfile(c.req.param("name"), {
+    "content-type": "application/json",
+  });
+});
+
+modelsRouter.post("/:name/eval-profile/export", (c) => {
+  return handleExportEvalProfile(c.req.param("name"), c.req.query("format") ?? "md", {
+    "content-type": "application/json",
+  });
+});
+
+modelsRouter.post("/:name/eval-profile/estimate", async (c) => {
+  return handleEstimateEvalRun(await c.req.json().catch(() => ({})), {
+    "content-type": "application/json",
+  });
+});
+
+modelsRouter.post("/:name/eval-profile/run", async (c) => {
+  return handleStartEvalRun(await c.req.json().catch(() => ({})), {
+    "content-type": "application/json",
+  });
+});
+
+modelsRouter.delete("/:name/eval-profile/run", (c) => {
+  return handleCancelEvalRun(c.req.param("name"), {
     "content-type": "application/json",
   });
 });

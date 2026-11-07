@@ -144,8 +144,7 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
     const file = new File(["zip"], "plugin.zip", {
       type: "application/zip",
     });
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    await userEvent.upload(input, file);
+    await userEvent.upload(screen.getByLabelText("Plugin .zip file"), file);
 
     await waitFor(() => {
       expect(mockApiClient.post).toHaveBeenCalledWith(
@@ -160,10 +159,8 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
     await renderPluginsManager([testPlugin]);
     await openManageDialog();
 
-    const row = (await screen.findByText(testPlugin.name)).closest(
-      "div.flex.flex-col.gap-2",
-    ) as HTMLElement;
-    const toggle = within(row).getByRole("checkbox");
+    const row = await screen.findByRole("group", { name: testPlugin.name });
+    const toggle = within(row).getByRole("checkbox", { name: "Active" });
     expect(toggle).not.toBeChecked();
 
     await userEvent.click(toggle);
@@ -206,15 +203,9 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
     await userEvent.click(screen.getByTitle("Plugins"));
     await openManageDialog();
 
-    await screen.findByText(testPlugin.name);
-    const row = screen.getByText(testPlugin.name).closest(
-      "div.flex.flex-col.gap-2",
-    ) as HTMLElement;
-    const removeButton = within(row).getAllByRole("button").find((btn) =>
-      btn.querySelector("svg.lucide-trash2"),
-    )!;
+    const row = await screen.findByRole("group", { name: testPlugin.name });
 
-    await userEvent.click(removeButton);
+    await userEvent.click(within(row).getByRole("button", { name: "Uninstall" }));
 
     await waitFor(() => {
       expect(mockApiClient.delete).toHaveBeenCalledWith(

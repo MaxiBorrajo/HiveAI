@@ -53,7 +53,7 @@ export function TestCardItem({
   const hasResults = !!res?.details;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div role="group" aria-label={test.label} className="flex flex-col gap-2">
       <label
         className={`flex flex-col gap-3 rounded-xl border p-4 cursor-pointer transition-all bg-card shadow-sm min-w-0 ${
           isSelected
@@ -207,13 +207,18 @@ export function TestCardItem({
           </div>
           <div className="shrink-0 pt-1">
             {res?.status === "running" && (
-              <Loader2 size={18} className="animate-spin text-primary" />
+              <Loader2
+                size={18}
+                role="img"
+                aria-label="Running"
+                className="animate-spin text-primary"
+              />
             )}
             {res?.status === "success" && (
-              <Check size={18} className="text-foreground" />
+              <Check size={18} role="img" aria-label="Passed" className="text-foreground" />
             )}
             {res?.status === "error" && (
-              <X size={18} className="text-destructive" />
+              <X size={18} role="img" aria-label="Failed" className="text-destructive" />
             )}
           </div>
         </div>

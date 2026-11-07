@@ -81,7 +81,10 @@ describe("HardwareSummary", () => {
     render(<HardwareSummary />);
     expect(await screen.findByText(/RTX 4070/)).toBeInTheDocument();
     expect(screen.getByText(/12 GB VRAM/)).toBeInTheDocument();
-    expect(screen.getByText(/1 active plugin use about 1,200/)).toBeInTheDocument();
+    // The component formats numbers in the machine's locale ("1,200" in
+    // English, "1.200" in Spanish), so expect whatever this machine writes.
+    const tokens = (1200).toLocaleString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    expect(screen.getByText(new RegExp(`1 active plugin use about ${tokens}`))).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -147,7 +150,8 @@ describe("ModelSearch", () => {
       handler: () => ok({ offline: true, items: [item("unsloth/Qwen3-4B-GGUF", 4, "fits", "ok")] }),
     }]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    expect(await screen.findByText(/Hugging Face is not reachable/)).toBeInTheDocument();
+    // The search starts on the Ollama library, so that's the source it names.
+    expect(await screen.findByText(/ollama\.com is not reachable/)).toBeInTheDocument();
   });
 });
 
@@ -184,7 +188,8 @@ describe("ModelSearch filters and paging", () => {
     expect(screen.getByRole("button", { name: "Ollama library" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: "Trending" })).not.toBeInTheDocument();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
-    expect(lastParams()).toEqual({ q: "", sort: "recommended" });
+    // The first search is debounced, so it hasn't been sent right after render.
+    await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "recommended" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Hugging Face" }));
     expect(screen.getByRole("button", { name: "Trending" })).toBeInTheDocument();

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
-import { Info, Trash2 } from "lucide-react";
+import { Gauge, Info, Trash2 } from "lucide-react";
 import { DeleteModelDialog } from "./DeleteModelDialog";
 import type {
   CurrentModels,
@@ -30,6 +30,9 @@ interface ModelListViewProps {
   current: CurrentModels;
   onChangeModel: (choice: ModelChoice) => void;
   onSelectModel: (model: ModelInfo) => void;
+  /** Opens the eval profile of a cloud model (local ones show it in Details).
+   *  Without it, cloud cards don't offer the button. */
+  onEvaluateModel?: (choice: ModelChoice) => void;
   onDeleteModel: (name: string) => void;
   protectedModel?: string;
 }
@@ -69,6 +72,7 @@ export function ModelListView({
   current,
   onChangeModel,
   onSelectModel,
+  onEvaluateModel,
   onDeleteModel,
   protectedModel,
 }: ModelListViewProps) {
@@ -212,10 +216,29 @@ export function ModelListView({
                     key={m.model}
                     className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4"
                   >
-                    <p className="font-mono text-sm font-semibold flex items-center flex-wrap gap-2">
-                      {m.model}
-                      <SupportBadge support={m.toolSupport} />
-                    </p>
+                    <div className="flex items-start gap-3">
+                      <p className="flex-1 min-w-0 font-mono text-sm font-semibold flex items-center flex-wrap gap-2">
+                        {m.model}
+                        <SupportBadge support={m.toolSupport} />
+                      </p>
+                      {onEvaluateModel && m.keys.length > 0 && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 gap-1 px-3 shrink-0"
+                          onClick={() =>
+                            onEvaluateModel({
+                              provider: entry.provider,
+                              model: m.model,
+                              keyId: m.keys[0].keyId,
+                            })
+                          }
+                        >
+                          <Gauge size={12} />
+                          <span>Eval profile</span>
+                        </Button>
+                      )}
+                    </div>
                     <SupportReason support={m.toolSupport} />
                     <div className="flex flex-wrap gap-2">
                       {m.keys.map((k) => {

@@ -23,6 +23,8 @@
     "test:coverage": "deno test -A --coverage=coverage_profile && deno coverage coverage_profile --html",
     "eval": "deno run -A tests/llm-eval/run.ts",
     "eval:compare": "deno run -A tests/llm-eval/compare.ts",
+    "eval:export": "deno run -A tests/llm-eval/export.ts",
+    "eval:profile": "deno run -A tests/llm-eval/profileModel.ts",
     "eval:llm": "deno run -A tests/llm-eval/run.ts -- --suite=routing",
     "eval:generator": "deno run -A tests/llm-eval/runGenerator.ts"
   },
