@@ -13,6 +13,29 @@ import { notifyCompaction } from "./notice.ts";
 export type Summarizer = (text: string) => Promise<string>;
 export type SummarizerProvider = () => Promise<Summarizer | undefined>;
 
+interface SummaryLlm {
+  invoke(
+    prompt: string,
+    config?: { callbacks: never[] },
+  ): Promise<{ content: string | { type: string; text?: string }[] }>;
+}
+
+/**
+ * Builds the summarizer on top of a chat model. The call runs inside the
+ * caller's graph run, so without an explicit empty `callbacks` it would
+ * inherit the graph's callbacks and its tokens would be streamed to the user
+ * as if they were part of the answer. Callbacks set on the model itself (usage
+ * recording) still apply.
+ */
+export function summarizerFromModel(llm: SummaryLlm): Summarizer {
+  return async (prompt) => {
+    const res = await llm.invoke(prompt, { callbacks: [] });
+    return typeof res.content === "string" ? res.content : res.content
+      .map((b) => (b.type === "text" ? (b.text ?? "") : ""))
+      .join("");
+  };
+}
+
 const SUMMARY_PROMPT =
   "Summarize the conversation below so an assistant can continue it without " +
   "re-reading it. Keep decisions, user preferences, concrete facts, names, " +

@@ -9,7 +9,10 @@ import {
   resolveTokenSavings,
   type TokenSavingsOverride,
 } from "../token-savings/config.ts";
-import type { Summarizer } from "../token-savings/llm-summary.ts";
+import {
+  type Summarizer,
+  summarizerFromModel,
+} from "../token-savings/llm-summary.ts";
 import { resolveSmallModelRef } from "../token-savings/small-model.ts";
 
 export interface ChatModelOptions {
@@ -101,12 +104,7 @@ async function buildSummarizer(
     { maxTokens: 1024, tokenSavings: false },
     resolveSecret,
   );
-  return async (prompt) => {
-    const res = await llm.invoke(prompt);
-    return typeof res.content === "string" ? res.content : res.content
-      .map((b) => (b.type === "text" ? (b as { text: string }).text : ""))
-      .join("");
-  };
+  return summarizerFromModel(llm);
 }
 
 function isOllamaCloudModel(model: string): boolean {
