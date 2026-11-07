@@ -19,11 +19,10 @@ const AVAILABLE_PLUGINS = [CounterPlugin, CurrentDatetimePlugin, FileReadPlugin,
 const MAX_TOOL_CALLS = 5;
 const SCOUT_RECURSION_LIMIT = MAX_TOOL_CALLS * 2;
 // The eval runs unattended: tools that wait on a human (ask_user, approvals)
-// run under an already-aborted signal, so they settle at once as "the user
-// did not answer". The routing verdict only looks at the first tool call, so
-// asking is still graded. The timeout bounds anything else that gets stuck.
+// settle at once as declined / "the user did not answer". The routing verdict
+// only looks at the first tool call, so asking is still graded. The timeout
+// bounds anything else that gets stuck.
 const CASE_TIMEOUT_MS = 300_000;
-const NO_HUMAN = AbortSignal.abort();
 
 interface CaseOutcome {
   case: EvalCase;
@@ -79,7 +78,7 @@ async function runCase(
   // the step limit, the case is still graded on the tool calls it already
   // made (the verdict only looks at the first one) instead of erroring out.
   const invoke = () =>
-    executionContextStorage.run({ autoApprove: false, signal: NO_HUMAN }, async () => {
+    executionContextStorage.run({ autoApprove: false, unattended: true }, async () => {
       let last: { messages?: unknown[] } = {};
       try {
         const stream = await Scout.stream(
