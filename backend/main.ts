@@ -15,8 +15,6 @@ import { ModelUsageRepository } from "./infrastructure/db/repositories/model-usa
 import { createApp } from "./bootstrap/create-app.ts";
 import { openDesktopWindow } from "./bootstrap/desktop.ts";
 import { loadPlugins } from "./bootstrap/load-plugins.ts";
-import { setTokenSavingsDefaults } from "./core/ai/token-savings/index.ts";
-setTokenSavingsDefaults({ compactionTriggerChars: 5000, summaryTriggerChars: 6000, summaryMinHistoryChars: 2000 });
 
 globalThis.addEventListener("unhandledrejection", (event) => {
   event.preventDefault();

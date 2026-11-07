@@ -49,3 +49,9 @@ Deno.test("the focus steers the preamble and unknown values are ignored", () => 
   const plain = buildJudgeChatPreamble("Flow", [run({})]);
   assertEquals(plain.includes("The user is looking at"), false);
 });
+
+Deno.test("the run key does not depend on the order or repeats", async () => {
+  const { runKeyOf } = await import("../../../../../modules/executions/use-cases/judge-chat.ts");
+  assertEquals(runKeyOf([15, 12]), "12,15");
+  assertEquals(runKeyOf([12, 15, 12]), "12,15");
+});

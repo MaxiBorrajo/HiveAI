@@ -143,29 +143,41 @@ async function main() {
   );
 
   const runs: { totals: Totals; factsOk: number; factsTotal: number }[] = [];
+  const failures: string[] = [];
   const total = Number(args.runs);
+  const save = async () => {
+    await Deno.mkdir(RESULTS_DIR, { recursive: true });
+    const result = { arm: `exec-${arm}`, model: args.model, runs, failures, prices };
+    await Deno.writeTextFile(new URL(`exec-${arm}.json`, RESULTS_DIR), JSON.stringify(result, null, 2));
+  };
   for (let i = 0; i < total; i++) {
     console.log(`[exec-${arm}] run ${i + 1}/${total}...`);
     buffer.length = 0;
-    const state = (await app.invoke({
-      paths_ab: `${path(facts[0])}\n${path(facts[1])}`,
-      paths_cd: `${path(facts[2])}\n${path(facts[3])}`,
-    })) as Record<string, unknown>;
-    const report = String(state.report ?? "");
-    const factsOk = facts.filter((f) => report.includes(f.codename)).length;
-    const totals = sumUsage(buffer);
-    console.log(
-      `  calls=${totals.calls} fresh=${totals.freshInput} read=${totals.cacheRead} write=${totals.cacheWrite} out=${totals.output} cost=$${
-        cost(totals, prices).toFixed(4)
-      } facts=${factsOk}/${facts.length}`,
-    );
-    runs.push({ totals, factsOk, factsTotal: facts.length });
+    try {
+      const state = (await app.invoke({
+        paths_ab: `${path(facts[0])}\n${path(facts[1])}`,
+        paths_cd: `${path(facts[2])}\n${path(facts[3])}`,
+      })) as Record<string, unknown>;
+      const report = String(state.report ?? "");
+      const factsOk = facts.filter((f) => report.includes(f.codename)).length;
+      const totals = sumUsage(buffer);
+      console.log(
+        `  calls=${totals.calls} fresh=${totals.freshInput} read=${totals.cacheRead} write=${totals.cacheWrite} out=${totals.output} cost=$${
+          cost(totals, prices).toFixed(4)
+        } facts=${factsOk}/${facts.length}`,
+      );
+      runs.push({ totals, factsOk, factsTotal: facts.length });
+    } catch (error) {
+      // A failed run is recorded, left out of the averages, and keeps the others.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`  run ${i + 1} FAILED (left out of the averages): ${message}`);
+      failures.push(message);
+    }
+    await save();
   }
-
-  await Deno.mkdir(RESULTS_DIR, { recursive: true });
-  const result = { arm: `exec-${arm}`, model: args.model, runs, prices };
-  await Deno.writeTextFile(new URL(`exec-${arm}.json`, RESULTS_DIR), JSON.stringify(result, null, 2));
-  console.log(`Saved scripts/benchmark-results/exec-${arm}.json`);
+  console.log(
+    `Saved scripts/benchmark-results/exec-${arm}.json (${runs.length} ok, ${failures.length} failed)`,
+  );
 }
 
 if (import.meta.main) await main();

@@ -1,3 +1,5 @@
+import { apiClient } from "../../../lib/apiClient";
+import type { ResponseEntity } from "../../../lib/config";
 import { postSse } from "../../../lib/sse";
 import type { JudgeChoice } from "../types.ts";
 
@@ -41,4 +43,25 @@ export async function judgeChat(
     },
     signal,
   );
+}
+
+export interface SavedJudgeLine {
+  role: "user" | "judge";
+  text: string;
+  tools?: string[];
+}
+
+/** The conversation already saved for this exact set of runs. */
+export async function getJudgeConversation(
+  executionId: string,
+  historyIds: number[],
+  signal?: AbortSignal,
+): Promise<{ chatId: number | null; lines: SavedJudgeLine[] }> {
+  const response = await apiClient.get<
+    ResponseEntity<{ chatId: number | null; lines: SavedJudgeLine[] }>
+  >(`/api/executions/${executionId}/judge-chat`, {
+    params: { historyIds: historyIds.join(",") },
+    signal,
+  });
+  return response.data.data ?? { chatId: null, lines: [] };
 }

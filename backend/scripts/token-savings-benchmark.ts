@@ -61,6 +61,7 @@ interface ArmResult {
   arm: string;
   model: string;
   runs: { totals: Totals; factsOk: number; factsTotal: number }[];
+  failures?: string[];
   prices: typeof DEFAULT_PRICES;
 }
 
@@ -193,7 +194,13 @@ async function compare(arms: string[]): Promise<void> {
       ].join(" "),
     );
   }
-  console.log(`\n(averages over ${loaded[0].runs.length} run(s); prices ${JSON.stringify(base.prices)})`);
+  for (const r of loaded) {
+    const failed = r.failures?.length ?? 0;
+    if (failed > 0) {
+      console.log(`  ${r.arm}: ${r.runs.length} ok, ${failed} failed run(s) left out of the averages`);
+    }
+  }
+  console.log(`\n(averages over each arm's successful runs; prices ${JSON.stringify(base.prices)})`);
 }
 
 async function main() {
@@ -251,20 +258,31 @@ async function main() {
     facts.push(f.fact);
   }
 
-  const result: ArmResult = { arm, model: args.model, runs: [], prices };
+  const result: ArmResult = { arm, model: args.model, runs: [], failures: [], prices };
   const runs = Number(args.runs);
+  const save = async () => {
+    await Deno.mkdir(RESULTS_DIR, { recursive: true });
+    await Deno.writeTextFile(new URL(`${arm}.json`, RESULTS_DIR), JSON.stringify(result, null, 2));
+  };
   for (let i = 0; i < runs; i++) {
     console.log(`[${arm}] run ${i + 1}/${runs}...`);
-    const run = await runConversation({ model: args.model, keyEnv }, facts, fixtureDir, buffer);
-    console.log(
-      `  calls=${run.totals.calls} fresh=${run.totals.freshInput} read=${run.totals.cacheRead} write=${run.totals.cacheWrite} out=${run.totals.output} cost=$${cost(run.totals, prices).toFixed(4)} facts=${run.factsOk}/${run.factsTotal}`,
-    );
-    result.runs.push(run);
+    try {
+      const run = await runConversation({ model: args.model, keyEnv }, facts, fixtureDir, buffer);
+      console.log(
+        `  calls=${run.totals.calls} fresh=${run.totals.freshInput} read=${run.totals.cacheRead} write=${run.totals.cacheWrite} out=${run.totals.output} cost=$${cost(run.totals, prices).toFixed(4)} facts=${run.factsOk}/${run.factsTotal}`,
+      );
+      result.runs.push(run);
+    } catch (error) {
+      // A failed run is recorded, left out of the averages, and keeps the others.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`  run ${i + 1} FAILED (left out of the averages): ${message}`);
+      result.failures?.push(message);
+    }
+    await save();
   }
-
-  await Deno.mkdir(RESULTS_DIR, { recursive: true });
-  await Deno.writeTextFile(new URL(`${arm}.json`, RESULTS_DIR), JSON.stringify(result, null, 2));
-  console.log(`Saved scripts/benchmark-results/${arm}.json`);
+  console.log(
+    `Saved scripts/benchmark-results/${arm}.json (${result.runs.length} ok, ${result.failures?.length ?? 0} failed)`,
+  );
 }
 
 if (import.meta.main) await main();

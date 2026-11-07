@@ -17,7 +17,7 @@ import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
 import { listRuns } from "./use-cases/list-runs.ts";
 import { getRubric, saveRubric } from "./use-cases/rubric.ts";
 import { gradeRuns } from "./use-cases/grade-runs.ts";
-import { judgeChat } from "./use-cases/judge-chat.ts";
+import { getJudgeConversation, judgeChat } from "./use-cases/judge-chat.ts";
 import { MAX_FILE_BYTES } from "./portability/flow-format.ts";
 import { exportFlow } from "./portability/export-flow.ts";
 import { importFlow, previewImport } from "./portability/import-flow.ts";
@@ -152,6 +152,15 @@ executionsRouter.post("/:id/runs/grade", async (c) => {
     headers,
     {},
     c.req.raw.signal,
+  );
+});
+
+executionsRouter.get("/:id/judge-chat", (c) => {
+  return getJudgeConversation(
+    getORM(),
+    parseId(c.req.param("id")),
+    c.req.query("historyIds") ?? "",
+    { "content-type": "application/json" },
   );
 });
 
