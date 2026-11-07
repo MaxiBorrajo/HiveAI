@@ -34,7 +34,7 @@ const DownloadsContext = createContext<DownloadsContextValue | null>(null);
 const RECONNECT_MS = 2000;
 
 export function DownloadsProvider({ children }: { children: ReactNode }) {
-  const { refreshModels, openManage } = useModels();
+  const { refreshModels, openExplore } = useModels();
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [requestedName, setRequestedName] = useState<string | null>(null);
   const statusRef = useRef(new Map<string, string>());
@@ -122,7 +122,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     retry: (id) => void retryRequest(id).catch(() => {}),
     requestDownload: (name) => {
       setRequestedName(name);
-      openManage();
+      openExplore();
     },
     requestedName,
     clearRequest: () => setRequestedName(null),

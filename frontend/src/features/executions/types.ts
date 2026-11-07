@@ -132,4 +132,35 @@ export interface RunSummary {
   result: unknown;
   input: Record<string, unknown> | null;
   usage: RunUsage | null;
+  grades: RunGrade[];
+}
+
+export interface Rubric {
+  id: number;
+  version: number;
+  rubric: string;
+  reference: string | null;
+  createdAt: number;
+}
+
+export interface RunGrade {
+  historyId: number;
+  status: "graded" | "failed";
+  score: number | null;
+  reasoning: string | null;
+  error: string | null;
+  judge: {
+    provider: string;
+    model: string;
+    keyId: string | null;
+    version: number;
+  };
+  rubric: { id: number; version: number };
+  createdAt: number;
+}
+
+export interface JudgeChoice {
+  provider: string;
+  model: string;
+  keyId: string;
 }

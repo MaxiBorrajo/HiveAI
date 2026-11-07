@@ -12,8 +12,10 @@ import {
 } from "@/features/models/api/downloads";
 import { formatBytes } from "@/features/models/lib/formatBytes";
 import { formatSpeed } from "@/features/models/lib/formatSpeed";
-
-const SUGGESTED = ["gemma3n:e4b", "qwen3:8b", "llama3.2:3b", "qwen3:0.6b"];
+import { HardwareSummary } from "@/features/model-discovery/components/HardwareSummary";
+import { ModelSearch } from "@/features/model-discovery/components/ModelSearch";
+import { ModelDetail } from "@/features/model-discovery/components/ModelDetail";
+import type { ModelSource } from "@/features/model-discovery/types";
 
 const STATUS_LABEL: Record<Download["status"], string> = {
   queued: "Queued",
@@ -141,6 +143,7 @@ export function ModelDownloadView() {
   const [info, setInfo] = useState<Preflight | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ id: string; source: ModelSource } | null>(null);
 
   useEffect(() => {
     if (requestedName) {
@@ -194,7 +197,7 @@ export function ModelDownloadView() {
         <div className="flex gap-2">
           <Input
             value={name}
-            placeholder="name:tag, for example gemma3n:e4b"
+            placeholder="Or type a name directly, for example gemma3n:e4b"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
@@ -203,19 +206,6 @@ export function ModelDownloadView() {
             <span>Download</span>
           </Button>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {SUGGESTED.map((s) => (
-            <Button
-              key={s}
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 font-mono text-xs"
-              onClick={() => setName(s)}
-            >
-              {s}
-            </Button>
-          ))}
-        </div>
         {checking && (
           <p className="text-xs text-muted-foreground">Checking…</p>
         )}
@@ -223,11 +213,30 @@ export function ModelDownloadView() {
         {info && !checking && <PreflightNotice info={info} />}
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="flex flex-col gap-3">
+      <ScrollArea className="-mx-1 flex-1 min-h-0">
+        <div className="flex flex-col gap-3 px-1">
+          <HardwareSummary />
+          {selected && (
+            <ModelDetail
+              id={selected.id}
+              source={selected.source}
+              onBack={() => setSelected(null)}
+              onDownload={(ollamaName) => {
+                void start(ollamaName);
+                setSelected(null);
+              }}
+            />
+          )}
+          {/* stays mounted behind the detail so Back keeps the query, chips and loaded pages */}
+          <div hidden={selected !== null}>
+            <ModelSearch onSelect={(id, source) => setSelected({ id, source })} />
+          </div>
+          {downloads.length > 0 && (
+            <p className="mt-2 text-sm font-medium">Downloads</p>
+          )}
           {downloads.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No downloads yet. Pick a model above to get started.
+            <p className="text-xs text-muted-foreground">
+              Downloads will appear here.
             </p>
           )}
           {[...downloads].reverse().map((d) => (

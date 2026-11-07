@@ -239,7 +239,7 @@ function headline(usage: RunUsage): HeadlineSide {
   };
 }
 
-function sameInput(
+export function sameInput(
   a: Record<string, unknown>,
   b: Record<string, unknown>,
 ): boolean {

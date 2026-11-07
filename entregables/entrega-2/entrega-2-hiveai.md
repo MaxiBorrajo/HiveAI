@@ -37,8 +37,15 @@ Las keys se guardan en `secrets.enc` (AES-GCM) con una master key local con perm
 #### Streaming con timeout por inactividad
 El timeout total de la request cortaba respuestas largas aunque siguieran avanzando. Se pasó a un timeout de inactividad (240 s sin recibir tokens). Si el stream se interrumpe, el nodo conserva el texto parcial y devuelve un `StreamInterruptedError`.
 
-#### No se evalúa la calidad en la comparación de corridas
-La app muestra resultados, tokens y latencia lado a lado y deja que el usuario juzgue. La evaluación automática es responsabilidad de las evals.
+#### La calidad en la comparación de corridas es opcional y la califica un juez
+La app muestra resultados, tokens y latencia lado a lado (de 2 a 4 corridas de la misma ejecución). Además, el usuario puede calificar cada corrida con un modelo juez que él elige, con una rúbrica que escribe para esa ejecución (y una respuesta de referencia opcional). La calificación es opcional: sin ella la comparación funciona igual.
+
+- El juez es un agente con el modelo elegido (local o cloud) y acceso a los plugins activos; el usuario también puede hacerle preguntas, por ejemplo que averigüe precios de modelos
+- Cada calificación guarda puntaje (1 a 10), justificación, modelo y versión del juez y versión de la rúbrica; las rúbricas son inmutables y cada edición crea una versión nueva
+- Si las corridas se calificaron con jueces o versiones de rúbrica distintos se avisa que los puntajes no son directamente comparables
+- Si el juez falla, la corrida queda "sin evaluar" y el resto de la comparación sigue funcionando
+- Si las entradas de las corridas difieren (o no se registraron) se avisa
+- No hay costo en dinero: la app no registra precios, solo tokens
 
 ### Desafíos técnicos encontrados
 - Que cada proveedor tenga sus particularidades (Claude rechaza `thinking` en algunos modelos y se reintenta sin él; Gemini y Anthropic manejan distinto el límite de salida) sin ensuciar los nodos.
@@ -201,7 +208,7 @@ Convierte el consumo en una decisión concreta: permite ver cuánto del trabajo 
 - Se resaltan las diferencias: nodos cuyo modelo cambió y variación de tokens por modelo
 - Se destaca la métrica principal: tokens del modelo orquestador cloud en cada corrida y tokens delegados
 - La comparación directa de tokens solo se hace cuando el mismo modelo aparece en ambas corridas; si difieren, se muestran lado a lado sin sumarlos en una cifra única y con un aviso de que no son precios
-- La app no evalúa la calidad del resultado: la juzga el usuario
+- La calidad es opcional: la califica un modelo juez que elige el usuario, y el usuario puede juzgar por su cuenta
 
 ### DoD
 Probada con el caso demo: la misma ejecución ("armar una página web") corrida en todo cloud y en mix, con dos API keys distintas, mostrando tokens, latencia y resultado de ambas.

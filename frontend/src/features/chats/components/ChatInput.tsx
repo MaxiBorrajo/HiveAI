@@ -25,9 +25,11 @@ import {
   type AttachmentDto,
 } from "../api/attachments.ts";
 import { getErrorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
   placeholder?: string;
+  className?: string;
   input: string;
   setInput: (val: string) => void;
   isThinking: boolean;
@@ -48,6 +50,7 @@ export function ChatInput({
   handleStop,
   hidePluginsAndModes,
   placeholder,
+  className,
   chatId = null,
   attachments = [],
   onAttachmentsChange,
@@ -58,6 +61,7 @@ export function ChatInput({
     hasAvailableModels,
     embeddingModelStatus,
     openManage,
+    openExplore,
     refreshModels,
   } = useModels();
   const embeddingModelMissing =
@@ -126,7 +130,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-2">
+    <div className={cn("flex w-full max-w-3xl flex-col gap-2", className)}>
       {!hasModel && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
           <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -137,7 +141,7 @@ export function ChatInput({
             </span>
           ) : (
             <span>
-              No models downloaded. Pull a model with Ollama, then select it
+              No models downloaded. Explore and download one, then select it
               here.
             </span>
           )}
@@ -145,9 +149,9 @@ export function ChatInput({
             variant="secondary"
             size="sm"
             className="ml-auto shrink-0"
-            onClick={openManage}
+            onClick={hasAvailableModels ? openManage : openExplore}
           >
-            Select models
+            {hasAvailableModels ? "Select models" : "Explore models"}
           </Button>
         </div>
       )}
