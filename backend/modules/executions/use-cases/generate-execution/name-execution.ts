@@ -1,5 +1,5 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { createChatModel } from "../../../../core/ai/providers/create-chat-model.ts";
+import { createChatModel, resolveAuxiliaryModelRef } from "../../../../core/ai/providers/create-chat-model.ts";
 import type { ModelRef } from "../../../../core/ai/providers/types.ts";
 import type { LangGraphAbstraction } from "../../../../core/ai/visual-builder/types.ts";
 
@@ -39,7 +39,10 @@ export async function nameExecutionFromGraph(
   graph: LangGraphAbstraction,
 ): Promise<string | undefined> {
   try {
-    const model = await createChatModel(orchestrator, { temperature: 0.2 });
+    const model = await createChatModel(
+      await resolveAuxiliaryModelRef(orchestrator),
+      { temperature: 0.2 },
+    );
     const response = await model.invoke([
       new SystemMessage(SYSTEM_PROMPT),
       new HumanMessage(

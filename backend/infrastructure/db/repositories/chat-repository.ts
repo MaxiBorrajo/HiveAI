@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc, isNull } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
 import { chats, type Chat, type NewChat } from "../schema/chats.ts";
 
@@ -13,8 +13,26 @@ export class ChatRepository {
     return chat;
   }
 
+  /** The user's chats; the judge chats of run comparisons are left out. */
   async findAll(): Promise<ChatRecord[]> {
-    return await this.db.select().from(chats).orderBy(desc(chats.updatedAt));
+    return await this.db
+      .select()
+      .from(chats)
+      .where(isNull(chats.executionId))
+      .orderBy(desc(chats.updatedAt));
+  }
+
+  async findByRunComparison(
+    executionId: number,
+    runKey: string,
+  ): Promise<ChatRecord | undefined> {
+    const [chat] = await this.db
+      .select()
+      .from(chats)
+      .where(and(eq(chats.executionId, executionId), eq(chats.runKey, runKey)))
+      .orderBy(desc(chats.updatedAt))
+      .limit(1);
+    return chat;
   }
 
   async create(chat: NewChat): Promise<number> {

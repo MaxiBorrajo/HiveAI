@@ -77,13 +77,13 @@ function buildAskUserTool(): NativeTool {
       const answer = await wait;
 
       return answer
-        ? `You asked the user: "${question}"\nThe user answered: "${answer}"\nUse this answer now to continue the task you were already working on — call whatever tool you originally needed with this information filled in. Do not ask the same question again, and do not treat this answer as a new, unrelated request.`
+        ? `You asked the user: "${question}"\nThe user answered: "${answer}"\nContinue the task you were already doing using this answer.`
         : "The user did not answer in time. Proceed with your best judgment, or explain to the user that you need this information to continue.";
     },
     {
       name: ASK_USER_TOOL_NAME,
       description:
-        "Ask the user a direct clarifying question when a required detail for another tool is missing or ambiguous in their request (e.g. which folder, which file among several candidates, a preference only they can state) AND no available tool could discover it on its own. Do not use this as a substitute for exploring first — only after you've exhausted what tools can find out. If the valid answers are a small known set (e.g. the specific candidates you found), pass them as `options` so the user can pick one instead of typing. This pauses your turn until the user replies.",
+        "Ask the user one direct question when a required detail is missing or ambiguous and no tool could find it out (e.g. which folder, which of several files, a preference only they can state). Explore with tools first. If the valid answers are a small known set, pass them as `options`. Pauses your turn until the user replies.",
       schema: AskUserSchema,
     },
   );

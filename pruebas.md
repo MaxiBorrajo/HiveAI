@@ -138,6 +138,90 @@ Formato en `docs/flow-format.md`. Se necesitan dos instalaciones (o dos `dataDir
 | K8 | Importar de nuevo el mismo archivo | Pide elegir copia o reemplazar; Cancelar no cambia nada; Reemplazar pide segunda confirmación |
 | K9 | Pegar `sk-…` en un systemPrompt y exportar | `confirm` de advertencia antes de guardar; en el import, aviso de campos sospechosos |
 
+## L. Reducción de tokens (cloud)
+
+Mecanismos: caching de Anthropic, compactación de resultados viejos, resumen del historial, thinking solo al inicio del turno, tope de reenvío, guarda de tools repetidas, modelo chico para nombrar/aclarar, system prompt y descripciones más cortos.
+
+### L0. Preparación
+
+| | |
+|---|---|
+| Dónde ver el consumo | Panel de uso del chat (muestra `cache read` / `cache write` por mensaje) o la base: `sqlite3 <dataDir>/hiveai.db "select datetime(created_at/1000,'unixepoch') t, model, input_tokens in_t, output_tokens out_t, cache_read_tokens cr, cache_write_tokens cw, reasoning_tokens th from model_usage order by id desc limit 15;"` (`dataDir` está en tu config de HiveAI) |
+| Modelo para caching | Usá `claude-sonnet-5-5`. Haiku exige un prefijo cacheable más grande (miles de tokens) y puede no cachear: si ves `cw`/`cr` en 0 con Haiku no es falla. Mantené los prompts cortos |
+| Apagar todo para comparar | En `backend/main.ts`, debajo de `setUsageRecorder(...)`, agregá `setTokenSavingsDefaults(false);` (y el import desde `core/ai/token-savings/index.ts`). Reiniciá `deno task dev`. **Sacá la línea al terminar** |
+| Plugins | Activá `web_read` y `file_read` en el menú de plugins. `counter` y `current_datetime` ahora arrancan apagados en instalaciones nuevas |
+| Archivo de prueba | Creá `~/prueba-largo.txt` con ~30.000 caracteres (por ejemplo `yes "Linea de relleno numero uno con texto de ejemplo." \| head -n 600 > ~/prueba-largo.txt`) |
+
+### L1. Prompt caching (Anthropic)
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L1.1 | Chat nuevo con Sonnet. Mensaje: `Leé el archivo ~/prueba-largo.txt y decime cuántas líneas tiene` | Usa `file_read`/`run_shell`. En la base, la primera fila del turno tiene `cw` > 0 |
+| L1.2 | Mismo chat, mandá dentro de los 5 minutos: `¿y cuál es la primera línea?` | Filas nuevas con `cr` > 0 (lee el prefijo del system prompt y las tools desde caché) y `in_t` menor que en L1.1 |
+| L1.3 | Repetí L1.1 y L1.2 con `setTokenSavingsDefaults(false)` (ver L0) | `cw` y `cr` quedan en 0 o vacíos, y `in_t` es mayor. Esta es la comparación con y sin mecanismo |
+| L1.4 | Gemini flash, misma pregunta de L1.1 | Responde bien, sin errores en consola. No hay `cache_control` (Gemini cachea solo, implícito) |
+| L1.5 | Modelo local, misma pregunta | Igual que antes; los mecanismos no se aplican a locales |
+
+### L2. Thinking solo al inicio del turno (chat con Sonnet)
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L2.1 | `Buscá en la web quién ganó el último Mundial de fútbol y leé una de las páginas para confirmar` (necesita 2-3 llamadas a tools) | En la consola, la primera línea `[SCOUT - Agent] Model ..., options:` muestra `{ think: true }` y las siguientes (después de resultados de tools) `{ think: false }`. El chat responde sin error 400 |
+| L2.2 | Mirá `th` (reasoning_tokens) en la base para ese turno | Solo la primera fila tiene `th` > 0; las de seguimiento tienen 0 o vacío |
+| L2.3 | Repetí con `setTokenSavingsDefaults(false)` | Todas las iteraciones muestran `think: true` |
+
+### L3. Compactación de resultados viejos
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L3.1 | Con Sonnet: `Leé estos 5 archivos grandes, uno por vez, y al final decime cuál tiene más líneas: ~/prueba-largo.txt, ~/prueba-largo.txt, ...` (usá 5 archivos distintos de más de 30.000 caracteres; si no tenés, copiá el archivo con otros nombres) | Termina y responde bien. En la base, `in_t` de las últimas iteraciones crece menos que linealmente (los primeros resultados se reemplazan por `[Tool result omitted to save tokens ...]`) |
+| L3.2 | Pedile: `repetí el contenido de la primera línea del primer archivo` | Si ya fue omitido, vuelve a llamar a la tool (el marcador lo permite) y responde correctamente. No debe inventar |
+| L3.3 | Repetí con `setTokenSavingsDefaults(false)` | `in_t` crece lineal; el resultado final es el mismo |
+
+### L4. Resumen del historial (conversaciones largas)
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L4.1 | Para no escribir 160.000 caracteres, bajá los umbrales en `main.ts`: `setTokenSavingsDefaults({ summaryTriggerChars: 6000, summaryMinHistoryChars: 2000 });` y reiniciá. Con Sonnet mandá `Mi perro se llama Bruno`, después 4 mensajes de ~1.500 caracteres cada uno (texto de relleno) y uno corto más | Al llegar al umbral aparece "Compactando el contexto de la conversación..." en el indicador del chat. En la base hay una fila extra con un modelo Haiku del mismo proveedor y el mismo grupo de uso |
+| L4.2 | Después preguntá: `¿Cómo se llama mi perro?` | Responde Bruno (el resumen conserva el dato) |
+| L4.3 | Con los mismos umbrales bajos, usá una key de Gemini o Anthropic sin acceso al modelo chico (o desconectá la red justo antes de enviar el mensaje largo) | El chat no se rompe: sale un warning `[token-savings] summary failed` y responde con el historial completo |
+| L4.4 | Recargá el chat | Se ven todos los mensajes originales completos: la compactación solo cambia lo que se envía al modelo, no lo guardado |
+
+### L5. Ejecuciones
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L5.1 | Generá un flujo desde un prompt: `Leé https://example.com y guardá un resumen de dos líneas`. Dejalo con modelo cloud | Se genera. El nombre de la ejecución sale con un modelo chico (fila en la base con `claude-haiku...` o `gemini-...flash...` y rol del orquestador) |
+| L5.2 | Ejecutalo | Termina bien. Filas de uso con `context_kind = execution` |
+| L5.3 | Nodo LLM con `web_read` y un system prompt `Llamá web_read con https://example.com tres veces seguidas con los mismos argumentos y después respondé` | En consola: `Refusing to repeat identical call to 'web_read'`. La tool se ejecuta una sola vez y el nodo responde |
+| L5.4 | Mismo caso con `setTokenSavingsDefaults(false)` | La tool se ejecuta las tres veces |
+| L5.5 | Una ejecución que ya tenías antes de estos cambios | Da el mismo resultado esperado |
+
+### L6. System prompt y tools más cortos
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L6.1 | Con Sonnet, preguntá `¿Estás corriendo en un modelo local o en la nube?` | Ya no afirma que corre localmente y que nada sale del dispositivo. Con un modelo local el prompt es el de siempre |
+| L6.2 | Comparar `in_t` del primer mensaje (`Respondé solo: hola`) antes y después (con `setTokenSavingsDefaults(false)` solo se apagan los mecanismos, no el prompt corto; para comparar el prompt viejo usá `git stash` o la rama `main`) | Unos 1.000-1.500 tokens menos de entrada |
+| L6.3 | Probá una consulta por cada tool: web (`buscá las novedades de Deno 2`), archivo (`dónde está la carpeta Documents`), shell (`corré df -h`), `ask_user` (`Borrá el archivo informe` sin decir cuál) | Cada tool se elige bien, y `ask_user` abre la pregunta en el chat. **Esto reemplaza las evals: si alguna tool deja de elegirse, reportalo con el prompt exacto** |
+| L6.4 | Menú de plugins en una instalación nueva (o borrando el estado de `counter` y `current_datetime` en la tabla de plugins) | Arrancan apagados; si los activás a mano y reiniciás, siguen activos |
+
+### L7. Historial del chat recortado
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L7.1 | Pedile a Sonnet `Escribí un texto de unas 2.000 palabras sobre el mar`, seguilo con 5 mensajes cortos, y después preguntá `¿Qué dijiste al principio de tu primer texto?` | Responde con lo que pueda ver del inicio (se conserva el comienzo) sin errores. En el chat guardado el texto original sigue completo |
+
+### L8. Gemini cache explícito (apagado por defecto)
+
+| # | Pasos | Esperado |
+|---|---|---|
+| L8.1 | En `main.ts` agregá `setTokenSavingsDefaults({ geminiContextCache: true });`, reiniciá, y en un chat con Gemini flash mandá dos mensajes seguidos que usen una tool | Ambos responden bien. En la consola no debe aparecer `gemini cached request failed`. En la base, `cr` > 0 en el segundo |
+| L8.2 | Si aparece ese warning | Anotá el mensaje completo; significa que la API no aceptó el caché y se cayó a la request normal. Dejalo apagado y reportámelo |
+
+## Qué reportarme si algo falla (sección L)
+Prompt exacto, modelo, las últimas filas de `model_usage` (query de L0) y las líneas `[token-savings]` o `[SCOUT - Agent]` de la consola.
+
 ## J. Automáticos
 
 Desde `backend/`: `deno test -A` → **480 tests deben pasar**. Desde `frontend/`: `npx tsc --noEmit -p tsconfig.app.json` y `npm run build` sin errores.

@@ -15,7 +15,7 @@ export interface StreamHandlers {
   onThinking: () => void;
   onStep: (step: ChatStep) => void;
   onToolCalls: (calls: LiveToolCall[]) => void;
-  onStatus: (phase: "loading_model" | "processing") => void;
+  onStatus: (phase: "loading_model" | "processing" | "compacting") => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
   onDone: (

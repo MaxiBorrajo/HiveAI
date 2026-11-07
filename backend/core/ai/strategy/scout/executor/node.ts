@@ -1,3 +1,4 @@
+import { duplicateToolCallMessage } from "../../shared/duplicate-tool-call.ts";
 import { AIMessage } from "@langchain/core/messages";
 import { ToolMessage } from "@langchain/core/messages/tool";
 import type { ToolCall } from "@langchain/core/messages/tool";
@@ -30,14 +31,7 @@ export const Executor: GraphNode<typeof ScoutState> = async (
       console.warn(
         `[SCOUT - Executor] Refusing to repeat identical call to "${toolCall.name}" with the same arguments.`,
       );
-      messages.push(
-        new ToolMessage({
-          tool_call_id: toolCall.id ?? "",
-          name: toolCall.name,
-          content: `This exact call to '${toolCall.name}' with the same arguments already ran successfully earlier in this turn — it was NOT run again, to avoid repeating a real action. If the task is already done, answer the user now instead of calling this again.`,
-          status: "error",
-        }),
-      );
+      messages.push(duplicateToolCallMessage(toolCall));
       steps.push({
         node: "Executor",
         label: toolCall.name,

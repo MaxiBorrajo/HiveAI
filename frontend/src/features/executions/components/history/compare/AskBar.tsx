@@ -6,7 +6,7 @@ import { MessageMarkdown } from "@/features/chats/components/MessageMarkdown";
 import { getErrorMessage } from "@/lib/errors";
 import { useModels } from "@/features/models/ModelsContext";
 import { currentChoice } from "@/features/models/lib/modelChoices";
-import { judgeChat, type JudgeFocus } from "../../../api/judgeChat";
+import { getJudgeConversation, judgeChat, type JudgeFocus } from "../../../api/judgeChat";
 import type { RunSummary } from "../../../types";
 
 interface ChatLine {
@@ -56,6 +56,24 @@ export function AskBar({
   const listEnd = useRef<HTMLLIElement | null>(null);
 
   useEffect(() => () => abort.current?.abort(), []);
+
+  // Bring back the conversation already saved for these runs.
+  const runIds = runs.map((r) => r.historyId).join(",");
+  useEffect(() => {
+    const controller = new AbortController();
+    chatId.current = null;
+    setLines([]);
+    getJudgeConversation(executionId, runs.map((r) => r.historyId), controller.signal)
+      .then((saved) => {
+        if (controller.signal.aborted) return;
+        chatId.current = saved.chatId;
+        // Keep anything the user already typed while this was loading.
+        setLines((current) => (current.length > 0 ? current : saved.lines));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executionId, runIds]);
   useEffect(() => {
     listEnd.current?.scrollIntoView({ block: "end" });
   }, [lines]);

@@ -23,7 +23,7 @@ import {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
-  phase: "processing" | "loading_model";
+  phase: "processing" | "loading_model" | "compacting";
   liveSteps: ChatStep[];
   liveTools: LiveToolCall[];
   isBusy: boolean;

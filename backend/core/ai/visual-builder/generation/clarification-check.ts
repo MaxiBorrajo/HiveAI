@@ -1,6 +1,6 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import { createChatModel } from "../../providers/create-chat-model.ts";
+import { createChatModel, resolveAuxiliaryModelRef } from "../../providers/create-chat-model.ts";
 import type { ModelRef } from "../../providers/types.ts";
 import type { LangGraphAbstraction, PluginInfo } from "../types.ts";
 import { invokeWithRetry } from "./generation-step.ts";
@@ -40,7 +40,7 @@ export async function findClarifyingQuestions(
   existingGraph?: LangGraphAbstraction,
 ): Promise<ClarifyingQuestion[]> {
   try {
-    const checker = (await createChatModel(orchestrator, { temperature: 0, think: false }))
+    const checker = (await createChatModel(await resolveAuxiliaryModelRef(orchestrator), { temperature: 0, think: false }))
       .withStructuredOutput(ClarificationSchema, { name: "ClarificationCheck" });
 
     const system = `You decide whether a request to build or change an automation workflow is missing information that is ESSENTIAL to design it.
