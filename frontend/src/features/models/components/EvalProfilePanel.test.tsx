@@ -8,7 +8,8 @@ import type {
   ModelEvalProfileResponse,
   RunEstimate,
 } from "@/features/models/api/getModelEvalProfile";
-import type { ModelChoice } from "@/features/models/lib/modelChoices";
+import { allModelChoices, type ModelChoice } from "@/features/models/lib/modelChoices";
+import type { ModelOption } from "@/features/models/types";
 
 /**
  * The model's eval profile and its "Evaluate" action, against a fake
@@ -37,10 +38,24 @@ function setRoutes(routes: MockRoute[]) {
 
 const LOCAL: ModelChoice = { provider: "ollama", model: "qwen3:8b", keyId: "" };
 const CLOUD: ModelChoice = { provider: "anthropic", model: "claude-haiku-4-5", keyId: "key-1" };
-const JUDGES = [
-  { choice: LOCAL, label: "qwen3:8b" },
-  { choice: { provider: "ollama" as const, model: "lfm2.5", keyId: "" }, label: "lfm2.5" },
-];
+function localOption(model: string, label: string, capabilities: string[]): ModelOption {
+  return { id: `ollama:${model}`, ref: { provider: "ollama", model }, label, capabilities };
+}
+
+// Built the way the app builds them, from the /api/models/options groups,
+// whose option labels are size hints ("8.2B local"), not names.
+const JUDGES = allModelChoices([
+  {
+    id: "local",
+    label: "Local (Ollama)",
+    provider: "ollama",
+    options: [
+      localOption("qwen3:8b", "8.2B local", ["completion", "tools"]),
+      localOption("lfm2.5", "1.2B local", ["completion"]),
+      localOption("nomic-embed-text", "137M local", ["embedding"]),
+    ],
+  },
+]);
 
 const SUITES: ModelEvalProfileResponse["suites"] = [
   { suite: "routing", categories: ["routing", "abstention", "param-extraction", "multi-turn"], needsJudge: false },
@@ -214,10 +229,12 @@ describe("Eval profile — what the model is good and bad at", () => {
     const start = within(form).getByRole("button", { name: /start evaluation/i });
     expect(start).toBeDisabled();
 
-    // The model being evaluated is not offered as its own judge.
+    // Judges are listed by model name, grouped by where they run. The model
+    // being evaluated and embedding-only models (they can't write) are left out.
     const judgeSelect = within(form).getByRole("combobox", { name: /judge model/i });
     const judgeOptions = within(judgeSelect).getAllByRole("option").map((o) => o.textContent);
     expect(judgeOptions).toEqual(["Choose a judge…", "lfm2.5"]);
+    expect(within(judgeSelect).getByRole("group", { name: "Local (Ollama)" })).toBeInTheDocument();
 
     await userEvent.selectOptions(judgeSelect, "lfm2.5");
     expect(await within(form).findByText(/Estimated cost: free · 17 cases/)).toBeInTheDocument();

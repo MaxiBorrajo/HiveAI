@@ -44,12 +44,24 @@ export function sameModel(a: Pick<ModelChoice, "provider" | "model">, b: Pick<Mo
   return a.provider === b.provider && a.model === b.model;
 }
 
-/** Every selectable model (local and per cloud key), e.g. to pick a judge. */
-export function allModelChoices(groups: ModelOptionGroup[]): { choice: ModelChoice; label: string }[] {
+/** Embedding-only models (e.g. nomic-embed-text) can't chat, so can't judge. */
+function canGenerateText(option: ModelOption) {
+  return !(option.capabilities.includes("embedding") && !option.capabilities.includes("completion"));
+}
+
+/**
+ * Every model that can write text (local and per cloud key), e.g. to pick a
+ * judge: labelled by model name and grouped by where it runs. An option's own
+ * `label` is a size/location hint ("8.5B local"), not a name.
+ */
+export function allModelChoices(
+  groups: ModelOptionGroup[],
+): { choice: ModelChoice; label: string; group: string }[] {
   return groups.flatMap((group) =>
-    group.options.map((option) => ({
+    group.options.filter(canGenerateText).map((option) => ({
       choice: toChoice(option),
-      label: group.keyAlias ? `${option.label} · ${group.keyAlias}` : option.label,
+      label: option.ref.model,
+      group: group.label,
     })),
   );
 }

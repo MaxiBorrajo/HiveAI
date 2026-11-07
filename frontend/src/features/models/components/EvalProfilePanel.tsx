@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Download, Loader2, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,17 @@ const SUITE_LABEL: Record<EvalSuite, string> = {
 export interface JudgeChoice {
   choice: ModelChoice;
   label: string;
+  /** Where it runs, e.g. "Local (Ollama)" or "Anthropic · work key". */
+  group?: string;
+}
+
+function groupJudges(choices: JudgeChoice[]): [string, JudgeChoice[]][] {
+  const byGroup = new Map<string, JudgeChoice[]>();
+  for (const j of choices) {
+    const key = j.group ?? "";
+    byGroup.set(key, [...(byGroup.get(key) ?? []), j]);
+  }
+  return [...byGroup];
 }
 
 function formatCost(cost: number | null | undefined): string {
@@ -358,21 +369,31 @@ function EvaluateForm({
       {needsJudge && (
         <label className="flex flex-col gap-1 text-xs">
           <span className="font-medium">Judge model</span>
+          <span className="text-muted-foreground">
+            Summarization has no single right answer, so another model reads each answer and
+            scores it from 0 to 100 (passes at 70). Pick a model other than the one being evaluated.
+          </span>
           <select
             value={judgeValue}
             onChange={(e) => setJudgeValue(e.target.value)}
             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           >
             <option value="">Choose a judge…</option>
-            {judgeChoices.map((j) => (
-              <option key={choiceValue(j.choice)} value={choiceValue(j.choice)}>
-                {j.label}
-              </option>
-            ))}
+            {groupJudges(judgeChoices).map(([group, choices]) => {
+              const options = choices.map((j) => (
+                <option key={choiceValue(j.choice)} value={choiceValue(j.choice)}>
+                  {j.label}
+                </option>
+              ));
+              return group ? (
+                <optgroup key={group} label={group}>
+                  {options}
+                </optgroup>
+              ) : (
+                <Fragment key="">{options}</Fragment>
+              );
+            })}
           </select>
-          <span className="text-muted-foreground">
-            Grades the answers where there's no single exact one. It must be a different model.
-          </span>
         </label>
       )}
 
