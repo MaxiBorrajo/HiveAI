@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { getPlugins } from "@/features/plugins/api/getPlugins";
 import type { Plugin } from "@/features/plugins/types";
 
-export function useActivePlugins(enabled: boolean): Plugin[] {
+/**
+ * Every installed plugin, active or not. "Active" means switched on for the
+ * chat; an execution is a separate thing and may use any of them (imported
+ * plugins additionally need to be running, which the run checks for).
+ */
+export function useInstalledPlugins(enabled: boolean): Plugin[] {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
 
   useEffect(() => {
@@ -10,7 +15,7 @@ export function useActivePlugins(enabled: boolean): Plugin[] {
     let cancelled = false;
     getPlugins()
       .then(({ data }) => {
-        if (!cancelled) setPlugins((data ?? []).filter((p) => p.active));
+        if (!cancelled) setPlugins(data ?? []);
       })
       .catch(() => {});
     return () => {

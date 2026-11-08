@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil, History, Download, Square } from "lucide-react";
+import { Play, Loader2, Terminal, CircleCheckBig, SlidersHorizontal, Copy, Check, Pencil, History, Download, Square, CalendarClock } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import type { LangGraphAbstraction } from "../types";
@@ -17,6 +17,11 @@ interface RunControlsBarProps {
   onOpenRunModal: () => void;
   onShowResult: () => void;
   onShowHistory: () => void;
+  onSchedule: () => void;
+  /** Missed scheduled runs waiting for the user to look at them. */
+  missedCount?: number;
+  /** The scheduler is running this execution right now (nothing to stop here). */
+  runningOnSchedule?: boolean;
   onEdit: () => void;
   /** Absent while the execution has not been saved yet. */
   onExport?: () => void;
@@ -37,11 +42,16 @@ export function RunControlsBar({
   onOpenRunModal,
   onShowResult,
   onShowHistory,
+  onSchedule,
+  missedCount = 0,
+  runningOnSchedule = false,
   onEdit,
   onExport,
 }: RunControlsBarProps) {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const { copied: isCopied, copy: copyText } = useCopyFeedback();
+  // A run started by the scheduler looks the same as one started here...
+  const busy = isRunning || runningOnSchedule;
 
   return (
     <div className="absolute top-6 right-6 z-20 pointer-events-auto flex flex-col items-end gap-2">
@@ -49,17 +59,21 @@ export function RunControlsBar({
         <button
           type="button"
           onClick={onRun}
-          disabled={isThinking || isRunning}
+          disabled={isThinking || busy}
           className={cn(
             "group flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium transition-all select-none",
-            isRunning
+            busy
               ? "bg-amber-500/10 text-amber-300 cursor-wait"
               : "text-foreground hover:bg-muted/90 hover:text-foreground active:bg-muted",
-            (isThinking || isRunning) && !isRunning && "opacity-50 cursor-not-allowed"
+            (isThinking || busy) && !busy && "opacity-50 cursor-not-allowed"
           )}
-          title={hasRequiredInputs ? "Configure & Run Execution" : "Run Execution"}
+          title={
+            runningOnSchedule
+              ? "Running on its schedule"
+              : hasRequiredInputs ? "Configure & Run Execution" : "Run Execution"
+          }
         >
-          {isRunning ? (
+          {busy ? (
             <>
               <Loader2 className="size-3.5 animate-spin text-amber-400" />
               <span>Running...</span>
@@ -84,7 +98,7 @@ export function RunControlsBar({
           </button>
         )}
 
-        {!hasRequiredInputs && !isRunning && (
+        {!hasRequiredInputs && !busy && (
           <button
             type="button"
             onClick={onOpenRunModal}
@@ -123,8 +137,30 @@ export function RunControlsBar({
         {graph && (
           <button
             type="button"
+            onClick={onSchedule}
+            className={cn(SEGMENT, "relative")}
+            title={
+              missedCount > 0
+                ? `${missedCount} scheduled run(s) were missed`
+                : "Run this execution automatically"
+            }
+          >
+            <CalendarClock className="size-3.5" />
+            <span>Schedule</span>
+            {missedCount > 0 && (
+              <span
+                aria-label="Missed scheduled runs"
+                className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-500"
+              />
+            )}
+          </button>
+        )}
+
+        {graph && (
+          <button
+            type="button"
             onClick={onEdit}
-            disabled={isThinking || isRunning}
+            disabled={isThinking || busy}
             className={cn(SEGMENT, "disabled:cursor-not-allowed disabled:opacity-50")}
             title="Edit this execution's graph by hand"
           >
@@ -137,7 +173,7 @@ export function RunControlsBar({
           <button
             type="button"
             onClick={onExport}
-            disabled={isThinking || isRunning}
+            disabled={isThinking || busy}
             className={cn(SEGMENT, "disabled:cursor-not-allowed disabled:opacity-50")}
             title="Export this execution to a file"
           >

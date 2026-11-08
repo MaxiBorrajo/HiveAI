@@ -335,6 +335,23 @@ export function useExecutionWorkspace({
     }
   };
 
+  /**
+   * The run list is cached per execution while this screen is mounted, so a
+   * run that happened elsewhere (the scheduler) is invisible until reloaded.
+   * Returns whether there is a result to show.
+   */
+  const reloadLastResult = async (id: string): Promise<boolean> => {
+    try {
+      const { data } = await getExecution(id);
+      if (!data?.lastResult) return false;
+      executionResult.set(data.lastResult, id);
+      return true;
+    } catch (e) {
+      console.error("Failed to reload the latest result", e);
+      return false;
+    }
+  };
+
   const adoptCreatedExecution = (id: string, created: LangGraphAbstraction) => {
     justCreatedIdRef.current = id;
     graph.set(created, id);
@@ -365,5 +382,6 @@ export function useExecutionWorkspace({
     handleStop,
     handleStopRun,
     handleRun,
+    reloadLastResult,
   };
 }

@@ -72,7 +72,7 @@ function ToastList() {
                 variant="secondary"
                 onClick={() =>
                   openErrorDetails({
-                    title: toast.title ?? "Error details",
+                    title: typeof toast.title === "string" ? toast.title : "Error details",
                     text: details,
                   })
                 }

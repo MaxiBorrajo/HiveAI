@@ -36,6 +36,7 @@ export class HiveMicrokernel {
     ollamaKvCacheType: "",
     ollamaFlashAttention: "",
     ollamaServerPromptDismissed: false,
+    runInBackground: true,
     callbackBaseUrl: "",
   });
 
