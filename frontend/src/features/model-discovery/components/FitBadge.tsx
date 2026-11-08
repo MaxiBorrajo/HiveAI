@@ -3,9 +3,9 @@ import { FIT_LABEL, FIT_VARIANT } from "../lib/fit";
 import type { FitResult } from "../types";
 
 export function FitBadge({ fit }: { fit: FitResult | null }) {
-  if (!fit) return <Badge variant="outline">Size unknown</Badge>;
+  if (!fit) return <Badge variant="outline" data-testid="fit-badge">Size unknown</Badge>;
   return (
-    <Badge variant={FIT_VARIANT[fit.status]} title={fit.reason}>
+    <Badge variant={FIT_VARIANT[fit.status]} title={fit.reason} data-testid="fit-badge">
       {FIT_LABEL[fit.status]}
     </Badge>
   );

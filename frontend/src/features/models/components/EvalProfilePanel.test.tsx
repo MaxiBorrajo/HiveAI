@@ -126,9 +126,9 @@ describe("Eval profile — what the model is good and bad at", () => {
     setRoutes([{ method: "get", match: LOCAL_BASE, handler: () => ok(response()) }]);
     await renderPanel();
 
-    expect(await screen.findByText(/Not evaluated yet/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /evaluate/i })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /export/i })).not.toBeInTheDocument();
+    expect(await screen.findByTestId("eval-profile-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("eval-profile-evaluate")).toBeEnabled();
+    expect(screen.queryAllByTestId(/^eval-profile-export-/)).toHaveLength(0);
   });
 
   test("shows each metric's level, value, unjudged cases, confidence, staleness and evolution", async () => {
@@ -164,16 +164,21 @@ describe("Eval profile — what the model is good and bad at", () => {
     ]);
     await renderPanel();
 
-    const routing = await screen.findByRole("group", { name: "routing" });
-    expect(within(routing).getByText("Very good · 92%")).toBeInTheDocument();
-    expect(within(routing).getByText(/Out of date: case set changed/)).toBeInTheDocument();
+    const routing = await screen.findByTestId("eval-metric-routing");
+    expect(within(routing).getByTestId("eval-metric-level")).toHaveTextContent("Very good · 92%");
+    expect(within(routing).getByTestId("eval-metric-stale")).toHaveTextContent(
+      /Out of date: case set changed/,
+    );
 
-    const summarization = screen.getByRole("group", { name: "summarization" });
-    expect(within(summarization).getByText("Good · 75%")).toBeInTheDocument();
-    expect(within(summarization).getByText(/1 unjudged \(not counted\)/)).toBeInTheDocument();
-    expect(within(summarization).getByText(/judge claude-sonnet-5/)).toBeInTheDocument();
-    expect(within(summarization).getByText(/Low confidence/)).toBeInTheDocument();
-    expect(within(summarization).getByText(/Evolution: 60% → 75% \(judge changed in the last run\)/)).toBeInTheDocument();
+    const summarization = screen.getByTestId("eval-metric-summarization");
+    expect(within(summarization).getByTestId("eval-metric-level")).toHaveTextContent("Good · 75%");
+    const cases = within(summarization).getByTestId("eval-metric-cases");
+    expect(cases).toHaveTextContent(/1 unjudged \(not counted\)/);
+    expect(cases).toHaveTextContent(/judge claude-sonnet-5/);
+    expect(within(summarization).getByTestId("eval-metric-low-confidence")).toBeInTheDocument();
+    expect(within(summarization).getByTestId("eval-metric-evolution")).toHaveTextContent(
+      /Evolution: 60% → 75% \(judge changed in the last run\)/,
+    );
   });
 
   test("when the profile can't be loaded it says so, and Retry loads it again", async () => {
@@ -191,9 +196,9 @@ describe("Eval profile — what the model is good and bad at", () => {
     ]);
     await renderPanel();
 
-    expect(await screen.findByText("Couldn't load the eval profile.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText(/Not evaluated yet/)).toBeInTheDocument();
+    expect(await screen.findByTestId("eval-profile-load-error")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("eval-profile-retry"));
+    expect(await screen.findByTestId("eval-profile-empty")).toBeInTheDocument();
   });
 
   test("evaluating a local model: pick categories and an independent judge, then follow progress and cancel", async () => {
@@ -221,24 +226,31 @@ describe("Eval profile — what the model is good and bad at", () => {
       },
     ]);
     await renderPanel();
-    await userEvent.click(await screen.findByRole("button", { name: /evaluate/i }));
+    await userEvent.click(await screen.findByTestId("eval-profile-evaluate"));
 
-    const form = screen.getByRole("form", { name: "Evaluate model" });
+    const form = screen.getByTestId("eval-form");
     // Everything is selected by default; the judged category needs a judge first.
-    expect(within(form).getByLabelText(/Summarization \(judged\)/)).toBeChecked();
-    const start = within(form).getByRole("button", { name: /start evaluation/i });
+    expect(within(form).getByTestId("eval-form-suite-summarization")).toBeChecked();
+    const start = within(form).getByTestId("eval-form-start");
     expect(start).toBeDisabled();
 
     // Judges are listed by model name, grouped by where they run. The model
     // being evaluated and embedding-only models (they can't write) are left out.
-    const judgeSelect = within(form).getByRole("combobox", { name: /judge model/i });
-    const judgeOptions = within(judgeSelect).getAllByRole("option").map((o) => o.textContent);
+    const judgeSelect = within(form).getByTestId("eval-form-judge");
+    const judgeOptions = within(judgeSelect).getAllByTestId("eval-form-judge-option").map((o) => o.textContent);
     expect(judgeOptions).toEqual(["Choose a judge…", "lfm2.5"]);
-    expect(within(judgeSelect).getByRole("group", { name: "Local (Ollama)" })).toBeInTheDocument();
+    expect(within(judgeSelect).getByTestId("eval-form-judge-group")).toHaveAttribute(
+      "label",
+      "Local (Ollama)",
+    );
 
     await userEvent.selectOptions(judgeSelect, "lfm2.5");
-    expect(await within(form).findByText(/Estimated cost: free · 17 cases/)).toBeInTheDocument();
-    expect(within(form).queryByText(/I accept the estimated cost/)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(form).getByTestId("eval-form-estimate")).toHaveTextContent(
+        /Estimated cost: free · 17 cases/,
+      ),
+    );
+    expect(within(form).queryByTestId("eval-form-accept-cost")).not.toBeInTheDocument();
     await waitFor(() => expect(start).toBeEnabled());
 
     await userEvent.click(start);
@@ -250,15 +262,17 @@ describe("Eval profile — what the model is good and bad at", () => {
     });
 
     // Running: shows which case is going and lets you stop it.
-    const status = await screen.findByRole("status");
-    expect(within(status).getByText(/routing · case 3\/17: picks the counter plugin/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /evaluate/i })).toBeDisabled();
+    const status = await screen.findByTestId("eval-job-status");
+    expect(within(status).getByTestId("eval-job-progress")).toHaveTextContent(
+      /routing · case 3\/17: picks the counter plugin/,
+    );
+    expect(screen.getByTestId("eval-profile-evaluate")).toBeDisabled();
 
-    await userEvent.click(within(status).getByRole("button", { name: "Cancel" }));
+    await userEvent.click(within(status).getByTestId("eval-job-cancel"));
     expect(mockApiClient.delete).toHaveBeenCalledWith(`${LOCAL_BASE}/run`);
-    expect(
-      await screen.findByText("Evaluation cancelled. Saved: execution. Unfinished categories kept their previous results."),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId("eval-job-message")).toHaveTextContent(
+      "Evaluation cancelled. Saved: execution. Unfinished categories kept their previous results.",
+    );
   });
 
   test("exact-match categories alone don't ask for a judge", async () => {
@@ -267,12 +281,12 @@ describe("Eval profile — what the model is good and bad at", () => {
       { method: "post", match: `${LOCAL_BASE}/estimate`, handler: () => ok(FREE) },
     ]);
     await renderPanel();
-    await userEvent.click(await screen.findByRole("button", { name: /evaluate/i }));
+    await userEvent.click(await screen.findByTestId("eval-profile-evaluate"));
 
-    const form = screen.getByRole("form", { name: "Evaluate model" });
-    await userEvent.click(within(form).getByLabelText(/Summarization \(judged\)/));
-    expect(within(form).queryByRole("combobox", { name: /judge model/i })).not.toBeInTheDocument();
-    await waitFor(() => expect(within(form).getByRole("button", { name: /start evaluation/i })).toBeEnabled());
+    const form = screen.getByTestId("eval-form");
+    await userEvent.click(within(form).getByTestId("eval-form-suite-summarization"));
+    expect(within(form).queryByTestId("eval-form-judge")).not.toBeInTheDocument();
+    await waitFor(() => expect(within(form).getByTestId("eval-form-start")).toBeEnabled());
   });
 
   test("a cloud model shows the estimated cost and can't start until it's accepted", async () => {
@@ -294,15 +308,19 @@ describe("Eval profile — what the model is good and bad at", () => {
       },
     ]);
     await renderPanel(CLOUD);
-    await userEvent.click(await screen.findByRole("button", { name: /evaluate/i }));
+    await userEvent.click(await screen.findByTestId("eval-profile-evaluate"));
 
-    const form = screen.getByRole("form", { name: "Evaluate model" });
-    await userEvent.click(within(form).getByLabelText(/Summarization \(judged\)/));
-    expect(await within(form).findByText(/Estimated cost: \$0\.42/)).toBeInTheDocument();
+    const form = screen.getByTestId("eval-form");
+    await userEvent.click(within(form).getByTestId("eval-form-suite-summarization"));
+    await waitFor(() =>
+      expect(within(form).getByTestId("eval-form-estimate")).toHaveTextContent(
+        /Estimated cost: \$0\.42/,
+      ),
+    );
 
-    const start = within(form).getByRole("button", { name: /start evaluation/i });
+    const start = within(form).getByTestId("eval-form-start");
     expect(start).toBeDisabled();
-    await userEvent.click(within(form).getByLabelText(/I accept the estimated cost/));
+    await userEvent.click(within(form).getByTestId("eval-form-accept-cost"));
     expect(start).toBeEnabled();
 
     await userEvent.click(start);
@@ -334,11 +352,13 @@ describe("Eval profile — what the model is good and bad at", () => {
     ]);
     await renderPanel();
 
-    const status = await screen.findByRole("status");
-    expect(
-      within(status).getByText("Evaluation failed: Profiling 'generation' failed (Ollama is not running). Saved: routing."),
-    ).toBeInTheDocument();
-    expect(within(status).getByText("Skipped summarization: no judge model chosen")).toBeInTheDocument();
+    const status = await screen.findByTestId("eval-job-status");
+    expect(within(status).getByTestId("eval-job-message")).toHaveTextContent(
+      "Evaluation failed: Profiling 'generation' failed (Ollama is not running). Saved: routing.",
+    );
+    expect(within(status).getByTestId("eval-job-skipped-summarization")).toHaveTextContent(
+      "Skipped summarization: no judge model chosen",
+    );
   });
 
   test("an evaluated profile can be exported with its results", async () => {
@@ -354,7 +374,7 @@ describe("Eval profile — what the model is good and bad at", () => {
     const { reportSuccess } = await import("@/lib/toastManager");
     await renderPanel();
 
-    await userEvent.click(await screen.findByRole("button", { name: "Export HTML" }));
+    await userEvent.click(await screen.findByTestId("eval-profile-export-html"));
     expect(mockApiClient.post).toHaveBeenCalledWith(`${LOCAL_BASE}/export`, undefined, { params: { format: "html" } });
     await waitFor(() =>
       expect(reportSuccess).toHaveBeenCalledWith("Profile exported", "C:/Users/me/Downloads/qwen3-8b-eval-profile.html"),

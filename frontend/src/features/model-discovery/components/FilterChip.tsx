@@ -5,14 +5,16 @@ interface FilterChipProps {
   active: boolean;
   onClick: () => void;
   children: ReactNode;
+  testId?: string;
 }
 
-export function FilterChip({ active, onClick, children }: FilterChipProps) {
+export function FilterChip({ active, onClick, children, testId }: FilterChipProps) {
   return (
     <button
       type="button"
       aria-pressed={active}
       onClick={onClick}
+      data-testid={testId}
       className={cn(
         "inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors",
         active

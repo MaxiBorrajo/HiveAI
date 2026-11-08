@@ -97,6 +97,7 @@ export function PluginTestsView({
           className="shrink-0 -ml-2"
           title="Back"
           aria-label="Back"
+          data-testid="tests-back-button"
         >
           <ArrowLeft size={16} />
         </Button>
@@ -115,6 +116,7 @@ export function PluginTestsView({
                 onChange={toggleAll}
                 disabled={isRunning || allTests.length === 0}
                 className="size-4 accent-primary"
+                data-testid="tests-select-all"
               />
               <span className="text-xs font-medium">Select all</span>
             </label>
@@ -148,6 +150,7 @@ export function PluginTestsView({
             disabled={selectedIds.size === 0}
             variant={isRunning ? "destructive" : "default"}
             className="h-8 text-xs font-semibold shadow-sm"
+            data-testid="tests-run-button"
           >
             {isRunning ? (
               <Square size={14} className="mr-1.5 fill-current" />
@@ -166,7 +169,10 @@ export function PluginTestsView({
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <span className="tabular-nums text-muted-foreground whitespace-nowrap">
+            <span
+              className="tabular-nums text-muted-foreground whitespace-nowrap"
+              data-testid="tests-progress"
+            >
               {progressPercent}% ({completedCount}/{testsToRunCount})
             </span>
           </div>
@@ -200,7 +206,10 @@ export function PluginTestsView({
                 <AccordionTrigger className="px-4 py-3 hover:no-underline bg-muted/30">
                   <div className="flex items-center gap-2 font-semibold">
                     <span>{group.pluginName}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
+                    <span
+                      className="text-xs font-normal text-muted-foreground"
+                      data-testid={`tests-group-count-${group.pluginName}`}
+                    >
                       ({group.tests.length} tests)
                     </span>
                   </div>

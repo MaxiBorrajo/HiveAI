@@ -114,8 +114,10 @@ export function EvalProfilePanel({
   if (loadError && !data) {
     return (
       <Section>
-        <p className="text-xs text-destructive">Couldn't load the eval profile.</p>
-        <Button variant="outline" size="sm" className="self-start" onClick={load}>
+        <p className="text-xs text-destructive" data-testid="eval-profile-load-error">
+          Couldn't load the eval profile.
+        </p>
+        <Button variant="outline" size="sm" className="self-start" onClick={load} data-testid="eval-profile-retry">
           Retry
         </Button>
       </Section>
@@ -135,7 +137,7 @@ export function EvalProfilePanel({
   return (
     <Section>
       {metrics.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground" data-testid="eval-profile-empty">
           Not evaluated yet. Evaluate it to see what this model is good and bad at.
         </p>
       ) : (
@@ -174,7 +176,12 @@ export function EvalProfilePanel({
         />
       ) : (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={running} onClick={() => setFormOpen(true)}>
+          <Button
+            size="sm"
+            disabled={running}
+            onClick={() => setFormOpen(true)}
+            data-testid="eval-profile-evaluate"
+          >
             <Play size={12} className="fill-current" />
             Evaluate
           </Button>
@@ -205,14 +212,19 @@ function MetricRow({
 }) {
   const points = history.slice(-EVOLUTION_POINTS);
   return (
-    <div role="group" aria-label={metric.category} className="flex flex-col gap-1">
+    <div
+      role="group"
+      aria-label={metric.category}
+      className="flex flex-col gap-1"
+      data-testid={`eval-metric-${metric.category}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium">{metric.category}</span>
-        <Badge variant={LEVEL_VARIANT[metric.level]}>
+        <Badge variant={LEVEL_VARIANT[metric.level]} data-testid="eval-metric-level">
           {LEVEL_LABEL[metric.level]} · {pct(metric.value)}
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground" data-testid="eval-metric-cases">
         {metric.casesGraded} case{metric.casesGraded === 1 ? "" : "s"} graded
         {metric.casesUnjudged > 0 && `, ${metric.casesUnjudged} unjudged (not counted)`}
         {metric.judgeModel && ` · judge ${metric.judgeModel}`}
@@ -222,16 +234,25 @@ function MetricRow({
         {new Date(metric.date).toLocaleDateString()}
       </p>
       {points.length > 1 && (
-        <p className="text-xs text-muted-foreground" title="Evolution of this metric, oldest first">
+        <p
+          className="text-xs text-muted-foreground"
+          title="Evolution of this metric, oldest first"
+          data-testid="eval-metric-evolution"
+        >
           Evolution: {points.map((p) => pct(p.value)).join(" → ")}
           {status?.judgeChangedSincePrevious && " (judge changed in the last run)"}
         </p>
       )}
       {metric.lowConfidence && (
-        <p className="text-xs text-amber-600 dark:text-amber-500">Low confidence — based on few cases.</p>
+        <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="eval-metric-low-confidence">
+          Low confidence — based on few cases.
+        </p>
       )}
       {status?.stale && (
-        <p className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500">
+        <p
+          className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500"
+          data-testid="eval-metric-stale"
+        >
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
           Out of date: {status.reasons.join("; ")}. Evaluate again to refresh it.
         </p>
@@ -243,10 +264,14 @@ function MetricRow({
 function JobStatus({ job, onCancel }: { job: EvalJob; onCancel: () => void }) {
   if (job.status === "running") {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded-md bg-muted/40 p-3 text-xs">
+      <div
+        role="status"
+        className="flex flex-col gap-2 rounded-md bg-muted/40 p-3 text-xs"
+        data-testid="eval-job-status"
+      >
         <div className="flex items-center gap-2">
           <Loader2 size={14} className="animate-spin" aria-hidden />
-          <span>
+          <span data-testid="eval-job-progress">
             Evaluating
             {job.current
               ? ` ${job.current.suite} · case ${job.current.index + 1}/${job.current.total}: ${job.current.name}`
@@ -256,7 +281,13 @@ function JobStatus({ job, onCancel }: { job: EvalJob; onCancel: () => void }) {
         {job.savedSuites.length > 0 && (
           <span className="text-muted-foreground">Saved so far: {job.savedSuites.join(", ")}</span>
         )}
-        <Button variant="destructive" size="sm" className="self-start" onClick={onCancel}>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="self-start"
+          onClick={onCancel}
+          data-testid="eval-job-cancel"
+        >
           <Square size={12} className="fill-current" />
           Cancel
         </Button>
@@ -271,10 +302,14 @@ function JobStatus({ job, onCancel }: { job: EvalJob; onCancel: () => void }) {
     failed: `Evaluation failed: ${job.log.at(-1) ?? "unknown error"}.${saved}`,
   }[job.status];
   return (
-    <div role="status" className={`text-xs ${job.status === "failed" ? "text-destructive" : "text-muted-foreground"}`}>
-      <p>{message}</p>
+    <div
+      role="status"
+      className={`text-xs ${job.status === "failed" ? "text-destructive" : "text-muted-foreground"}`}
+      data-testid="eval-job-status"
+    >
+      <p data-testid="eval-job-message">{message}</p>
       {job.skipped.map((s) => (
-        <p key={s.suite}>
+        <p key={s.suite} data-testid={`eval-job-skipped-${s.suite}`}>
           Skipped {s.suite}: {s.reason}
         </p>
       ))}
@@ -344,6 +379,7 @@ function EvaluateForm({
   return (
     <form
       aria-label="Evaluate model"
+      data-testid="eval-form"
       className="flex flex-col gap-3 rounded-md border border-border p-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -359,6 +395,7 @@ function EvaluateForm({
               className="size-3.5 accent-primary"
               checked={selected.includes(s.suite)}
               onChange={() => toggle(s.suite)}
+              data-testid={`eval-form-suite-${s.suite}`}
             />
             {SUITE_LABEL[s.suite]}
             <span className="text-muted-foreground">({s.categories.join(", ")})</span>
@@ -376,17 +413,24 @@ function EvaluateForm({
           <select
             value={judgeValue}
             onChange={(e) => setJudgeValue(e.target.value)}
+            data-testid="eval-form-judge"
             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           >
-            <option value="">Choose a judge…</option>
+            <option value="" data-testid="eval-form-judge-option">
+              Choose a judge…
+            </option>
             {groupJudges(judgeChoices).map(([group, choices]) => {
               const options = choices.map((j) => (
-                <option key={choiceValue(j.choice)} value={choiceValue(j.choice)}>
+                <option
+                  key={choiceValue(j.choice)}
+                  value={choiceValue(j.choice)}
+                  data-testid="eval-form-judge-option"
+                >
                   {j.label}
                 </option>
               ));
               return group ? (
-                <optgroup key={group} label={group}>
+                <optgroup key={group} label={group} data-testid="eval-form-judge-group">
                   {options}
                 </optgroup>
               ) : (
@@ -398,7 +442,7 @@ function EvaluateForm({
       )}
 
       {selected.length > 0 && !missingJudge && (
-        <p className="text-xs" aria-live="polite">
+        <p className="text-xs" aria-live="polite" data-testid="eval-form-estimate">
           {estimate
             ? `Estimated cost: ${formatCost(estimate.totalCostUsd)} · ${estimate.suites.reduce((n, s) => n + s.cases, 0)} cases`
             : "Estimating…"}
@@ -412,13 +456,14 @@ function EvaluateForm({
             className="mt-0.5 size-3.5 accent-primary"
             checked={accepted}
             onChange={(e) => setAccepted(e.target.checked)}
+            data-testid="eval-form-accept-cost"
           />
           This uses a cloud model and makes real, paid API calls. I accept the estimated cost.
         </label>
       )}
 
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={!canStart}>
+        <Button type="submit" size="sm" disabled={!canStart} data-testid="eval-form-start">
           {starting ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} className="fill-current" />}
           Start evaluation
         </Button>
@@ -442,7 +487,13 @@ function ExportButtons({ model }: { model: ModelChoice }) {
   return (
     <>
       {(["md", "html", "json"] as const).map((format) => (
-        <Button key={format} variant="outline" size="sm" onClick={() => exportAs(format)}>
+        <Button
+          key={format}
+          variant="outline"
+          size="sm"
+          onClick={() => exportAs(format)}
+          data-testid={`eval-profile-export-${format}`}
+        >
           <Download size={12} />
           Export {format.toUpperCase()}
         </Button>

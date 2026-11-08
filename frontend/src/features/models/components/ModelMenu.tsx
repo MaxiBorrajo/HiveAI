@@ -85,6 +85,7 @@ export function ModelMenu({
       <DropdownMenuTrigger
         className="flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring px-1.5 py-0.5 gap-2"
         title="Models"
+        data-testid="model-menu-trigger"
       >
         {isCloud(current.provider) ? (
           <Cloud className="size-4" />
@@ -116,10 +117,14 @@ export function ModelMenu({
               className="relative size-7 justify-center p-0"
               title="Explore and download models"
               onClick={onOpenExplore}
+              data-testid="model-menu-explore"
             >
               <Compass className="size-4" />
               {activeDownloads > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
+                <span
+                  className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground"
+                  data-testid="model-menu-active-downloads"
+                >
                   {activeDownloads}
                 </span>
               )}

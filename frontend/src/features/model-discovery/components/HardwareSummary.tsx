@@ -42,12 +42,12 @@ export function HardwareSummary() {
         <Cpu size={14} />
         <span>Your computer</span>
       </div>
-      <p className="text-muted-foreground">
+      <p className="text-muted-foreground" data-testid="hardware-memory">
         {formatBytes(profile.totalMemBytes)} RAM ({formatBytes(profile.availableMemBytes)} free)
         {" · "}
         {gpu}
       </p>
-      <p className="text-muted-foreground">
+      <p className="text-muted-foreground" data-testid="hardware-plugins">
         {plugins.length > 0
           ? `Your ${plugins.length} active plugin${plugins.length === 1 ? "" : "s"} use about ${context.pluginTokens.toLocaleString()} of the ${context.nCtx.toLocaleString()}-token context.`
           : "No active plugins are using context."}
@@ -55,6 +55,7 @@ export function HardwareSummary() {
       {report.noToolModelFits && (
         <div
           role="alert"
+          data-testid="hardware-warning"
           className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive"
         >
           <p className="font-medium">

@@ -77,12 +77,12 @@ async function renderPluginsManager(initialPlugins: Plugin[] = []) {
   );
 
   // Opens the "Plugins" dropdown trigger (the swarm icon in the sidebar).
-  await userEvent.click(screen.getByTitle("Plugins"));
+  await userEvent.click(screen.getByTestId("plugins-menu-trigger"));
 }
 
 async function openManageDialog() {
-  await userEvent.click(await screen.findByText("Manage Plugins..."));
-  await screen.findByText("Manage Plugins");
+  await userEvent.click(await screen.findByTestId("plugins-menu-manage"));
+  await screen.findByTestId("plugins-list-title");
 }
 
 describe("Plugins modal — list, install, invoke, uninstall", () => {
@@ -94,15 +94,20 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
     await renderPluginsManager([testPlugin]);
     await openManageDialog();
 
-    expect(await screen.findByText(testPlugin.name)).toBeInTheDocument();
-    expect(screen.getByText(testPlugin.description)).toBeInTheDocument();
+    const row = await screen.findByTestId(`plugin-row-${testPlugin.name}`);
+    expect(within(row).getByTestId("plugin-name")).toHaveTextContent(testPlugin.name);
+    expect(within(row).getByTestId("plugin-description")).toHaveTextContent(
+      testPlugin.description,
+    );
   });
 
   test("shows an empty state when there are no plugins registered", async () => {
     await renderPluginsManager([]);
     await openManageDialog();
 
-    expect(await screen.findByText("No plugins registered.")).toBeInTheDocument();
+    expect(await screen.findByTestId("plugins-empty")).toHaveTextContent(
+      "No plugins registered.",
+    );
   });
 
   test("installing (registering) a plugin: importing refreshes the list with the new plugin", async () => {
@@ -136,15 +141,17 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
         </DraftEditorProvider>
       </ModelsProvider>,
     );
-    await userEvent.click(screen.getByTitle("Plugins"));
+    await userEvent.click(screen.getByTestId("plugins-menu-trigger"));
     await openManageDialog();
 
-    expect(screen.queryByText(installedPlugin.name)).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`plugin-row-${installedPlugin.name}`),
+    ).not.toBeInTheDocument();
 
     const file = new File(["zip"], "plugin.zip", {
       type: "application/zip",
     });
-    await userEvent.upload(screen.getByLabelText("Plugin .zip file"), file);
+    await userEvent.upload(screen.getByTestId("plugin-import-input"), file);
 
     await waitFor(() => {
       expect(mockApiClient.post).toHaveBeenCalledWith(
@@ -152,15 +159,17 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
         expect.anything(),
       );
     });
-    expect(await screen.findByText(installedPlugin.name)).toBeInTheDocument();
+    expect(
+      await screen.findByTestId(`plugin-row-${installedPlugin.name}`),
+    ).toBeInTheDocument();
   });
 
   test("toggling a plugin active calls the activate endpoint", async () => {
     await renderPluginsManager([testPlugin]);
     await openManageDialog();
 
-    const row = await screen.findByRole("group", { name: testPlugin.name });
-    const toggle = within(row).getByRole("checkbox", { name: "Active" });
+    const row = await screen.findByTestId(`plugin-row-${testPlugin.name}`);
+    const toggle = within(row).getByTestId("plugin-active-toggle");
     expect(toggle).not.toBeChecked();
 
     await userEvent.click(toggle);
@@ -200,12 +209,12 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
         </DraftEditorProvider>
       </ModelsProvider>,
     );
-    await userEvent.click(screen.getByTitle("Plugins"));
+    await userEvent.click(screen.getByTestId("plugins-menu-trigger"));
     await openManageDialog();
 
-    const row = await screen.findByRole("group", { name: testPlugin.name });
+    const row = await screen.findByTestId(`plugin-row-${testPlugin.name}`);
 
-    await userEvent.click(within(row).getByRole("button", { name: "Uninstall" }));
+    await userEvent.click(within(row).getByTestId("plugin-uninstall-button"));
 
     await waitFor(() => {
       expect(mockApiClient.delete).toHaveBeenCalledWith(
@@ -213,7 +222,7 @@ describe("Plugins modal — list, install, invoke, uninstall", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.queryByText(testPlugin.name)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(`plugin-row-${testPlugin.name}`)).not.toBeInTheDocument();
     });
   });
 });
