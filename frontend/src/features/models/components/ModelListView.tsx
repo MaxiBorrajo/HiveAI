@@ -91,11 +91,11 @@ export function ModelListView({
   return (
     <>
       <DialogHeader className="p-6 pb-0">
-        <DialogTitle>Manage Models</DialogTitle>
+        <DialogTitle data-testid="manage-models-title">Manage Models</DialogTitle>
       </DialogHeader>
 
       <Tabs value={tab} onValueChange={setTab} className="flex-1 min-h-0 px-6 pt-2 pb-6">
-        <TabsList>
+        <TabsList data-testid="model-provider-tabs">
           {providers.map((p) => (
             <TabsTrigger key={p.provider} value={p.provider}>
               {p.label}

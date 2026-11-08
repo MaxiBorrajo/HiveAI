@@ -30,6 +30,7 @@ export function PluginsMenu({
       <DropdownMenuTrigger
         className="flex items-center justify-center rounded-md size-8 hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
         title="Plugins"
+        data-testid="plugins-menu-trigger"
       >
         <Blocks className="size-5" />
       </DropdownMenuTrigger>
@@ -86,7 +87,7 @@ export function PluginsMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={onOpenManage}>
+        <DropdownMenuItem onClick={onOpenManage} data-testid="plugins-menu-manage">
           <Settings className="mr-2 size-4" />
           <span>Manage Plugins...</span>
         </DropdownMenuItem>

@@ -14,7 +14,7 @@ export function ExploreModelsModal({ isOpen, onOpenChange }: ExploreModelsModalP
         showCloseButton
       >
         <DialogHeader className="p-6 pb-2">
-          <DialogTitle>Explore models</DialogTitle>
+          <DialogTitle data-testid="explore-models-title">Explore models</DialogTitle>
         </DialogHeader>
         <div className="flex flex-1 min-h-0 flex-col px-6 pb-6">
           {isOpen && <ModelDownloadView />}

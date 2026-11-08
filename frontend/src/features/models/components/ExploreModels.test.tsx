@@ -40,14 +40,14 @@ beforeEach(() => {
 describe("Explore models modal", () => {
   test("opens with hardware summary and the search box", async () => {
     render(<ExploreModelsModal isOpen onOpenChange={vi.fn()} />);
-    expect(screen.getByText("Explore models")).toBeInTheDocument();
-    expect(await screen.findByText(/No usable GPU/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Search models")).toBeInTheDocument();
+    expect(screen.getByTestId("explore-models-title")).toBeInTheDocument();
+    expect(await screen.findByTestId("hardware-memory")).toHaveTextContent(/No usable GPU/);
+    expect(screen.getByTestId("model-search-input")).toBeInTheDocument();
   });
 
   test("renders nothing when closed", () => {
     render(<ExploreModelsModal isOpen={false} onOpenChange={vi.fn()} />);
-    expect(screen.queryByText("Explore models")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("explore-models-title")).not.toBeInTheDocument();
   });
 });
 
@@ -65,8 +65,8 @@ describe("Manage models", () => {
         />
       </Dialog>,
     );
-    expect(screen.getByText("Manage Models")).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Download/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("manage-models-title")).toBeInTheDocument();
+    expect(screen.getByTestId("model-provider-tabs")).not.toHaveTextContent(/Download/);
   });
 });
 
@@ -83,8 +83,8 @@ describe("Model menu", () => {
         onOpenKeys={vi.fn()}
       />,
     );
-    await userEvent.click(screen.getByTitle("Models"));
-    await userEvent.click(await screen.findByTitle("Explore and download models"));
+    await userEvent.click(screen.getByTestId("model-menu-trigger"));
+    await userEvent.click(await screen.findByTestId("model-menu-explore"));
     expect(onOpenExplore).toHaveBeenCalled();
   });
 
@@ -100,7 +100,7 @@ describe("Model menu", () => {
         onOpenKeys={vi.fn()}
       />,
     );
-    await userEvent.click(screen.getByTitle("Models"));
-    expect(await screen.findByText("2")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("model-menu-trigger"));
+    expect(await screen.findByTestId("model-menu-active-downloads")).toHaveTextContent("2");
   });
 });

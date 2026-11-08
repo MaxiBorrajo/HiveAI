@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMockApiClient, ok, type MockRoute } from "@/test-utils/mockApiClient";
 import type { HardwareReport, ModelCard, SearchResultItem } from "../types";
@@ -79,20 +79,22 @@ describe("HardwareSummary", () => {
   test("GPU profile: shows RAM, VRAM and plugin context usage, no warning", async () => {
     setRoutes([{ method: "get", match: "/api/hardware", handler: () => ok(GPU_REPORT) }]);
     render(<HardwareSummary />);
-    expect(await screen.findByText(/RTX 4070/)).toBeInTheDocument();
-    expect(screen.getByText(/12 GB VRAM/)).toBeInTheDocument();
+    expect(await screen.findByTestId("hardware-memory")).toHaveTextContent(/RTX 4070/);
+    expect(screen.getByTestId("hardware-memory")).toHaveTextContent(/12 GB VRAM/);
     // The component formats numbers in the machine's locale ("1,200" in
     // English, "1.200" in Spanish), so expect whatever this machine writes.
     const tokens = (1200).toLocaleString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    expect(screen.getByText(new RegExp(`1 active plugin use about ${tokens}`))).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("hardware-plugins")).toHaveTextContent(
+      new RegExp(`1 active plugin use about ${tokens}`),
+    );
+    expect(screen.queryByTestId("hardware-warning")).not.toBeInTheDocument();
   });
 
   test("no-GPU profile: says so and suggests a cloud model when no tool model fits", async () => {
     setRoutes([{ method: "get", match: "/api/hardware", handler: () => ok(NO_GPU_REPORT) }]);
     render(<HardwareSummary />);
-    expect(await screen.findByText(/No usable GPU/)).toBeInTheDocument();
-    const alert = await screen.findByRole("alert");
+    expect(await screen.findByTestId("hardware-memory")).toHaveTextContent(/No usable GPU/);
+    const alert = await screen.findByTestId("hardware-warning");
     expect(alert).toHaveTextContent("No local model with tool support runs well");
     expect(alert).toHaveTextContent("claude-sonnet-5-5");
   });
@@ -104,7 +106,7 @@ describe("HardwareSummary", () => {
       handler: () => ok({ ...NO_GPU_REPORT, cloudSuggestion: null, hasCloudKey: false }),
     }]);
     render(<HardwareSummary />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Add a cloud API key");
+    expect(await screen.findByTestId("hardware-warning")).toHaveTextContent("Add a cloud API key");
   });
 });
 
@@ -126,18 +128,22 @@ describe("ModelSearch", () => {
     const onSelect = vi.fn();
     render(<ModelSearch onSelect={onSelect} />);
 
-    expect(await screen.findByText("Fits your hardware")).toBeInTheDocument();
-    expect(screen.getByText("Too big")).toBeInTheDocument();
-    expect(screen.getByText(/only 5.7 GB of RAM is free/)).toBeInTheDocument();
+    const fitting = await screen.findByTestId("model-result-unsloth/Qwen3-8B-GGUF");
+    const tooBig = screen.getByTestId("model-result-unsloth/Qwen3-32B-GGUF");
+    expect(within(fitting).getByTestId("fit-badge")).toHaveTextContent("Fits your hardware");
+    expect(within(tooBig).getByTestId("fit-badge")).toHaveTextContent("Too big");
+    expect(within(tooBig).getByTestId("model-result-reason")).toHaveTextContent(
+      /only 5.7 GB of RAM is free/,
+    );
 
-    await userEvent.click(screen.getByText("unsloth/Qwen3-8B-GGUF"));
+    await userEvent.click(fitting);
     expect(onSelect).toHaveBeenCalledWith("unsloth/Qwen3-8B-GGUF", "huggingface");
   });
 
   test("typing queries the backend", async () => {
     setRoutes([{ method: "get", match: "/api/model-discovery/search", handler: () => ok({ offline: false, items: [] }) }]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    await userEvent.type(screen.getByLabelText("Search models"), "lfm");
+    await userEvent.type(screen.getByTestId("model-search-input"), "lfm");
     await waitFor(() =>
       expect(mockApiClient.get).toHaveBeenCalledWith("/api/model-discovery/search", { params: { q: "lfm", sort: "downloads" } })
     );
@@ -151,7 +157,9 @@ describe("ModelSearch", () => {
     }]);
     render(<ModelSearch onSelect={vi.fn()} />);
     // The search starts on the Ollama library, so that's the source it names.
-    expect(await screen.findByText(/ollama\.com is not reachable/)).toBeInTheDocument();
+    expect(await screen.findByTestId("model-search-offline")).toHaveTextContent(
+      /ollama\.com is not reachable/,
+    );
   });
 });
 
@@ -171,39 +179,39 @@ describe("ModelSearch filters and paging", () => {
   test("starts on Recommended and refetches with the chosen sort and filters", async () => {
     setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [] }))]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("model-sort-recommended")).toHaveAttribute("aria-pressed", "true");
 
-    await userEvent.click(screen.getByRole("button", { name: "Newest" }));
-    await userEvent.click(screen.getByRole("button", { name: "Tools" }));
-    await userEvent.click(screen.getByRole("button", { name: "Fits my hardware" }));
+    await userEvent.click(screen.getByTestId("model-sort-updated"));
+    await userEvent.click(screen.getByTestId("model-filter-tools"));
+    await userEvent.click(screen.getByTestId("model-filter-fitsOnly"));
 
-    expect(screen.getByRole("button", { name: "Newest" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("model-sort-updated")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("model-sort-recommended")).toHaveAttribute("aria-pressed", "false");
     await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "updated", tools: "1", fits: "1" }));
   });
 
   test("defaults to the Ollama library; Hugging Face is opt-in, warns, and offers more sorts", async () => {
     setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [] }))]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Ollama library" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("button", { name: "Trending" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.getByTestId("model-source-ollama")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("model-sort-trending")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("model-search-hf-note")).not.toBeInTheDocument();
     // The first search is debounced, so it hasn't been sent right after render.
     await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "recommended" }));
 
-    await userEvent.click(screen.getByRole("button", { name: "Hugging Face" }));
-    expect(screen.getByRole("button", { name: "Trending" })).toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent("not verified with Ollama");
+    await userEvent.click(screen.getByTestId("model-source-huggingface"));
+    expect(screen.getByTestId("model-sort-trending")).toBeInTheDocument();
+    expect(screen.getByTestId("model-search-hf-note")).toHaveTextContent("not verified with Ollama");
     await waitFor(() => expect(lastParams()).toEqual({ source: "huggingface", q: "", sort: "recommended" }));
   });
 
   test("a sort only Hugging Face has falls back to Recommended when switching back to the library", async () => {
     setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [] }))]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Hugging Face" }));
-    await userEvent.click(screen.getByRole("button", { name: "Trending" }));
-    await userEvent.click(screen.getByRole("button", { name: "Ollama library" }));
-    expect(screen.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByTestId("model-source-huggingface"));
+    await userEvent.click(screen.getByTestId("model-sort-trending"));
+    await userEvent.click(screen.getByTestId("model-source-ollama"));
+    expect(screen.getByTestId("model-sort-recommended")).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(lastParams()).toEqual({ q: "", sort: "recommended" }));
   });
 
@@ -227,8 +235,9 @@ describe("ModelSearch filters and paging", () => {
     )]);
     const onSelect = vi.fn();
     render(<ModelSearch onSelect={onSelect} />);
-    expect(await screen.findByText("0.6B · 8B · 32B")).toBeInTheDocument();
-    await userEvent.click(screen.getByText("qwen3"));
+    const result = await screen.findByTestId("model-result-qwen3");
+    expect(within(result).getByTestId("model-result-sizes")).toHaveTextContent("0.6B · 8B · 32B");
+    await userEvent.click(result);
     expect(onSelect).toHaveBeenCalledWith("qwen3", "ollama");
   });
 
@@ -240,13 +249,13 @@ describe("ModelSearch filters and paging", () => {
         : ok({ offline: false, nextCursor: "c1", items: [item("a/first", 1, "fits", "ok")] });
     })]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    await screen.findByText("a/first");
+    await screen.findByTestId("model-result-a/first");
 
-    await userEvent.click(screen.getByRole("button", { name: "Load more" }));
-    expect(await screen.findByText("a/second")).toBeInTheDocument();
-    expect(screen.getByText("a/first")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("model-search-load-more"));
+    expect(await screen.findByTestId("model-result-a/second")).toBeInTheDocument();
+    expect(screen.getByTestId("model-result-a/first")).toBeInTheDocument();
     expect(lastParams()).toMatchObject({ cursor: "c1" });
-    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("model-search-load-more")).not.toBeInTheDocument();
   });
 
   test("scrolling the sentinel into view loads the next page", async () => {
@@ -269,9 +278,9 @@ describe("ModelSearch filters and paging", () => {
           : ok({ offline: false, nextCursor: "c1", items: [item("a/first", 1, "fits", "ok")] });
       })]);
       render(<ModelSearch onSelect={vi.fn()} />);
-      await screen.findByText("a/first");
+      await screen.findByTestId("model-result-a/first");
       act(() => trigger());
-      expect(await screen.findByText("a/second")).toBeInTheDocument();
+      expect(await screen.findByTestId("model-result-a/second")).toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -280,17 +289,19 @@ describe("ModelSearch filters and paging", () => {
   test("an empty filtered result offers to clear the filters", async () => {
     setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [] }))]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Vision" }));
-    expect(await screen.findByText("No models match these filters.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByRole("button", { name: "Vision" })).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByTestId("model-filter-vision"));
+    expect(await screen.findByTestId("model-search-empty")).toHaveTextContent(
+      "No models match these filters.",
+    );
+    await userEvent.click(screen.getByTestId("model-search-clear-filters"));
+    expect(screen.getByTestId("model-filter-vision")).toHaveAttribute("aria-pressed", "false");
   });
 
   test("shows the end of results once the cursor is exhausted", async () => {
     setRoutes([route(() => ok({ offline: false, nextCursor: null, items: [item("a/only", 1, "fits", "ok")] }))]);
     render(<ModelSearch onSelect={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Most downloaded" }));
-    expect(await screen.findByText("End of results")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("model-sort-downloads"));
+    expect(await screen.findByTestId("model-search-end")).toBeInTheDocument();
   });
 });
 
@@ -321,12 +332,16 @@ describe("ModelDetail", () => {
     const onDownload = vi.fn();
     render(<ModelDetail id="unsloth/Qwen3-8B-GGUF" onBack={vi.fn()} onDownload={onDownload} />);
 
-    expect(await screen.findByText("Qwen3 is a text model for local agents.")).toBeInTheDocument();
-    expect(screen.getByText("Recommended")).toBeInTheDocument();
-    expect(screen.getByText("Runs slowly")).toBeInTheDocument();
+    expect(await screen.findByTestId("model-detail-description")).toHaveTextContent(
+      "Qwen3 is a text model for local agents.",
+    );
+    const q4 = screen.getByTestId("model-quant-Q4_K_M");
+    const q8 = screen.getByTestId("model-quant-Q8_0");
+    expect(within(q4).getByTestId("model-quant-recommended")).toBeInTheDocument();
+    expect(within(q8).queryByTestId("model-quant-recommended")).not.toBeInTheDocument();
+    expect(within(q8).getByTestId("fit-badge")).toHaveTextContent("Runs slowly");
 
-    const buttons = screen.getAllByRole("button", { name: /Download/ });
-    await userEvent.click(buttons[0]);
+    await userEvent.click(within(q4).getByTestId("model-quant-download"));
     expect(onDownload).toHaveBeenCalledWith("hf.co/unsloth/Qwen3-8B-GGUF:Q4_K_M");
   });
 
@@ -337,6 +352,8 @@ describe("ModelDetail", () => {
       handler: () => ({ success: false, errors: ["Hugging Face could not be reached."] }),
     }]);
     render(<ModelDetail id="a/b" onBack={vi.fn()} onDownload={vi.fn()} />);
-    expect(await screen.findByText("Hugging Face could not be reached.")).toBeInTheDocument();
+    expect(await screen.findByTestId("model-detail-error")).toHaveTextContent(
+      "Hugging Face could not be reached.",
+    );
   });
 });

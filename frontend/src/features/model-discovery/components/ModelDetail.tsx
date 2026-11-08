@@ -46,7 +46,11 @@ export function ModelDetail({ id, source = "ollama", onBack, onDownload }: Model
         <h3 className="min-w-0 flex-1 truncate font-mono text-sm font-semibold">{id}</h3>
       </div>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && (
+        <p className="text-xs text-destructive" data-testid="model-detail-error">
+          {error}
+        </p>
+      )}
       {!detail && !error && <p className="text-xs text-muted-foreground">Loading…</p>}
 
       {detail && (
@@ -64,7 +68,7 @@ export function ModelDetail({ id, source = "ollama", onBack, onDownload }: Model
           </div>
 
           {detail.readmeSummary ? (
-            <div className="rounded-lg border border-border bg-card p-3 text-sm">
+            <div className="rounded-lg border border-border bg-card p-3 text-sm" data-testid="model-detail-description">
               <MessageMarkdown content={showReadme ? detail.readme : detail.readmeSummary} />
               {detail.readme && (
                 <Button
@@ -100,12 +104,17 @@ export function ModelDetail({ id, source = "ollama", onBack, onDownload }: Model
             {detail.quantizations.map(({ quant, fit }) => (
               <div
                 key={quant.name}
+                data-testid={`model-quant-${quant.name}`}
                 className="flex flex-col gap-1 rounded-lg border border-border bg-card p-2.5"
               >
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm">{quant.name}</span>
                   <span className="text-xs text-muted-foreground">{formatBytes(quant.sizeBytes)}</span>
-                  {quant.name === detail.bestQuantization && <Badge variant="outline">Recommended</Badge>}
+                  {quant.name === detail.bestQuantization && (
+                    <Badge variant="outline" data-testid="model-quant-recommended">
+                      Recommended
+                    </Badge>
+                  )}
                   <span className="flex-1" />
                   <FitBadge fit={fit} />
                   <Button
@@ -113,6 +122,7 @@ export function ModelDetail({ id, source = "ollama", onBack, onDownload }: Model
                     variant="secondary"
                     className="h-8 gap-1 px-3"
                     onClick={() => onDownload(quant.ollamaName)}
+                    data-testid="model-quant-download"
                   >
                     <DownloadIcon size={12} />
                     <span>Download</span>

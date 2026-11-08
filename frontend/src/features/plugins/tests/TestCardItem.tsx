@@ -53,7 +53,12 @@ export function TestCardItem({
   const hasResults = !!res?.details;
 
   return (
-    <div role="group" aria-label={test.label} className="flex flex-col gap-2">
+    <div
+      role="group"
+      aria-label={test.label}
+      className="flex flex-col gap-2"
+      data-testid={`test-card-${id}`}
+    >
       <label
         className={`flex flex-col gap-3 rounded-xl border p-4 cursor-pointer transition-all bg-card shadow-sm min-w-0 ${
           isSelected
@@ -70,6 +75,7 @@ export function TestCardItem({
               onChange={() => onToggle(id)}
               disabled={isRunning}
               className="size-4 shrink-0 accent-primary cursor-pointer"
+              data-testid="test-card-checkbox"
             />
           </div>
           <div className="flex-1 min-w-0">
@@ -133,7 +139,10 @@ export function TestCardItem({
 
             {res?.failureCategory && (
               <div className="mt-2 mb-1">
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-destructive/10 text-destructive text-[0.625rem] font-bold uppercase tracking-wider rounded-md border border-destructive/20">
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-destructive/10 text-destructive text-[0.625rem] font-bold uppercase tracking-wider rounded-md border border-destructive/20"
+                  data-testid="test-failure-category"
+                >
                   <AlertTriangle size={11} />
                   Failure: {res.failureCategory}
                 </span>
@@ -173,7 +182,7 @@ export function TestCardItem({
                 title="Errors resulting from the test failure"
                 className="mt-3 bg-destructive/10 cursor-help text-destructive rounded-md p-3 border border-destructive/20"
               >
-                <ul className="text-xs list-disc list-inside space-y-1">
+                <ul className="text-xs list-disc list-inside space-y-1" data-testid="test-errors">
                   {res.errors.map((err, i) => (
                     <li key={i}>{err}</li>
                   ))}
@@ -191,6 +200,7 @@ export function TestCardItem({
                     onToggleExpand(id);
                   }}
                   className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors bg-muted/30 hover:bg-muted/50 px-3 py-1.5 rounded-full border border-border/50"
+                  data-testid="test-toggle-results"
                 >
                   {isExpanded ? (
                     <>
@@ -212,13 +222,26 @@ export function TestCardItem({
                 role="img"
                 aria-label="Running"
                 className="animate-spin text-primary"
+                data-testid="test-status-running"
               />
             )}
             {res?.status === "success" && (
-              <Check size={18} role="img" aria-label="Passed" className="text-foreground" />
+              <Check
+                size={18}
+                role="img"
+                aria-label="Passed"
+                className="text-foreground"
+                data-testid="test-status-passed"
+              />
             )}
             {res?.status === "error" && (
-              <X size={18} role="img" aria-label="Failed" className="text-destructive" />
+              <X
+                size={18}
+                role="img"
+                aria-label="Failed"
+                className="text-destructive"
+                data-testid="test-status-failed"
+              />
             )}
           </div>
         </div>
@@ -259,7 +282,10 @@ export function TestCardItem({
               <p className="text-[0.625rem] font-bold uppercase text-muted-foreground mb-1">
                 Plugin Output
               </p>
-              <pre className="text-xs font-mono text-foreground/90 bg-muted/50 p-2.5 rounded-md border border-border whitespace-pre-wrap overflow-y-auto max-h-[300px]">
+              <pre
+                className="text-xs font-mono text-foreground/90 bg-muted/50 p-2.5 rounded-md border border-border whitespace-pre-wrap overflow-y-auto max-h-[300px]"
+                data-testid="test-output"
+              >
                 {res.details.output || "<empty>"}
               </pre>
             </div>

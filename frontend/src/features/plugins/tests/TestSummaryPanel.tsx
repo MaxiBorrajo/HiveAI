@@ -24,10 +24,11 @@ function StatTile({
   );
 }
 
-function ScoreValue({ value }: { value: number }) {
+function ScoreValue({ value, testId }: { value: number; testId: string }) {
   return (
     <span
       className={`text-2xl font-bold ${value < 70 ? "text-destructive" : "text-foreground"}`}
+      data-testid={testId}
     >
       {value}%
     </span>
@@ -39,11 +40,13 @@ function CountChip({
   label,
   passed,
   total,
+  testId,
 }: {
   title: string;
   label: string;
   passed: number;
   total: number;
+  testId: string;
 }) {
   return (
     <div
@@ -51,7 +54,7 @@ function CountChip({
       className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 text-foreground rounded-md border border-border cursor-help"
     >
       <span>{label}:</span>
-      <strong className="font-mono">
+      <strong className="font-mono" data-testid={testId}>
         {passed}/{total}
       </strong>
     </div>
@@ -66,7 +69,10 @@ export function TestSummaryPanel({
   testsToRunCount: number;
 }) {
   return (
-    <div className="mb-4 bg-card rounded-xl border border-border shadow-sm p-5 animate-in fade-in slide-in-from-top-4">
+    <div
+      className="mb-4 bg-card rounded-xl border border-border shadow-sm p-5 animate-in fade-in slide-in-from-top-4"
+      data-testid="test-summary"
+    >
       <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
         <Box size={16} className="text-primary" />
         Execution Summary
@@ -78,8 +84,11 @@ export function TestSummaryPanel({
           title="Percentage of successful tests across the current run (Passed / Total)"
         >
           <div className="flex items-end gap-2">
-            <ScoreValue value={summary.passRate} />
-            <span className="text-xs text-muted-foreground font-medium mb-1">
+            <ScoreValue value={summary.passRate} testId="summary-pass-rate" />
+            <span
+              className="text-xs text-muted-foreground font-medium mb-1"
+              data-testid="summary-passed-count"
+            >
               {summary.passed}/{testsToRunCount}
             </span>
           </div>
@@ -89,7 +98,7 @@ export function TestSummaryPanel({
           label="Resilience Score"
           title="Percentage of Edge, Negative, and Error tests that passed. Measures the plugin's robustness to invalid or tricky inputs."
         >
-          <ScoreValue value={summary.resilienceScore} />
+          <ScoreValue value={summary.resilienceScore} testId="summary-resilience-score" />
         </StatTile>
 
         <StatTile
@@ -122,12 +131,14 @@ export function TestSummaryPanel({
           title="Number of successful LLM Selection tests out of total Selection tests run"
           passed={summary.selectionPassed}
           total={summary.selectionCount}
+          testId="summary-selection-count"
         />
         <CountChip
           label="Execution"
           title="Number of successful code Execution tests out of total Execution tests run"
           passed={summary.executionPassed}
           total={summary.executionCount}
+          testId="summary-execution-count"
         />
       </div>
     </div>

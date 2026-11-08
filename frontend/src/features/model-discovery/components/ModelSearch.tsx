@@ -85,12 +85,18 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
             className="pl-8"
             placeholder="Search models, for example qwen3 or llama"
             aria-label="Search models"
+            data-testid="model-search-input"
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Source">
           {SOURCE_CHIPS.map(({ source: value, label }) => (
-            <FilterChip key={value} active={source === value} onClick={() => setSource(value)}>
+            <FilterChip
+              key={value}
+              active={source === value}
+              onClick={() => setSource(value)}
+              testId={`model-source-${value}`}
+            >
               {label}
             </FilterChip>
           ))}
@@ -101,6 +107,7 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
               key={value}
               active={effectiveSort === value}
               onClick={() => setSort(value)}
+              testId={`model-sort-${value}`}
             >
               {label}
             </FilterChip>
@@ -112,6 +119,7 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
               key={key}
               active={filters[key]}
               onClick={() => setFilters((f) => ({ ...f, [key]: !f[key] }))}
+              testId={`model-filter-${key}`}
             >
               {label}
             </FilterChip>
@@ -120,13 +128,13 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
       </div>
 
       {source === "huggingface" && (
-        <p className="text-xs text-muted-foreground" role="note">
+        <p className="text-xs text-muted-foreground" role="note" data-testid="model-search-hf-note">
           These models are not verified with Ollama: they may fail to load or lack tool support.
           Models from the Ollama library are guaranteed to run.
         </p>
       )}
       {offline && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground" data-testid="model-search-offline">
           {source === "ollama" ? "ollama.com" : "Hugging Face"} is not reachable, so only a few
           recommended models are shown (sizes are estimates).
         </p>
@@ -135,11 +143,16 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
       {error && <p className="text-xs text-destructive">{error}</p>}
       {!loading && !error && items.length === 0 && (
         <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" data-testid="model-search-empty">
             {anyFilter ? "No models match these filters." : "No models found."}
           </p>
           {anyFilter && (
-            <Button variant="outline" size="sm" onClick={() => setFilters(NO_FILTERS)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilters(NO_FILTERS)}
+              data-testid="model-search-clear-filters"
+            >
               Clear filters
             </Button>
           )}
@@ -152,6 +165,7 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
             <button
               type="button"
               onClick={() => onSelect(card.id, card.source)}
+              data-testid={`model-result-${card.id}`}
               className="flex w-full flex-col gap-1.5 rounded-lg border border-border bg-card p-3 text-left hover:bg-muted/50"
             >
               <div className="flex items-center gap-2">
@@ -162,7 +176,9 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 {card.sizes && card.sizes.length > 0 ? (
-                  <Badge variant="secondary">{card.sizes.map((z) => `${z}B`).join(" · ")}</Badge>
+                  <Badge variant="secondary" data-testid="model-result-sizes">
+                    {card.sizes.map((z) => `${z}B`).join(" · ")}
+                  </Badge>
                 ) : card.paramsBillions !== null && (
                   <Badge variant="secondary">{card.paramsBillions}B params</Badge>
                 )}
@@ -180,7 +196,9 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
                 {card.downloads > 0 && <span>· {formatCount(card.downloads)} downloads</span>}
               </div>
               {fit && (
-                <p className="text-xs text-muted-foreground">{fit.reason}</p>
+                <p className="text-xs text-muted-foreground" data-testid="model-result-reason">
+                  {fit.reason}
+                </p>
               )}
             </button>
           </li>
@@ -192,14 +210,16 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
           {loadingMore ? (
             <p className="text-xs text-muted-foreground">Loading more…</p>
           ) : (
-            <Button variant="ghost" size="sm" onClick={loadMore}>
+            <Button variant="ghost" size="sm" onClick={loadMore} data-testid="model-search-load-more">
               Load more
             </Button>
           )}
         </div>
       )}
       {!loading && !hasMore && !offline && items.length > 0 && effectiveSort !== "recommended" && (
-        <p className="py-2 text-center text-xs text-muted-foreground">End of results</p>
+        <p className="py-2 text-center text-xs text-muted-foreground" data-testid="model-search-end">
+          End of results
+        </p>
       )}
     </div>
   );
