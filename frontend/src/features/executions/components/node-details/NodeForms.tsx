@@ -275,7 +275,7 @@ export function LlmNodeForm({
         <div className="flex flex-col gap-1">
           {plugins.length === 0 && (
             <p className="text-[11px] text-muted-foreground">
-              No active plugins.
+              No plugins installed.
             </p>
           )}
           {plugins.map((plugin) => (
@@ -289,6 +289,11 @@ export function LlmNodeForm({
                 onChange={() => togglePlugin(plugin.name)}
               />
               <span className="font-mono">{plugin.name}</span>
+              {plugin.isExternal && !plugin.active && (
+                <span className="text-[10px] text-muted-foreground">
+                  inactive — activate it in Plugins to run
+                </span>
+              )}
             </label>
           ))}
         </div>

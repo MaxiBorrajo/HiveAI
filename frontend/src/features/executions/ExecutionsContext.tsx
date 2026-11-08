@@ -6,6 +6,10 @@ import {
   type UpdateExecutionDto,
 } from "@/features/executions/api/updateExecution";
 import { useEntityListState } from "@/hooks/useEntityListState";
+import {
+  useScheduleActivity,
+  type ScheduleActivityView,
+} from "@/features/executions/hooks/useScheduleActivity";
 import type { ExecutionSummary } from "@/features/executions/types";
 
 interface ExecutionsContextValue {
@@ -24,6 +28,8 @@ interface ExecutionsContextValue {
   renameExecution: (id: string, name: string) => Promise<void>;
   onExecutionCreated: (id: string) => void;
   touchExecution: (id: string) => void;
+  /** What the background scheduler is doing right now. */
+  scheduleActivity: ScheduleActivityView;
 }
 
 const ExecutionsContext = createContext<ExecutionsContextValue | null>(null);
@@ -43,6 +49,10 @@ export function ExecutionsProvider({ children }: { children: ReactNode }) {
       name: serverExecution?.name ?? dto.name,
       updatedAt: serverExecution?.updatedAt ?? Date.now(),
     }),
+  );
+
+  const scheduleActivity = useScheduleActivity(
+    (id) => state.items.find((e) => String(e.id) === String(id))?.name,
   );
 
   async function updateExecution(
@@ -66,6 +76,7 @@ export function ExecutionsProvider({ children }: { children: ReactNode }) {
     renameExecution: (id: string, name: string) => updateExecution(id, name),
     onExecutionCreated: state.onCreated,
     touchExecution: state.touch,
+    scheduleActivity,
   };
 
   return (

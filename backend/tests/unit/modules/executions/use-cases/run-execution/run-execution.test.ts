@@ -213,3 +213,58 @@ Deno.test("runExecution - a plugin node referencing an unregistered tool fails f
   const body = await res.json();
   assertEquals(body.data.missingPlugins, ["does-not-exist"]);
 });
+
+Deno.test("runExecution: a built-in plugin switched off for the chat still runs in an execution", async () => {
+  const db = await initORM(await Deno.makeTempDir());
+  const repo = new ExecutionRepository(db);
+  const hive = await makeHiveWithCounter();
+  await hive.deactivate("counter");
+  assertEquals(hive.isActive("counter"), false);
+
+  const now = Date.now();
+  const execution = await repo.create({ name: "inactive-builtin", createdAt: now, updatedAt: now });
+  const graph = await repo.createGraph({
+    executionId: execution.id,
+    graph: counterGraph("c"),
+    state: counterGraph("c").stateSchema,
+    createdAt: now,
+  });
+  await repo.update(execution.id, { lastGraphId: graph.id });
+
+  const res = await runExecution(db, hive, execution.id, { counter_name: "x", action: "increment" }, {});
+  assertEquals(res.status, 200);
+  const { events, done } = await readSseStream(res);
+  assertEquals(events.includes("error"), false);
+  assertExists(done);
+});
+
+Deno.test("runExecution: an imported plugin that is not active is refused up front, with its name", async () => {
+  const db = await initORM(await Deno.makeTempDir());
+  const repo = new ExecutionRepository(db);
+  const hive = await makeHiveWithCounter();
+  // Stand-in for an imported plugin: external, and its subprocess is not running.
+  hive.isExternalPlugin = (name: string) => name === "counter";
+  await hive.deactivate("counter");
+
+  const now = Date.now();
+  const execution = await repo.create({ name: "stopped-external", createdAt: now, updatedAt: now });
+  const graph = await repo.createGraph({
+    executionId: execution.id,
+    graph: counterGraph("c"),
+    state: counterGraph("c").stateSchema,
+    createdAt: now,
+  });
+  await repo.update(execution.id, { lastGraphId: graph.id });
+
+  const res = await runExecution(db, hive, execution.id, {}, {});
+  assertEquals(res.status, 422);
+  const body = await res.json();
+  assertEquals(body.data.inactivePlugins, ["counter"]);
+  assertEquals(body.errors[0].includes("Activate them in Plugins"), true);
+
+  // Once it is active again, the same execution is accepted.
+  await hive.activate("counter");
+  const ok = await runExecution(db, hive, execution.id, { counter_name: "x", action: "increment" }, {});
+  assertEquals(ok.status, 200);
+  await ok.body?.cancel();
+});

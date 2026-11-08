@@ -12,6 +12,7 @@ function run(over: Partial<RunSummary>): RunSummary {
     input: { topic: "bees" },
     usage: null,
     grades: [],
+    trigger: "manual",
     ...over,
   };
 }
