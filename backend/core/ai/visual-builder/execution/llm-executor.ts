@@ -18,6 +18,8 @@ import { mapTypeToZod } from "./state.ts";
 import { withLocalNumCtx } from "../../providers/local-context.ts";
 import { splitContent } from "../../providers/capabilities.ts";
 import { streamToMessage } from "./stream-model.ts";
+import type { AttachmentContentPart } from "../../../attachments/build-attachment-content.ts";
+import { toHumanContent } from "../../../attachments/to-human-content.ts";
 
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -60,35 +62,15 @@ const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
   "attachments",
 ]);
 
-interface AttachmentContentPart {
-  type: "text" | "image";
-  text?: string;
-  mimeType?: string;
-  data?: string;
-}
-
-function toLangchainImageUrl(part: AttachmentContentPart): string {
-  return `data:${part.mimeType};base64,${part.data}`;
-}
-
 function buildHumanMessage(
   text: string,
   attachmentParts: AttachmentContentPart[],
 ): HumanMessage {
   if (attachmentParts.length === 0) return new HumanMessage(text);
 
-  const content: Array<Record<string, unknown>> = [{ type: "text", text }];
-  for (const part of attachmentParts) {
-    if (part.type === "image") {
-      content.push({
-        type: "image_url",
-        image_url: { url: toLangchainImageUrl(part) },
-      });
-    } else if (part.type === "text" && part.text) {
-      content.push({ type: "text", text: part.text });
-    }
-  }
-  return new HumanMessage({ content: content as unknown as BaseMessage["content"] });
+  return new HumanMessage({
+    content: toHumanContent(text, attachmentParts) as unknown as BaseMessage["content"],
+  });
 }
 
 function resolveModelName(model: unknown): string {

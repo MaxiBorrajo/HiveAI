@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AttachmentsList } from "@/features/chats/components/AttachmentsList";
 import {
   ACCEPTED_ATTACHMENT_TYPES,
+  attachmentProblem,
   uploadExecutionAttachment,
   type AttachmentDto,
 } from "@/features/chats/api/attachments";
@@ -51,15 +52,22 @@ export function RunExecutionModal({
     if (!fileList || fileList.length === 0 || !executionId) return;
     const files = Array.from(fileList);
     setIsUploading(true);
+    let uploaded = runAttachments;
     try {
       for (const file of files) {
+        const problem = attachmentProblem(file);
+        if (problem) {
+          reportError([problem]);
+          continue;
+        }
         try {
           const response = await uploadExecutionAttachment(
             Number(executionId),
             file,
           );
           if (response.data) {
-            setRunAttachments([...runAttachments, response.data]);
+            uploaded = [...uploaded, response.data];
+            setRunAttachments(uploaded);
           }
         } catch (error) {
           reportError([

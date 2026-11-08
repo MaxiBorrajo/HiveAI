@@ -25,6 +25,7 @@ import {
   buildAttachmentContent,
   type AttachmentContentPart,
 } from "../../../core/attachments/build-attachment-content.ts";
+import { toHumanContent } from "../../../core/attachments/to-human-content.ts";
 import { boundHistoryForCloud } from "../../../core/ai/token-savings/bounded-history.ts";
 import { withCompactionListener } from "../../../core/ai/token-savings/notice.ts";
 import { normalizeModelRef, type ModelRef } from "../../../core/ai/providers/types.ts";
@@ -72,7 +73,7 @@ async function persistUserMessage(
   if (attachmentIds.length > 0) {
     const attachmentRepo = new AttachmentRepository(db);
     for (const id of attachmentIds) {
-      await attachmentRepo.linkToMessage(id, messageId);
+      await attachmentRepo.linkToMessage(id, messageId, chat.id);
     }
   }
 
@@ -304,12 +305,14 @@ export async function sendMessage(
         keyId: config.get("modelKeyId"),
       });
       try {
-        ({ parts: attachmentParts } = await buildAttachmentContent(
+        const content = await buildAttachmentContent(
           config.get("dataDir"),
           new AttachmentRepository(db),
           attachmentIds,
           modelRef,
-        ));
+        );
+        attachmentParts = content.parts;
+        for (const message of content.warnings) send("warning", { message });
       } catch (error) {
         send("error", {
           message:
@@ -369,10 +372,10 @@ export async function sendMessage(
       const last = contextMessages[lastIndex];
       if (last instanceof HumanMessage) {
         contextMessages[lastIndex] = new HumanMessage({
-          content: [
-            { type: "text", text: userText },
-            ...attachmentParts,
-          ] as unknown as BaseMessage["content"],
+          content: toHumanContent(
+            userText,
+            attachmentParts,
+          ) as unknown as BaseMessage["content"],
         });
       }
     }

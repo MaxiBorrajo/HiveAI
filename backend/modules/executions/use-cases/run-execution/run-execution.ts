@@ -215,12 +215,15 @@ async function resolveInputAttachments(
     keyId: config.get("modelKeyId"),
   });
 
-  const { parts } = await buildAttachmentContent(
+  const { parts, warnings } = await buildAttachmentContent(
     config.get("dataDir"),
     new AttachmentRepository(db),
     attachmentIds,
     modelRef,
   );
+  if (warnings.length > 0) {
+    send("warning", { warnings: warnings.map((reason) => ({ reason })) });
+  }
 
   return parts.length > 0 ? { attachments: parts } : {};
 }

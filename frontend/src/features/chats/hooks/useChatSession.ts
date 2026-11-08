@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { sendMessage, type LiveToolCall } from "../api/sendMessage.ts";
 import type { AttachmentDto } from "../api/attachments.ts";
 import { getChatMessages } from "../api/getChatMessages.ts";
-import { reportError } from "../../../lib/toastManager.ts";
+import { reportError, reportWarning } from "../../../lib/toastManager.ts";
 import { getErrorMessage } from "../../../lib/errors.ts";
 import { useKeyedState } from "../../../hooks/useKeyedState.ts";
 import type {
@@ -249,6 +249,7 @@ export function useChatSession() {
               );
             }
           },
+          onWarning: (message) => reportWarning("Attachment shortened", message),
           onError: (errorMessage, rejected) => {
             reportError([errorMessage]);
             if (rejected) throw new RejectedSendError(errorMessage);

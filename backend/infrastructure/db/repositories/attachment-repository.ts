@@ -47,10 +47,18 @@ export class AttachmentRepository {
     return result;
   }
 
-  async linkToMessage(id: number, messageId: number): Promise<void> {
+  /**
+   * Also sets the chat: a file attached before the chat exists is uploaded
+   * without one, and the chat's history looks attachments up by chat id.
+   */
+  async linkToMessage(
+    id: number,
+    messageId: number,
+    chatId: number,
+  ): Promise<void> {
     await this.db
       .update(attachments)
-      .set({ messageId })
+      .set({ messageId, chatId })
       .where(eq(attachments.id, id));
   }
 
