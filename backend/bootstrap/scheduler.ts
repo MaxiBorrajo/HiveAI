@@ -1,9 +1,11 @@
 import type { HiveMicrokernel } from "../core/microkernel/hive-microkernel.ts";
 import type { AppDatabase } from "../infrastructure/db/orm.ts";
+import { ExecutionRepository } from "../infrastructure/db/repositories/execution-repository.ts";
 import { ScheduleRepository } from "../infrastructure/db/repositories/schedule-repository.ts";
 import { runExecution } from "../modules/executions/use-cases/run-execution/run-execution.ts";
 import { consumeRunResponse } from "../modules/schedules/lib/consume-run.ts";
 import { whyNotSchedulable } from "../modules/schedules/schedule-service.ts";
+import { notifyUser } from "./notify.ts";
 import {
   type AttentionEvent,
   startScheduler,
@@ -13,11 +15,13 @@ function notify(event: AttentionEvent): void {
   const body = event.kind === "missed"
     ? `HiveAI was not running for ${event.missedCount} scheduled run(s). Open the app to review them.`
     : `A scheduled run failed: ${event.error}`;
-  try {
-    new Notification("HiveAI", { body });
-  } catch {
-    // Notifications are best effort; the run log in the app is the record.
-  }
+  notifyUser("HiveAI", body);
+}
+
+async function executionName(db: AppDatabase, executionId: number): Promise<string> {
+  const execution = await new ExecutionRepository(db).findById(executionId)
+    .catch(() => undefined);
+  return execution?.name?.trim() || "Your execution";
 }
 
 export function startAppScheduler(db: AppDatabase, hive: HiveMicrokernel) {
@@ -40,5 +44,12 @@ export function startAppScheduler(db: AppDatabase, hive: HiveMicrokernel) {
         ),
       ),
     onAttention: notify,
+    onStarted: async ({ executionId }) => {
+      notifyUser("HiveAI", `${await executionName(db, executionId)} started its scheduled run.`);
+    },
+    onCompleted: async ({ executionId }) => {
+      const name = await executionName(db, executionId);
+      notifyUser("HiveAI", `${name} finished its scheduled run. Open HiveAI to see the result.`);
+    },
   });
 }

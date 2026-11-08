@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { desktopLog } from "./desktop-log.ts";
 import { setAppWindowControls } from "../modules/app-settings/window-controls.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +33,13 @@ function createTray(onOpen: () => void): Deno.Tray | null {
     if (!icon) return null;
     const tray = new Deno.Tray();
     // trayId 0 = the platform could not create it (e.g. no AppIndicator).
-    if (tray.trayId === 0) return null;
+    if (tray.trayId === 0) {
+      console.log(
+        "[desktop] No system tray available. HiveAI still keeps running when " +
+          "its window is closed; launch it again to bring the window back.",
+      );
+      return null;
+    }
     tray.setIcon(icon);
     tray.setTooltip("HiveAI");
     tray.setMenu([
@@ -60,30 +67,94 @@ export function openDesktopWindow(port: number, options: DesktopOptions): void {
     return;
   }
 
-  const win = new Deno.BrowserWindow({
-    title: "HiveAI",
-    width: 1200,
-    height: 800,
-    resizable: true,
-  });
-  win.navigate?.(`http://localhost:${port}`);
+  const url = `http://localhost:${port}`;
+  const log = desktopLog;
+
+  let win: Deno.BrowserWindow;
+  let tray: Deno.Tray | null = null;
+
+  // The first window adopts the implicit startup window; later ones are new.
+  const openWindow = (): Deno.BrowserWindow => {
+    const created = new Deno.BrowserWindow({
+      title: "HiveAI",
+      width: 1200,
+      height: 800,
+      resizable: true,
+    });
+    created.navigate?.(url);
+    // Closing hides it; scheduled runs keep going.
+    created.addEventListener("close", (event) => {
+      log("close event received");
+      try {
+        const keep = options.runInBackground();
+        log(`runInBackground=${keep}, cancelable=${event.cancelable}`);
+        if (!keep) return log("Quitting (background mode is off).");
+        // The close cannot be cancelled in this webview (cancelable=false) and
+        // calling hide() from inside the handler never returns. The window is
+        // destroyed and show() opens a new one; the process keeps running.
+        setTimeout(() => {
+          try {
+            log(`after close: isClosed=${created.isClosed()}`);
+          } catch (error) {
+            log(`after close check failed: ${error}`);
+          }
+        }, 300);
+      } catch (error) {
+        log(`close handler failed: ${error instanceof Error ? error.stack : error}`);
+      }
+    });
+    return created;
+  };
+
+  win = openWindow();
+
+  // The runtime exits when no window is open, and a close cannot be cancelled
+  // here. A tiny hidden window keeps the process (and the scheduler) alive
+  // after the user closes the real one; show() opens a fresh window.
+  try {
+    const keeper = new Deno.BrowserWindow({
+      title: "HiveAI (background)",
+      width: 100,
+      height: 100,
+      noActivate: true,
+      resizable: false,
+    });
+    keeper.hide();
+    log("Background keeper window ready.");
+  } catch (error) {
+    log(`Could not create the background keeper window: ${error}`);
+  }
 
   const show = () => {
+    // If the OS destroyed the window without a cancelable close, open a new one.
+    if (win.isClosed()) {
+      log("Window was destroyed; opening a new one.");
+      win = openWindow();
+    }
     win.show();
     win.focus();
   };
   setAppWindowControls({ show });
 
-  const tray = createTray(show);
+  tray = createTray(show);
 
-  // Only hide on close when there is a tray to get it back from; otherwise
-  // the app would keep running with no way to reach it.
-  win.addEventListener("close", (event) => {
-    if (tray && options.runInBackground()) {
-      event.preventDefault();
-      win.hide();
+  // Safety net: the window vanished and nothing hid it (no close event).
+  let reported = false;
+  setInterval(() => {
+    if (!win.isClosed()) {
+      reported = false;
+      return;
     }
-  });
+    if (options.runInBackground()) {
+      if (!reported) {
+        reported = true;
+        log("Window closed without a close event; staying in the background.");
+      }
+    } else {
+      log("Window closed; quitting (background mode is off).");
+      Deno.exit(0);
+    }
+  }, 2000);
 
   try {
     Deno.dock?.addEventListener("reopen", show);
@@ -91,7 +162,7 @@ export function openDesktopWindow(port: number, options: DesktopOptions): void {
     // macOS only
   }
 
-  if (options.startHidden && tray) win.hide();
+  if (options.startHidden) win.hide();
 
   console.log("Desktop window opened.");
 }

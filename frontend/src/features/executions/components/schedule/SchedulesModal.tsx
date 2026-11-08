@@ -348,6 +348,10 @@ export function SchedulesModal({
                   }
                 />
               </label>
+              <p className="text-xs text-muted-foreground">
+                Closing the window keeps HiveAI running, so scheduled runs
+                continue.
+              </p>
             </section>
           )}
         </DialogContent>

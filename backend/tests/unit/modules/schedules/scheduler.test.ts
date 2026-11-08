@@ -59,6 +59,8 @@ function harness(
 ) {
   const runs: number[] = [];
   const attention: AttentionEvent[] = [];
+  const completed: { executionId: number; historyId: number | null }[] = [];
+  const started: number[] = [];
   const scheduler = createScheduler({
     repo: scoped(s.repo, s.executionId),
     now: () => clock.t,
@@ -68,8 +70,10 @@ function harness(
     },
     checkRunnable: () => Promise.resolve(blocked),
     onAttention: (e) => attention.push(e),
+    onCompleted: (e) => completed.push(e),
+    onStarted: (e) => started.push(e.executionId),
   });
-  return { scheduler, runs, attention };
+  return { scheduler, runs, attention, completed, started };
 }
 
 async function scheduleDaily(
@@ -424,4 +428,37 @@ Deno.test("two legacy schedules of one execution never run it twice at once", as
   assertEquals(h.runs.length, 1, "the second schedule's slot is skipped, not run in parallel");
   const statuses = (await s.repo.listRuns(s.executionId)).map((r) => r.status).sort();
   assertEquals(statuses, ["ok", "skipped"]);
+});
+
+Deno.test("a successful run reports completion; a failed one does not", async () => {
+  const s = await setup();
+  await scheduleDaily(s, at(7, 9));
+  const ok = harness(s, { t: at(8, 10, 1) });
+  await ok.scheduler.tick();
+  await ok.scheduler.whenIdle();
+  assertEquals(ok.completed, [{ executionId: s.executionId, historyId: 42 }]);
+
+  const s2 = await setup();
+  await scheduleDaily(s2, at(7, 9));
+  const bad = harness(s2, { t: at(8, 10, 1) }, () =>
+    Promise.resolve({ ok: false, error: "boom" }));
+  await bad.scheduler.tick();
+  await bad.scheduler.whenIdle();
+  assertEquals(bad.completed, []);
+});
+
+Deno.test("a run that starts reports it; a skipped slot does not", async () => {
+  const s = await setup();
+  await scheduleDaily(s, at(7, 9));
+  const h = harness(s, { t: at(8, 10, 1) });
+  await h.scheduler.tick();
+  await h.scheduler.whenIdle();
+  assertEquals(h.started, [s.executionId]);
+
+  const s2 = await setup();
+  await scheduleDaily(s2, at(7, 9));
+  const late = harness(s2, { t: at(8, 10, 30) }); // past the grace period: missed
+  await late.scheduler.tick();
+  await late.scheduler.whenIdle();
+  assertEquals(late.started, []);
 });

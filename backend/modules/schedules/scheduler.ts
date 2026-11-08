@@ -24,6 +24,10 @@ export interface SchedulerDeps {
   now?: () => number;
   /** Something the user should look at (shown even if the window is hidden). */
   onAttention?: (event: AttentionEvent) => void;
+  /** A scheduled run has just started. */
+  onStarted?: (event: { executionId: number }) => void;
+  /** A scheduled run finished successfully. */
+  onCompleted?: (event: { executionId: number; historyId: number | null }) => void;
 }
 
 export interface Scheduler {
@@ -87,6 +91,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         historyId: outcome.historyId,
         finishedAt,
       });
+      deps.onCompleted?.({
+        executionId: schedule.executionId,
+        historyId: outcome.historyId ?? null,
+      });
     } else {
       await deps.repo.updateRun(runId, {
         status: "failed",
@@ -147,6 +155,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       startedAt: at,
     });
     await deps.repo.update(schedule.id, { lastRunAt: at });
+    deps.onStarted?.({ executionId: schedule.executionId });
 
     const task = execute(schedule, run.id).catch((error) =>
       console.error("[Scheduler] Could not record a run:", error)

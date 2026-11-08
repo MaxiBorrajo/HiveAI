@@ -156,6 +156,14 @@ describe("SchedulesModal list", () => {
   });
 });
 
+describe("SchedulesModal background note", () => {
+  test("it explains that closing the window does not stop scheduled runs", async () => {
+    setup();
+    renderModal();
+    expect(await screen.findByText(/Closing the window keeps HiveAI running/)).toBeInTheDocument();
+  });
+});
+
 describe("SchedulesModal wizard", () => {
   test("with nothing else to ask: When -> warning -> Accept and schedule", async () => {
     const created = vi.fn(() => ok(schedule));
