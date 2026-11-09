@@ -14,7 +14,7 @@ export type { NewMessage };
 export const RECENCY_WINDOW = 10;
 export const RELEVANCE_TOPK = 6;
 
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
   let normB = 0;

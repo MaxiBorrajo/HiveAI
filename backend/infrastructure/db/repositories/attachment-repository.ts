@@ -1,12 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
+import { isImageMimeType } from "../../../core/attachments/attachment-limits.ts";
 import {
+  attachmentChunks,
   attachments,
   type Attachment,
+  type AttachmentChunk,
   type NewAttachment,
 } from "../schema/attachments.ts";
 
-export type { Attachment, NewAttachment };
+export type { Attachment, AttachmentChunk, NewAttachment };
 
 export class AttachmentRepository {
   constructor(private db: AppDatabase) {}
@@ -84,5 +87,50 @@ export class AttachmentRepository {
 
   async delete(id: number): Promise<void> {
     await this.db.delete(attachments).where(eq(attachments.id, id));
+  }
+
+  async findUnindexedChatIds(chatId: number): Promise<number[]> {
+    const rows = await this.db
+      .select({ id: attachments.id, mimeType: attachments.mimeType })
+      .from(attachments)
+      .where(and(eq(attachments.chatId, chatId), isNull(attachments.indexedAt)));
+    return rows.filter((r) => !isImageMimeType(r.mimeType)).map((r) => r.id);
+  }
+
+  async countChunks(attachmentId: number): Promise<number> {
+    const [{ total }] = await this.db
+      .select({ total: count() })
+      .from(attachmentChunks)
+      .where(eq(attachmentChunks.attachmentId, attachmentId));
+    return total;
+  }
+
+  async addChunk(chunk: AttachmentChunk): Promise<void> {
+    await this.db.insert(attachmentChunks).values(chunk);
+  }
+
+  async markIndexed(id: number, indexedAt: number): Promise<void> {
+    await this.db
+      .update(attachments)
+      .set({ indexedAt })
+      .where(eq(attachments.id, id));
+  }
+
+  async findChunks(attachmentIds: number[]): Promise<AttachmentChunk[]> {
+    if (attachmentIds.length === 0) return [];
+    return await this.db
+      .select()
+      .from(attachmentChunks)
+      .where(inArray(attachmentChunks.attachmentId, attachmentIds));
+  }
+
+  copyChunks(fromAttachmentId: number, toAttachmentId: number): void {
+    this.db.$client
+      .prepare(
+        `INSERT INTO attachment_chunks (attachmentId, chunkIndex, startChar, text, vector)
+         SELECT ?, chunkIndex, startChar, text, vector
+         FROM attachment_chunks WHERE attachmentId = ?`,
+      )
+      .run(toAttachmentId, fromAttachmentId);
   }
 }

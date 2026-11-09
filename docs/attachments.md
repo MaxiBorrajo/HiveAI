@@ -30,8 +30,30 @@ The legacy binary formats `.doc` and `.ppt` are not supported.
   rejected on upload.
 - An image sent to a model without vision rejects the message.
 - The text of all the attachments in one message is limited to 100,000
-  characters. Past that, the text is cut, the model sees a marker where it
-  stops, and the user gets a warning. Files that no longer fit are left out.
+  characters on cloud models and to about half of the context window on local
+  models, because Ollama silently drops whatever exceeds it. Past the limit,
+  the text is cut, the model sees a marker where it stops, and the user gets a
+  warning. Files that no longer fit are left out.
+
+## Searching files in a chat
+
+Chat files are split into chunks and embedded locally with
+`nomic-embed-text`, so this works offline and with cloud models. Each turn
+searches every file in the chat and adds the most relevant excerpts to the
+message: up to 12,000 characters on cloud models and about a quarter of the
+context window on local ones. That is how a long file's later parts, and
+files from earlier turns, reach the model.
+
+- Indexing runs in the background, one file at a time, and never delays a
+  message. While a file is being indexed, the user gets a warning and only the
+  part that is ready can be found.
+- It resumes after a restart. Files older than this feature are indexed the
+  next time their chat is used.
+- Files are indexed up to 500 chunks (roughly 350 pages).
+- Images are not indexed. Execution runs read their files whole and do not
+  search them.
+- Excerpts suit specific questions. A request about a whole long document only
+  sees what was included in the turn it was attached.
 
 Adding a format takes an entry in `MIME_TYPE_BY_EXTENSION`
 (`backend/core/attachments/attachment-limits.ts`), an extractor in

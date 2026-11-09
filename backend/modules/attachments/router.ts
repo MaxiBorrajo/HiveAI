@@ -4,6 +4,7 @@ import { AppError, parseId } from "../../core/api/errors.ts";
 import { ResponseBuilder } from "../../core/api/response.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
 import { AttachmentRepository } from "../../infrastructure/db/repositories/attachment-repository.ts";
+import { scheduleAttachmentIndexing } from "../../core/attachments/attachment-index.ts";
 import { createAttachment } from "./use-cases/create-attachment.ts";
 import { getChatAttachments } from "./use-cases/get-chat-attachments.ts";
 import {
@@ -19,9 +20,12 @@ export const attachmentsRouter = new Hono<{
 }>();
 
 function depsFor(hive: HiveMicrokernel): AttachmentDeps {
+  const repo = new AttachmentRepository(getORM());
+  const dataDir = hive.getConfig().get("dataDir");
   return {
-    repo: new AttachmentRepository(getORM()),
-    dataDir: hive.getConfig().get("dataDir"),
+    repo,
+    dataDir,
+    scheduleIndexing: (id) => scheduleAttachmentIndexing(dataDir, repo, id),
   };
 }
 

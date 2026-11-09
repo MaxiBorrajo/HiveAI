@@ -1,5 +1,6 @@
 import {
   integer,
+  primaryKey,
   sqliteTable,
   text,
   type AnySQLiteColumn,
@@ -36,7 +37,24 @@ export const attachments = sqliteTable("attachments", {
     .notNull()
     .default("ready"),
   createdAt: integer("createdAt").notNull(),
+  // Null until every chunk of the file is stored in attachment_chunks.
+  indexedAt: integer("indexedAt"),
 });
+
+export const attachmentChunks = sqliteTable(
+  "attachment_chunks",
+  {
+    attachmentId: integer("attachmentId")
+      .notNull()
+      .references(() => attachments.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunkIndex").notNull(),
+    startChar: integer("startChar").notNull(),
+    text: text("text").notNull(),
+    vector: text("vector").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.attachmentId, table.chunkIndex] })],
+);
 
 export type Attachment = typeof attachments.$inferSelect;
 export type NewAttachment = typeof attachments.$inferInsert;
+export type AttachmentChunk = typeof attachmentChunks.$inferSelect;

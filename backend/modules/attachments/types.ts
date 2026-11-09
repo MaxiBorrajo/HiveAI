@@ -4,6 +4,7 @@ import type { AttachmentRepository } from "../../infrastructure/db/repositories/
 export interface AttachmentDeps {
   repo: AttachmentRepository;
   dataDir: string;
+  scheduleIndexing?: (attachmentId: number) => void;
 }
 
 export interface AttachmentDto {

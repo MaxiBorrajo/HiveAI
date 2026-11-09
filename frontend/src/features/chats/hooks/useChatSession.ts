@@ -249,7 +249,7 @@ export function useChatSession() {
               );
             }
           },
-          onWarning: (message) => reportWarning("Attachment shortened", message),
+          onWarning: (message) => reportWarning("Attachments", message),
           onError: (errorMessage, rejected) => {
             reportError([errorMessage]);
             if (rejected) throw new RejectedSendError(errorMessage);

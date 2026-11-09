@@ -71,6 +71,13 @@
       "when": 1794163335769,
       "tag": "0009_backfill_attachment_chat_id",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794166910568,
+      "tag": "0010_attachment_search_index",
+      "breakpoints": true
     }
   ]
 }

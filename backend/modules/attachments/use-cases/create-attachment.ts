@@ -4,6 +4,7 @@ import {
   SUPPORTED_FORMATS_LABEL,
   isDocxMimeType,
   isExcelMimeType,
+  isImageMimeType,
   isPdfMimeType,
   isPptxMimeType,
   isSupportedMimeType,
@@ -95,6 +96,11 @@ export async function createAttachment(
     status: "ready",
     createdAt: Date.now(),
   });
+
+  // Runs read their files whole: only chats search them.
+  if (owner.executionId === undefined && !isImageMimeType(mimeType)) {
+    deps.scheduleIndexing?.(row.id);
+  }
 
   return toAttachmentDto(row);
 }

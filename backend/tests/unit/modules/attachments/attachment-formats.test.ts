@@ -27,6 +27,7 @@ async function setup() {
       repo,
       ids,
       visionModel,
+      MAX_TOTAL_CONTEXT_CHARS,
     );
     return { texts: parts.map((p) => (p as TextContentPart).text), parts, warnings };
   };

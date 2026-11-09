@@ -26,9 +26,22 @@ import {
   type AttachmentContentPart,
 } from "../../../core/attachments/build-attachment-content.ts";
 import { toHumanContent } from "../../../core/attachments/to-human-content.ts";
+import { scheduleAttachmentIndexing } from "../../../core/attachments/attachment-index.ts";
+import {
+  retrieveAttachmentExcerpts,
+  type Retrieval,
+} from "../../../core/attachments/attachment-retrieval.ts";
 import { boundHistoryForCloud } from "../../../core/ai/token-savings/bounded-history.ts";
 import { withCompactionListener } from "../../../core/ai/token-savings/notice.ts";
-import { normalizeModelRef, type ModelRef } from "../../../core/ai/providers/types.ts";
+import {
+  isCloudProvider,
+  normalizeModelRef,
+  type ModelRef,
+} from "../../../core/ai/providers/types.ts";
+import {
+  attachmentBudget,
+  OLLAMA_DEFAULT_NUM_CTX,
+} from "../../../core/attachments/context-budget.ts";
 import { HumanMessage, SystemMessage, type BaseMessage } from "@langchain/core/messages";
 
 const MAX_MESSAGE_LENGTH = 100_000;
@@ -78,6 +91,35 @@ async function persistUserMessage(
   }
 
   return messageId;
+}
+
+/** Never fails the turn: without search the model just answers from the chat. */
+async function searchChatFiles(
+  db: AppDatabase,
+  dataDir: string,
+  chatId: number,
+  query: string,
+  sentChars: Map<number, number>,
+  maxChars: number,
+): Promise<Retrieval> {
+  try {
+    const repo = new AttachmentRepository(db);
+    // Files from before search existed, or whose indexing a restart cut short.
+    for (const id of await repo.findUnindexedChatIds(chatId)) {
+      scheduleAttachmentIndexing(dataDir, repo, id);
+    }
+    return await retrieveAttachmentExcerpts({
+      repo,
+      chatId,
+      query,
+      embed: embedText,
+      maxChars,
+      sentChars,
+    });
+  } catch (error) {
+    console.error("[Attachments] Could not search the chat's files:", error);
+    return { warnings: [] };
+  }
 }
 
 async function persistAssistantMessage(
@@ -297,7 +339,14 @@ export async function sendMessage(
 
     // Resolve attachments before anything is persisted, so a rejected file
     // leaves no chat or message behind and the client can restore the input.
+    const modelOptions = await resolveModelOptions();
+    const budget = attachmentBudget(
+      isCloudProvider(options.modelRef?.provider ?? hive.getConfig().get("modelProvider"))
+        ? undefined
+        : modelOptions.numCtx ?? OLLAMA_DEFAULT_NUM_CTX,
+    );
     let attachmentParts: AttachmentContentPart[] = [];
+    let sentChars = new Map<number, number>();
     if (attachmentIds.length > 0) {
       const config = hive.getConfig();
       const modelRef = options.modelRef ?? normalizeModelRef(model, {
@@ -310,8 +359,10 @@ export async function sendMessage(
           new AttachmentRepository(db),
           attachmentIds,
           modelRef,
+          budget.attachmentChars,
         );
         attachmentParts = content.parts;
+        sentChars = content.sentChars;
         for (const message of content.warnings) send("warning", { message });
       } catch (error) {
         send("error", {
@@ -359,7 +410,18 @@ export async function sendMessage(
 
     send("thinking", {});
 
-    const modelOptions = await resolveModelOptions();
+    const excerpts = await searchChatFiles(
+      db,
+      hive.getConfig().get("dataDir"),
+      resolvedChatId,
+      userText,
+      sentChars,
+      budget.excerptChars,
+    );
+    for (const message of excerpts.warnings) send("warning", { message });
+    if (excerpts.text) {
+      attachmentParts.push({ type: "text", text: excerpts.text });
+    }
 
     const msgRepo = new MessageRepository(db);
     let contextMessages = await msgRepo.buildTurnContext(

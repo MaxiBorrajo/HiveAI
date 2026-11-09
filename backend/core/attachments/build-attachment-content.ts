@@ -4,7 +4,6 @@ import type { ModelRef } from "../ai/providers/types.ts";
 import {
   isTextMimeType,
   isImageMimeType,
-  MAX_TOTAL_CONTEXT_CHARS,
 } from "./attachment-limits.ts";
 import {
   readAttachment,
@@ -46,9 +45,15 @@ export async function buildAttachmentContent(
   repo: AttachmentRepository,
   attachmentIds: number[],
   modelRef: ModelRef,
-): Promise<{ parts: AttachmentContentPart[]; warnings: string[] }> {
+  maxChars: number,
+): Promise<{
+  parts: AttachmentContentPart[];
+  warnings: string[];
+  sentChars: Map<number, number>;
+}> {
   const parts: AttachmentContentPart[] = [];
   const warnings: string[] = [];
+  const sentChars = new Map<number, number>();
   let totalTextChars = 0;
   let visionChecked = false;
   let hasVision = false;
@@ -77,10 +82,11 @@ export async function buildAttachmentContent(
     if (text === undefined) continue;
     const filePath = join(dataDir, row.storagePath);
 
-    const available = MAX_TOTAL_CONTEXT_CHARS - totalTextChars;
+    const available = maxChars - totalTextChars;
     if (available <= 0) {
+      sentChars.set(id, 0);
       warnings.push(
-        `'${row.originalName}' was left out: the attachments already reach the limit of ${MAX_TOTAL_CONTEXT_CHARS} characters.`,
+        `'${row.originalName}' was left out: the attachments already reach the limit of ${maxChars} characters for this model.`,
       );
       continue;
     }
@@ -92,6 +98,7 @@ export async function buildAttachmentContent(
       );
     }
     totalTextChars += included.length;
+    sentChars.set(id, truncated ? included.length : Infinity);
     const marker = truncated
       ? `\n[… file truncated: only the first ${included.length} of ${text.length} characters are shown …]`
       : "";
@@ -101,10 +108,10 @@ export async function buildAttachmentContent(
     });
   }
 
-  return { parts, warnings };
+  return { parts, warnings, sentChars };
 }
 
-async function attachmentText(
+export async function attachmentText(
   dataDir: string,
   row: Attachment,
 ): Promise<string | undefined> {
