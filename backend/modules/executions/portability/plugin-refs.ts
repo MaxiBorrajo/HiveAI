@@ -33,3 +33,17 @@ export function findInactivePlugins(
     (n) => hive.getPlugin(n) && !hive.isActive(n),
   );
 }
+
+/**
+ * Imported (external) plugins run in a subprocess that only exists while the
+ * plugin is active. Built-in plugins don't care: an execution can use them
+ * whether or not they are switched on for the chat.
+ */
+export function findStoppedExternalPlugins(
+  graph: LangGraphAbstraction,
+  hive: HiveMicrokernel,
+): string[] {
+  return collectRequiredPlugins(graph).filter(
+    (n) => hive.getPlugin(n) && hive.isExternalPlugin(n) && !hive.isActive(n),
+  );
+}

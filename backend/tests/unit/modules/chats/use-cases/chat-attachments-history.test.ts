@@ -93,7 +93,7 @@ Deno.test("the backfill migration recovers files already orphaned from their cha
   const migration = await Deno.readTextFile(
     fileURLToPath(
       new URL(
-        "../../../../../infrastructure/db/migrations/0009_backfill_attachment_chat_id.sql",
+        "../../../../../infrastructure/db/migrations/0012_backfill_attachment_chat_id.sql",
         import.meta.url,
       ),
     ),

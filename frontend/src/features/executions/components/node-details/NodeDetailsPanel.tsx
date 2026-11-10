@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { GraphEdge, GraphNode } from "../../types";
-import { useActivePlugins } from "./usePlugins";
+import { useInstalledPlugins } from "./usePlugins";
 import { Field, TextInput } from "./fields";
 import {
   ConditionNodeForm,
@@ -83,7 +83,7 @@ function NodeBody({
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(node.name);
   const [config, setConfig] = useState<Record<string, any>>(node.config ?? {});
-  const plugins = useActivePlugins(isEditing);
+  const plugins = useInstalledPlugins(isEditing);
   const Form = FORMS[node.type];
 
   const startEditing = () => {

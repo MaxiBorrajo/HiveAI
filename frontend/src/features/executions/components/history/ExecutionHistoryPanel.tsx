@@ -100,6 +100,11 @@ function RunRow({
             <span className="font-mono text-xs font-medium">
               #{run.iteration}
             </span>
+            {run.trigger === "scheduled" && (
+              <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">
+                Scheduled
+              </span>
+            )}
             <span className="text-xs text-muted-foreground">
               {new Date(run.createdAt).toLocaleString([], {
                 dateStyle: "medium",

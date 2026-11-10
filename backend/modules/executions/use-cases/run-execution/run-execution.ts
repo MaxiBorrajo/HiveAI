@@ -1,4 +1,7 @@
-import { findMissingPlugins } from "../../portability/plugin-refs.ts";
+import {
+  findMissingPlugins,
+  findStoppedExternalPlugins,
+} from "../../portability/plugin-refs.ts";
 import { beginModelActivity } from "../../../../core/ai/activity-tracker.ts";
 import { createSseResponse, type SseSend } from "../../../../core/api/sse.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
@@ -252,6 +255,7 @@ export async function runExecution(
   autoApprove = true,
   signal?: AbortSignal,
   attachmentIds: number[] = [],
+  unattended = false,
 ): Promise<Response> {
   try {
     const repo = new ExecutionRepository(db);
@@ -273,6 +277,18 @@ export async function runExecution(
           }. Install them to run it.`,
         ],
         { missingPlugins },
+        { headers, status: 422 },
+      );
+    }
+    const stoppedPlugins = findStoppedExternalPlugins(abstraction, hive);
+    if (stoppedPlugins.length > 0) {
+      return ResponseBuilder.error(
+        [
+          `This execution uses imported plugins that are not active: ${
+            stoppedPlugins.join(", ")
+          }. Activate them in Plugins to run it.`,
+        ],
+        { inactivePlugins: stoppedPlugins },
         { headers, status: 422 },
       );
     }
@@ -309,7 +325,7 @@ export async function runExecution(
     return createSseResponse(headers, async (send) => {
       const endActivity = [...localModels].map(beginModelActivity);
       try {
-        await executionContextStorage.run({ autoApprove }, () =>
+        await executionContextStorage.run({ autoApprove, unattended }, () =>
         withUsageContext(
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {

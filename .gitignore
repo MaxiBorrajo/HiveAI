@@ -31,3 +31,6 @@ frontend/coverage/
 *.sw?
 
 backend/scripts/benchmark-results/
+
+# Local desktop builds
+build/

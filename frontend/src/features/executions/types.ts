@@ -133,6 +133,7 @@ export interface RunSummary {
   input: Record<string, unknown> | null;
   usage: RunUsage | null;
   grades: RunGrade[];
+  trigger: "manual" | "scheduled";
 }
 
 export interface Rubric {
@@ -163,4 +164,64 @@ export interface JudgeChoice {
   provider: string;
   model: string;
   keyId: string;
+}
+
+export type ScheduleFrequency = "daily" | "weekly" | "cron";
+
+export type ScheduleRunStatus =
+  | "running"
+  | "ok"
+  | "failed"
+  | "missed"
+  | "skipped";
+
+export interface Schedule {
+  id: number;
+  executionId: number;
+  frequency: ScheduleFrequency;
+  /** Local "HH:MM". */
+  timeOfDay: string;
+  /** 0 (Sunday) - 6 (Saturday); only used by weekly schedules. */
+  daysOfWeek: number[];
+  /** 5-field cron expression; only used when frequency is "cron". */
+  cron: string;
+  /** Fixed input handed to every run. */
+  input: string;
+  enabled: boolean;
+  nextRunAt: number;
+  lastRunAt: number | null;
+}
+
+export interface ScheduleRun {
+  id: number;
+  scheduleId: number;
+  executionId: number;
+  scheduledFor: number;
+  status: ScheduleRunStatus;
+  historyId: number | null;
+  missedCount: number;
+  error: string | null;
+  acknowledged: boolean;
+  startedAt: number;
+  finishedAt: number | null;
+}
+
+export interface SchedulesPayload {
+  schedules: Schedule[];
+  runs: ScheduleRun[];
+  /** The graph insists on an input, so a schedule must carry a fixed one. */
+  inputRequired: boolean;
+}
+
+export interface ScheduleDraft {
+  frequency: ScheduleFrequency;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  cron: string;
+  input: string;
+}
+
+export interface BackgroundSettings {
+  launchAtLogin: boolean;
+  runInBackground: boolean;
 }

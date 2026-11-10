@@ -26,6 +26,7 @@ function run(id: number, over: Partial<RunSummary> = {}): RunSummary {
     input: { q: "same" },
     usage: null,
     grades: [],
+    trigger: "manual",
     ...over,
   };
 }

@@ -8,6 +8,7 @@ import {
   summarizeRunUsage,
 } from "../../usage/summarize-run-usage.ts";
 import type { RunUsage } from "../../usage/types.ts";
+import { ScheduleRepository } from "../../../infrastructure/db/repositories/schedule-repository.ts";
 import { RunGradeRepository } from "../../../infrastructure/db/repositories/run-grade-repository.ts";
 import { parseRunRecord } from "../parse-run-record.ts";
 import { toGradeDto, type RunGradeDto } from "../rubric-types.ts";
@@ -21,6 +22,7 @@ export interface RunSummary {
   input: Record<string, unknown> | null;
   usage: RunUsage | null;
   grades: RunGradeDto[];
+  trigger: "manual" | "scheduled";
 }
 
 export async function loadRunSummaries(
@@ -37,6 +39,12 @@ export async function loadRunSummaries(
     histories.map((history) => history.id),
   );
 
+  const scheduled = new Set(
+    (await new ScheduleRepository(db).listRunsByHistoryIds(
+      histories.map((history) => history.id),
+    )).map((run) => run.historyId),
+  );
+
   return histories.map((history) => {
     const record = parseRunRecord(history.result);
     return {
@@ -44,6 +52,7 @@ export async function loadRunSummaries(
       iteration: history.iteration,
       createdAt: history.createdAt,
       graphId: history.version,
+      trigger: scheduled.has(history.id) ? "scheduled" : "manual",
       result: record.result,
       input: record.run?.input ?? null,
       grades: gradeRows

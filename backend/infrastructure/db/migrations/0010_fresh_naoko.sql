@@ -1,0 +1,1 @@
+ALTER TABLE `schedules` ADD `input` text DEFAULT '' NOT NULL;

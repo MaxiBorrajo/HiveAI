@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { VisualBuilder } from "../visual-builder";
 import { useExecutions } from "../ExecutionsContext";
 import { useKeyedState } from "@/hooks/useKeyedState";
@@ -20,6 +20,10 @@ import { EditModeBar } from "./edit/EditModeBar";
 import { StateCard } from "./edit/StateCard";
 import { ValidateGraphModal } from "./edit/ValidateGraphModal";
 import { NodeDetailsPanel } from "./node-details/NodeDetailsPanel";
+import { SchedulesModal } from "./schedule/SchedulesModal";
+import { useSchedules } from "../hooks/useSchedules";
+import { totalMissed } from "../lib/schedule";
+import { sameExecution, shouldOpenResult } from "../lib/scheduleActivity";
 import { ExecutionHistoryPanel } from "./history/ExecutionHistoryPanel";
 
 export function ExecutionsMain() {
@@ -29,9 +33,16 @@ export function ExecutionsMain() {
     onExecutionCreated,
     refreshExecutions,
     newExecutionToken,
+    scheduleActivity,
   } = useExecutions();
   const [input, setInput] = useState("");
   const key = activeExecutionId || newExecutionToken;
+  // The scheduler is running this execution: it looks like a run started here.
+  const scheduledRunActive =
+    activeExecutionId != null &&
+    [...scheduleActivity.runningExecutionIds].some((id) =>
+      sameExecution(id, activeExecutionId)
+    );
 
   const selectedNodeIdState = useKeyedState<string | null>(key, null);
   const selectedEdgeIdState = useKeyedState<string | null>(key, null);
@@ -43,6 +54,12 @@ export function ExecutionsMain() {
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
   const [isStateOpen, setIsStateOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const schedules = useSchedules(
+    activeExecutionId,
+    true,
+    scheduleActivity.finishedTick,
+  );
 
   const {
     isThinking,
@@ -64,6 +81,7 @@ export function ExecutionsMain() {
     handleStop,
     handleStopRun,
     handleRun: runExecution,
+    reloadLastResult,
   } = useExecutionWorkspace({
     key,
     activeExecutionId,
@@ -87,11 +105,35 @@ export function ExecutionsMain() {
   const runControls = useRunControls({
     graph,
     isThinking,
-    isRunning,
+    isRunning: isRunning || scheduledRunActive,
     isEditing,
     runExecution,
     onResult: () => setIsResultSidebarOpen(true),
   });
+
+  // When the scheduler finishes a run, refresh this execution's result (it is
+  // cached while this screen is open) and, if you are looking at it, open it
+  // just as if you had pressed Run yourself.
+  const activeIdRef = useRef(activeExecutionId);
+  const reloadRef = useRef(reloadLastResult);
+  useEffect(() => {
+    activeIdRef.current = activeExecutionId;
+    reloadRef.current = reloadLastResult;
+  });
+  const { subscribe } = scheduleActivity;
+  useEffect(
+    () =>
+      subscribe(async (run) => {
+        if (run.status !== "ok") return false;
+        const hasResult = await reloadRef.current(String(run.executionId));
+        if (hasResult && shouldOpenResult(run, activeIdRef.current)) {
+          setIsResultSidebarOpen(true);
+          return true;
+        }
+        return false;
+      }),
+    [subscribe],
+  );
 
   const displayGraph = isEditing ? draftGraph : graph;
   const isEmpty = !displayGraph && !isThinking;
@@ -207,6 +249,9 @@ export function ExecutionsMain() {
               onOpenRunModal={runControls.openRunModal}
               onShowResult={() => setIsResultSidebarOpen(true)}
               onShowHistory={() => setIsHistoryOpen(true)}
+              onSchedule={() => setIsScheduleOpen(true)}
+              missedCount={schedules.data ? totalMissed(schedules.data.runs) : 0}
+              runningOnSchedule={scheduledRunActive}
               onEdit={editor.startEditing}
               onExport={
                 activeExecutionId
@@ -278,18 +323,27 @@ export function ExecutionsMain() {
         onRun={() => runControls.run()}
       />
 
+      <SchedulesModal
+        open={isScheduleOpen}
+        onOpenChange={setIsScheduleOpen}
+        executionId={activeExecutionId}
+        onRunNow={runControls.runClick}
+        onChanged={() => void schedules.reload()}
+        refreshKey={scheduleActivity.finishedTick}
+      />
+
       <ExecutionHistoryPanel
         executionId={activeExecutionId}
         open={isHistoryOpen}
         onOpenChange={setIsHistoryOpen}
-        refreshKey={executionResult?.createdAt}
+        refreshKey={`${executionResult?.createdAt ?? 0}:${scheduleActivity.finishedTick}`}
       />
 
       <ExecutionResultSidebar
         isOpen={isResultSidebarOpen}
         onClose={() => setIsResultSidebarOpen(false)}
         data={executionResult}
-        executionName={executions.find((e) => String(e.id) === activeExecutionId)?.name}
+        executionName={executions.find((e) => sameExecution(e.id, activeExecutionId))?.name}
         onRunAgain={runControls.runClick}
       />
     </div>

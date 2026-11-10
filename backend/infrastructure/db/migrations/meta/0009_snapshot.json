@@ -1,8 +1,8 @@
 {
-  "id": "d92f5093-e905-4810-a239-8073989c730c",
-  "prevId": "53c71f68-fb4e-4d39-8d9d-6a48ea627612",
   "version": "6",
   "dialect": "sqlite",
+  "id": "f7538c2f-99f2-4f53-b4a9-6aed63b005c4",
+  "prevId": "53c71f68-fb4e-4d39-8d9d-6a48ea627612",
   "tables": {
     "chats": {
       "name": "chats",
@@ -72,15 +72,15 @@
         "chats_executionId_executions_id_fk": {
           "name": "chats_executionId_executions_id_fk",
           "tableFrom": "chats",
+          "tableTo": "executions",
           "columnsFrom": [
             "executionId"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -145,15 +145,15 @@
         "messages_chatId_chats_id_fk": {
           "name": "messages_chatId_chats_id_fk",
           "tableFrom": "messages",
+          "tableTo": "chats",
           "columnsFrom": [
             "chatId"
           ],
-          "tableTo": "chats",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -287,15 +287,15 @@
         "execution_graphs_executionId_executions_id_fk": {
           "name": "execution_graphs_executionId_executions_id_fk",
           "tableFrom": "execution_graphs",
+          "tableTo": "executions",
           "columnsFrom": [
             "executionId"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -354,15 +354,15 @@
         "execution_history_executionId_executions_id_fk": {
           "name": "execution_history_executionId_executions_id_fk",
           "tableFrom": "execution_history",
+          "tableTo": "executions",
           "columnsFrom": [
             "executionId"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -420,28 +420,28 @@
         "executions_lastResultId_execution_history_id_fk": {
           "name": "executions_lastResultId_execution_history_id_fk",
           "tableFrom": "executions",
+          "tableTo": "execution_history",
           "columnsFrom": [
             "lastResultId"
           ],
-          "tableTo": "execution_history",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "executions_lastGraphId_execution_graphs_id_fk": {
           "name": "executions_lastGraphId_execution_graphs_id_fk",
           "tableFrom": "executions",
+          "tableTo": "execution_graphs",
           "columnsFrom": [
             "lastGraphId"
           ],
-          "tableTo": "execution_graphs",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -549,54 +549,54 @@
         "attachments_chatId_chats_id_fk": {
           "name": "attachments_chatId_chats_id_fk",
           "tableFrom": "attachments",
+          "tableTo": "chats",
           "columnsFrom": [
             "chatId"
           ],
-          "tableTo": "chats",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "attachments_messageId_messages_id_fk": {
           "name": "attachments_messageId_messages_id_fk",
           "tableFrom": "attachments",
+          "tableTo": "messages",
           "columnsFrom": [
             "messageId"
           ],
-          "tableTo": "messages",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "attachments_executionId_executions_id_fk": {
           "name": "attachments_executionId_executions_id_fk",
           "tableFrom": "attachments",
+          "tableTo": "executions",
           "columnsFrom": [
             "executionId"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "attachments_executionHistoryId_execution_history_id_fk": {
           "name": "attachments_executionHistoryId_execution_history_id_fk",
           "tableFrom": "attachments",
+          "tableTo": "execution_history",
           "columnsFrom": [
             "executionHistoryId"
           ],
-          "tableTo": "execution_history",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -707,41 +707,41 @@
         "chat_usage_usage_id_model_usage_id_fk": {
           "name": "chat_usage_usage_id_model_usage_id_fk",
           "tableFrom": "chat_usage",
+          "tableTo": "model_usage",
           "columnsFrom": [
             "usage_id"
           ],
-          "tableTo": "model_usage",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "chat_usage_chat_id_chats_id_fk": {
           "name": "chat_usage_chat_id_chats_id_fk",
           "tableFrom": "chat_usage",
+          "tableTo": "chats",
           "columnsFrom": [
             "chat_id"
           ],
-          "tableTo": "chats",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "chat_usage_message_id_messages_id_fk": {
           "name": "chat_usage_message_id_messages_id_fk",
           "tableFrom": "chat_usage",
+          "tableTo": "messages",
           "columnsFrom": [
             "message_id"
           ],
-          "tableTo": "messages",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -807,41 +807,41 @@
         "execution_usage_usage_id_model_usage_id_fk": {
           "name": "execution_usage_usage_id_model_usage_id_fk",
           "tableFrom": "execution_usage",
+          "tableTo": "model_usage",
           "columnsFrom": [
             "usage_id"
           ],
-          "tableTo": "model_usage",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "execution_usage_execution_id_executions_id_fk": {
           "name": "execution_usage_execution_id_executions_id_fk",
           "tableFrom": "execution_usage",
+          "tableTo": "executions",
           "columnsFrom": [
             "execution_id"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "execution_usage_history_id_execution_history_id_fk": {
           "name": "execution_usage_history_id_execution_history_id_fk",
           "tableFrom": "execution_usage",
+          "tableTo": "execution_history",
           "columnsFrom": [
             "history_id"
           ],
-          "tableTo": "execution_history",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -886,28 +886,28 @@
         "generation_usage_usage_id_model_usage_id_fk": {
           "name": "generation_usage_usage_id_model_usage_id_fk",
           "tableFrom": "generation_usage",
+          "tableTo": "model_usage",
           "columnsFrom": [
             "usage_id"
           ],
-          "tableTo": "model_usage",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "generation_usage_execution_id_executions_id_fk": {
           "name": "generation_usage_execution_id_executions_id_fk",
           "tableFrom": "generation_usage",
+          "tableTo": "executions",
           "columnsFrom": [
             "execution_id"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1147,15 +1147,15 @@
         "execution_rubrics_executionId_executions_id_fk": {
           "name": "execution_rubrics_executionId_executions_id_fk",
           "tableFrom": "execution_rubrics",
+          "tableTo": "executions",
           "columnsFrom": [
             "executionId"
           ],
-          "tableTo": "executions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1266,28 +1266,239 @@
         "run_grades_historyId_execution_history_id_fk": {
           "name": "run_grades_historyId_execution_history_id_fk",
           "tableFrom": "run_grades",
+          "tableTo": "execution_history",
           "columnsFrom": [
             "historyId"
           ],
-          "tableTo": "execution_history",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "run_grades_rubricId_execution_rubrics_id_fk": {
           "name": "run_grades_rubricId_execution_rubrics_id_fk",
           "tableFrom": "run_grades",
+          "tableTo": "execution_rubrics",
           "columnsFrom": [
             "rubricId"
           ],
-          "tableTo": "execution_rubrics",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "schedule_runs": {
+      "name": "schedule_runs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "scheduleId": {
+          "name": "scheduleId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "executionId": {
+          "name": "executionId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scheduledFor": {
+          "name": "scheduledFor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "historyId": {
+          "name": "historyId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "missedCount": {
+          "name": "missedCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acknowledged": {
+          "name": "acknowledged",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "finishedAt": {
+          "name": "finishedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "schedule_runs_scheduleId_schedules_id_fk": {
+          "name": "schedule_runs_scheduleId_schedules_id_fk",
+          "tableFrom": "schedule_runs",
+          "tableTo": "schedules",
+          "columnsFrom": [
+            "scheduleId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "schedule_runs_executionId_executions_id_fk": {
+          "name": "schedule_runs_executionId_executions_id_fk",
+          "tableFrom": "schedule_runs",
+          "tableTo": "executions",
+          "columnsFrom": [
+            "executionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "schedules": {
+      "name": "schedules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "executionId": {
+          "name": "executionId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "frequency": {
+          "name": "frequency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "timeOfDay": {
+          "name": "timeOfDay",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "daysOfWeek": {
+          "name": "daysOfWeek",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "nextRunAt": {
+          "name": "nextRunAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lastRunAt": {
+          "name": "lastRunAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "schedules_executionId_executions_id_fk": {
+          "name": "schedules_executionId_executions_id_fk",
+          "tableFrom": "schedules",
+          "tableTo": "executions",
+          "columnsFrom": [
+            "executionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1298,9 +1509,9 @@
   "views": {},
   "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
   },
   "internal": {
     "indexes": {}
