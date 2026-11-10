@@ -193,8 +193,12 @@ export function Chat() {
             />
             <ScrollArea className="flex-1 min-h-0 **:data-[slot=scroll-area-thumb]:bg-muted-foreground/30 **:data-[slot=scroll-area-thumb]:hover:bg-muted-foreground/50 **:data-[slot=scroll-area-thumb]:transition-colors">
               <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
-                {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} />
+                {messages.map((message, index) => (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    isLast={index === messages.length - 1}
+                  />
                 ))}
 
                 {isThinking && (

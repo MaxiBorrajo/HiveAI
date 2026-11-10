@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatBytes } from "@/features/models/lib/formatBytes";
-import { formatContext, formatCount } from "../lib/fit";
+import type { ModelChoice } from "@/features/models/lib/modelChoices";
 import { useModelSearch } from "../lib/useModelSearch";
-import { type ModelSource, NO_FILTERS, type SearchFilters, type SearchSort } from "../types";
-import { CapabilityBadges, FitBadge } from "./FitBadge";
+import { type ModelSource, NO_FILTERS, type SearchFilters, type SearchSort, type SuggestResult } from "../types";
 import { FilterChip } from "./FilterChip";
+import { type AdvisorChoice, ModelAdvisorBar } from "./ModelAdvisorBar";
+import { ModelResultItem } from "./ModelResultItem";
 
 interface ModelSearchProps {
   onSelect: (id: string, source: ModelSource) => void;
+  /** Models the user can ask for suggestions. Without them the advisor is not shown. */
+  advisorChoices?: AdvisorChoice[];
+  advisorDefault?: ModelChoice | null;
 }
 
 const SOURCE_CHIPS: { source: ModelSource; label: string }[] = [
@@ -37,7 +39,9 @@ const FILTER_CHIPS: { key: keyof SearchFilters; label: string }[] = [
   { key: "fitsOnly", label: "Fits my hardware" },
 ];
 
-export function ModelSearch({ onSelect }: ModelSearchProps) {
+export function ModelSearch({ onSelect, advisorChoices = [], advisorDefault = null }: ModelSearchProps) {
+  // while set, the list below shows what the asked model suggested instead of the library
+  const [advice, setAdvice] = useState<{ query: string; result: SuggestResult } | null>(null);
   const [source, setSource] = useState<ModelSource>("ollama");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SearchSort>("recommended");
@@ -75,151 +79,156 @@ export function ModelSearch({ onSelect }: ModelSearchProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="sticky top-0 z-10 flex flex-col gap-2 bg-popover py-1">
-        <div className="relative">
-          <Search
-            size={14}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            value={query}
-            className="pl-8"
-            placeholder="Search models, for example qwen3 or llama"
-            aria-label="Search models"
-            data-testid="model-search-input"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Source">
-          {SOURCE_CHIPS.map(({ source: value, label }) => (
-            <FilterChip
-              key={value}
-              active={source === value}
-              onClick={() => setSource(value)}
-              testId={`model-source-${value}`}
-            >
-              {label}
-            </FilterChip>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort">
-          {sortChips.map(({ sort: value, label }) => (
-            <FilterChip
-              key={value}
-              active={effectiveSort === value}
-              onClick={() => setSort(value)}
-              testId={`model-sort-${value}`}
-            >
-              {label}
-            </FilterChip>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filters">
-          {FILTER_CHIPS.map(({ key, label }) => (
-            <FilterChip
-              key={key}
-              active={filters[key]}
-              onClick={() => setFilters((f) => ({ ...f, [key]: !f[key] }))}
-              testId={`model-filter-${key}`}
-            >
-              {label}
-            </FilterChip>
-          ))}
-        </div>
+        <ModelAdvisorBar
+          choices={advisorChoices}
+          defaultChoice={advisorDefault}
+          onResult={(query, result) => setAdvice({ query, result })}
+        />
+        {!advice && (
+          <>
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                value={query}
+                className="pl-8"
+                placeholder="Search models, for example qwen3 or llama"
+                aria-label="Search models"
+                data-testid="model-search-input"
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Source">
+              {SOURCE_CHIPS.map(({ source: value, label }) => (
+                <FilterChip
+                  key={value}
+                  active={source === value}
+                  onClick={() => setSource(value)}
+                  testId={`model-source-${value}`}
+                >
+                  {label}
+                </FilterChip>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort">
+              {sortChips.map(({ sort: value, label }) => (
+                <FilterChip
+                  key={value}
+                  active={effectiveSort === value}
+                  onClick={() => setSort(value)}
+                  testId={`model-sort-${value}`}
+                >
+                  {label}
+                </FilterChip>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filters">
+              {FILTER_CHIPS.map(({ key, label }) => (
+                <FilterChip
+                  key={key}
+                  active={filters[key]}
+                  onClick={() => setFilters((f) => ({ ...f, [key]: !f[key] }))}
+                  testId={`model-filter-${key}`}
+                >
+                  {label}
+                </FilterChip>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      {source === "huggingface" && (
-        <p className="text-xs text-muted-foreground" role="note" data-testid="model-search-hf-note">
-          These models are not verified with Ollama: they may fail to load or lack tool support.
-          Models from the Ollama library are guaranteed to run.
-        </p>
-      )}
-      {offline && (
-        <p className="text-xs text-muted-foreground" data-testid="model-search-offline">
-          {source === "ollama" ? "ollama.com" : "Hugging Face"} is not reachable, so only a few
-          recommended models are shown (sizes are estimates).
-        </p>
-      )}
-      {loading && <p className="text-xs text-muted-foreground">Searching…</p>}
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      {!loading && !error && items.length === 0 && (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-muted-foreground" data-testid="model-search-empty">
-            {anyFilter ? "No models match these filters." : "No models found."}
-          </p>
-          {anyFilter && (
+      {advice ? (
+        <div className="flex flex-col gap-2" data-testid="model-advice">
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">
+              Suggested for: <span className="font-normal text-muted-foreground">{advice.query}</span>
+            </p>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              onClick={() => setFilters(NO_FILTERS)}
-              data-testid="model-search-clear-filters"
+              onClick={() => setAdvice(null)}
+              data-testid="model-advice-clear"
+              aria-label="Back to all models"
             >
-              Clear filters
+              <X size={14} /> All models
             </Button>
+          </div>
+          {advice.result.items.length === 0 && (
+            <p className="text-sm text-muted-foreground" data-testid="model-advice-empty">
+              {advice.result.message ?? "No suggestions."}
+            </p>
           )}
+          <ul className="flex flex-col gap-2">
+            {advice.result.items.map((item) => (
+              <ModelResultItem
+                key={item.card.id}
+                item={item}
+                onSelect={onSelect}
+                reason={advice.result.reasons[item.card.id]}
+              />
+            ))}
+          </ul>
         </div>
-      )}
+      ) : (
+        <>
+        {source === "huggingface" && (
+          <p className="text-xs text-muted-foreground" role="note" data-testid="model-search-hf-note">
+            These models are not verified with Ollama: they may fail to load or lack tool support.
+            Models from the Ollama library are guaranteed to run.
+          </p>
+        )}
+        {offline && (
+          <p className="text-xs text-muted-foreground" data-testid="model-search-offline">
+            {source === "ollama" ? "ollama.com" : "Hugging Face"} is not reachable, so only a few
+            recommended models are shown (sizes are estimates).
+          </p>
+        )}
+        {loading && <p className="text-xs text-muted-foreground">Searching…</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {!loading && !error && items.length === 0 && (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-muted-foreground" data-testid="model-search-empty">
+              {anyFilter ? "No models match these filters." : "No models found."}
+            </p>
+            {anyFilter && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilters(NO_FILTERS)}
+                data-testid="model-search-clear-filters"
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        )}
 
-      <ul className="flex flex-col gap-2">
-        {items.map(({ card, fit, estimatedQ4Bytes }) => (
-          <li key={card.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(card.id, card.source)}
-              data-testid={`model-result-${card.id}`}
-              className="flex w-full flex-col gap-1.5 rounded-lg border border-border bg-card p-3 text-left hover:bg-muted/50"
-            >
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate font-mono text-sm font-semibold">
-                  {card.id}
-                </span>
-                <FitBadge fit={fit} />
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                {card.sizes && card.sizes.length > 0 ? (
-                  <Badge variant="secondary" data-testid="model-result-sizes">
-                    {card.sizes.map((z) => `${z}B`).join(" · ")}
-                  </Badge>
-                ) : card.paramsBillions !== null && (
-                  <Badge variant="secondary">{card.paramsBillions}B params</Badge>
-                )}
-                <CapabilityBadges capabilities={card.capabilities} />
-                {estimatedQ4Bytes !== null && (
-                  <span>
-                    {card.sizes && card.sizes.length > 1 && card.paramsBillions !== null
-                      ? `${card.paramsBillions}B: `
-                      : ""}~{formatBytes(estimatedQ4Bytes)} at 4-bit
-                  </span>
-                )}
-                {formatContext(card.contextLength) && (
-                  <span>· {formatContext(card.contextLength)}</span>
-                )}
-                {card.downloads > 0 && <span>· {formatCount(card.downloads)} downloads</span>}
-              </div>
-              {fit && (
-                <p className="text-xs text-muted-foreground" data-testid="model-result-reason">
-                  {fit.reason}
-                </p>
-              )}
-            </button>
-          </li>
-        ))}
-      </ul>
+        <ul className="flex flex-col gap-2">
+          {items.map((item) => (
+            <ModelResultItem key={item.card.id} item={item} onSelect={onSelect} />
+          ))}
+        </ul>
 
-      {hasMore && (
-        <div ref={sentinel} className="flex justify-center py-2">
-          {loadingMore ? (
-            <p className="text-xs text-muted-foreground">Loading more…</p>
-          ) : (
-            <Button variant="ghost" size="sm" onClick={loadMore} data-testid="model-search-load-more">
-              Load more
-            </Button>
-          )}
-        </div>
-      )}
-      {!loading && !hasMore && !offline && items.length > 0 && effectiveSort !== "recommended" && (
-        <p className="py-2 text-center text-xs text-muted-foreground" data-testid="model-search-end">
-          End of results
-        </p>
+        {hasMore && (
+          <div ref={sentinel} className="flex justify-center py-2">
+            {loadingMore ? (
+              <p className="text-xs text-muted-foreground">Loading more…</p>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={loadMore} data-testid="model-search-load-more">
+                Load more
+              </Button>
+            )}
+          </div>
+        )}
+        {!loading && !hasMore && !offline && items.length > 0 && effectiveSort !== "recommended" && (
+          <p className="py-2 text-center text-xs text-muted-foreground" data-testid="model-search-end">
+            End of results
+          </p>
+        )}
+        </>
       )}
     </div>
   );

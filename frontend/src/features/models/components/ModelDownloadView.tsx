@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDownloads } from "@/features/models/DownloadsContext";
+import { useModels } from "@/features/models/ModelsContext";
+import { allModelChoices, currentChoice } from "@/features/models/lib/modelChoices";
 import {
   getPreflight,
   type Download,
@@ -139,6 +141,8 @@ function DownloadRow({ item }: { item: Download }) {
 
 export function ModelDownloadView() {
   const { downloads, start, requestedName, clearRequest } = useDownloads();
+  const { optionGroups, current } = useModels();
+  const advisorChoices = allModelChoices(optionGroups);
   const [name, setName] = useState("");
   const [info, setInfo] = useState<Preflight | null>(null);
   const [checking, setChecking] = useState(false);
@@ -229,7 +233,11 @@ export function ModelDownloadView() {
           )}
           {/* stays mounted behind the detail so Back keeps the query, chips and loaded pages */}
           <div hidden={selected !== null}>
-            <ModelSearch onSelect={(id, source) => setSelected({ id, source })} />
+            <ModelSearch
+              onSelect={(id, source) => setSelected({ id, source })}
+              advisorChoices={advisorChoices}
+              advisorDefault={current.model ? currentChoice(current) : null}
+            />
           </div>
           {downloads.length > 0 && (
             <p className="mt-2 text-sm font-medium">Downloads</p>

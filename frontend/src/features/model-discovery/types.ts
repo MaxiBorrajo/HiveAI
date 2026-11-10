@@ -43,6 +43,15 @@ export interface SearchResultItem {
   estimatedQ4Bytes: number | null;
 }
 
+/** Models a chosen LLM picked from the library for a free-text request. */
+export interface SuggestResult {
+  items: SearchResultItem[];
+  /** One short sentence per model, keyed by `card.id` */
+  reasons: Record<string, string>;
+  /** Set when nothing matched */
+  message?: string;
+}
+
 export interface SearchResult {
   items: SearchResultItem[];
   /** cursor for the next page, null when the results are exhausted */

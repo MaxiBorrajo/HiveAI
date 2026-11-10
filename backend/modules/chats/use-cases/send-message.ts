@@ -29,6 +29,7 @@ import { boundHistoryForCloud } from "../../../core/ai/token-savings/bounded-his
 import { withCompactionListener } from "../../../core/ai/token-savings/notice.ts";
 import { normalizeModelRef, type ModelRef } from "../../../core/ai/providers/types.ts";
 import { HumanMessage, SystemMessage, type BaseMessage } from "@langchain/core/messages";
+import { type ModelSuggestion, suggestModelsForTurn } from "./suggest-models.ts";
 
 const MAX_MESSAGE_LENGTH = 100_000;
 
@@ -88,6 +89,7 @@ async function persistAssistantMessage(
   thinkingRuns: ThinkingRun[],
   wasStopped = false,
   usageGroupId?: string,
+  modelSuggestion?: ModelSuggestion | null,
 ): Promise<number> {
   const chatRepo = new ChatRepository(db);
   const msgRepo = new MessageRepository(db);
@@ -110,6 +112,8 @@ async function persistAssistantMessage(
       steps,
       thinkingRuns,
       ...(wasStopped ? { wasStopped } : {}),
+      // kept in metadata, never in `content`: it must not reach the embedding or the model's history
+      ...(modelSuggestion ? { modelSuggestion } : {}),
     }),
     vector: JSON.stringify(vector),
   });
@@ -454,6 +458,21 @@ export async function sendMessage(
 
     const usedTools = usedToolsOf(steps);
 
+    // "Try these models" note for the end of the answer. Its small-model call
+    // (if any) is billed to this turn's usage group.
+    const modelSuggestion = await withUsageContext(
+      { kind: "chat", role: "delegate", chatId: resolvedChatId, groupId: usageGroupId },
+      () =>
+        suggestModelsForTurn({
+          text: userText,
+          hasImage: attachmentParts.some((p) => p.type === "image"),
+          hasDocument: attachmentParts.some((p) => p.type === "text"),
+          currentRef: { provider: modelProvider, model, keyId: modelKeyId },
+          hive,
+        }),
+    );
+    if (modelSuggestion) send("model_suggestion", modelSuggestion);
+
     const messageId = await persistAssistantMessage(
       db,
       resolvedChatId,
@@ -463,6 +482,7 @@ export async function sendMessage(
       thinkingRuns,
       false,
       usageGroupId,
+      modelSuggestion,
     );
 
     send("done", {

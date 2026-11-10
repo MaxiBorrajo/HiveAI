@@ -6,6 +6,7 @@ import { MessageMarkdown } from "./MessageMarkdown.tsx";
 import { StepsPanel } from "./StepsPanel.tsx";
 import { MessageUsageLine } from "./MessageUsageLine.tsx";
 import { AttachmentsList } from "./AttachmentsList.tsx";
+import { ModelSuggestionFooter } from "./ModelSuggestionFooter.tsx";
 import { useChats } from "../ChatsContext.tsx";
 import { reportError, reportSuccess } from "@/lib/toastManager";
 
@@ -50,8 +51,11 @@ function ForkButton({
 
 export const ChatMessage = memo(function ChatMessage({
   message,
+  isLast = false,
 }: {
   message: Message;
+  /** The model suggestion only makes sense under the latest answer */
+  isLast?: boolean;
 }) {
   const isAgent = message.role === "agent";
   const [stepsOpen, setStepsOpen] = useState(false);
@@ -85,6 +89,9 @@ export const ChatMessage = memo(function ChatMessage({
             <MessageMarkdown content={message.content} />
           )}
         </div>
+        {isLast && !message.isError && !message.wasStopped && message.modelSuggestion && (
+          <ModelSuggestionFooter suggestion={message.modelSuggestion} />
+        )}
         {message.wasStopped && (
           <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             <OctagonXIcon className="size-3.5 shrink-0" />
