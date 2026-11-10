@@ -19,6 +19,7 @@ import {
 } from "@/features/models/api/pullEmbeddingModel";
 import { reportError } from "@/lib/toastManager";
 import { AttachmentsList } from "./AttachmentsList.tsx";
+import { useScanProgress } from "../hooks/useScanProgress.ts";
 import {
   ACCEPTED_ATTACHMENT_TYPES,
   attachmentProblem,
@@ -76,6 +77,7 @@ export function ChatInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  useScanProgress(attachments, onAttachmentsChange);
 
   async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList || fileList.length === 0 || !onAttachmentsChange) return;

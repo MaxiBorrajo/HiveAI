@@ -34,6 +34,7 @@ import { ModelUsageRepository } from "../../../../infrastructure/db/repositories
 import { AttachmentRepository } from "../../../../infrastructure/db/repositories/attachment-repository.ts";
 import { saveAttachment } from "../../../../core/attachments/attachment-storage.ts";
 import { buildAttachmentContent } from "../../../../core/attachments/build-attachment-content.ts";
+import { ensureScansRead } from "../../../../core/attachments/scan-recognition.ts";
 import {
   attachmentBudget,
   OLLAMA_DEFAULT_NUM_CTX,
@@ -226,6 +227,7 @@ async function resolveInputAttachments(
     keyId: config.get("modelKeyId"),
   });
 
+  await ensureScansRead(config.get("dataDir"), new AttachmentRepository(db), attachmentIds);
   const { parts, warnings } = await buildAttachmentContent(
     config.get("dataDir"),
     new AttachmentRepository(db),

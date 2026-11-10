@@ -158,7 +158,7 @@ Deno.test("a damaged or textless document is rejected and leaves no file behind"
   await assertRejects(() => upload("a.docx", "not a zip"), AppError);
   const textless = await zip({ "word/document.xml": "<w:document/>" });
   const error = await assertRejects(() => upload("b.docx", textless), AppError);
-  assertStringIncludes(error.message, "no text to extract");
+  assertStringIncludes(error.message, "no text or images to read");
   const stored = [...Deno.readDirSync(`${dataDir}/attachments`)];
   assertEquals(stored, []);
 });

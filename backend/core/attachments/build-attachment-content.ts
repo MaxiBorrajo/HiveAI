@@ -4,7 +4,17 @@ import type { ModelRef } from "../ai/providers/types.ts";
 import {
   isTextMimeType,
   isImageMimeType,
+  MAX_IMAGE_SIZE_BYTES,
 } from "./attachment-limits.ts";
+import {
+  composeScannedText,
+  loadScanImage,
+  scanProgress,
+} from "./scanned-content.ts";
+
+// Every page is an image the model pays for: the rest goes as OCR text.
+const MAX_SCAN_IMAGES_PER_MESSAGE = 10;
+const VISION_RENDER_SCALE = 1.5;
 import {
   readAttachment,
   readAttachmentText,
@@ -55,19 +65,16 @@ export async function buildAttachmentContent(
   const warnings: string[] = [];
   const sentChars = new Map<number, number>();
   let totalTextChars = 0;
-  let visionChecked = false;
-  let hasVision = false;
+  let scanImagesLeft = MAX_SCAN_IMAGES_PER_MESSAGE;
+  let hasVision: boolean | undefined;
+  const vision = async () => (hasVision ??= await modelSupportsVision(modelRef));
 
   for (const id of attachmentIds) {
     const row = await repo.findById(id);
     if (!row) throw new AppError(`Attachment ${id} not found.`, 404);
 
     if (isImageMimeType(row.mimeType)) {
-      if (!visionChecked) {
-        hasVision = await modelSupportsVision(modelRef);
-        visionChecked = true;
-      }
-      if (!hasVision) {
+      if (!(await vision())) {
         throw new AppError(
           `'${row.originalName}' is an image, but the active model (${modelRef.model}) does not support image input. Remove it or switch to a vision model.`,
           422,
@@ -78,7 +85,45 @@ export async function buildAttachmentContent(
       continue;
     }
 
-    const text = await attachmentText(dataDir, row);
+    // Scanned pages and images in documents: the model sees them itself when
+    // it can, and reads the OCR text otherwise.
+    const imaged = new Set<string>();
+    if (row.scan) {
+      const { scan } = row;
+      if (await vision()) {
+        for (const source of scan.sources) {
+          if (scanImagesLeft === 0) break;
+          try {
+            const image = await loadScanImage(dataDir, row, source, VISION_RENDER_SCALE);
+            if (image.bytes.length > MAX_IMAGE_SIZE_BYTES) continue;
+            parts.push(
+              { type: "text", text: `[${row.originalName}: ${source.label}]` },
+              { type: "image", mimeType: image.mimeType, data: toBase64(image.bytes) },
+            );
+            imaged.add(source.key);
+            scanImagesLeft--;
+          } catch (error) {
+            console.error(`[Attachments] Could not prepare ${source.label} of '${row.originalName}':`, error);
+          }
+        }
+        if (imaged.size < scan.sources.length) {
+          warnings.push(
+            `'${row.originalName}': ${imaged.size} of its ${scan.sources.length} scanned pages or images went to the model as images; the rest go as text read by OCR.`,
+          );
+        }
+      } else if (scan.status === "pending") {
+        const { done, total } = scanProgress(scan);
+        warnings.push(
+          `'${row.originalName}': its scanned pages or images are still being read (${done} of ${total}). The model only gets the ones ready so far.`,
+        );
+      } else if (scan.status === "failed") {
+        warnings.push(
+          `'${row.originalName}': its scanned pages or images could not be read (${scan.error}). A model with image support can read them.`,
+        );
+      }
+    }
+
+    const text = await attachmentText(dataDir, row, imaged);
     if (text === undefined) continue;
     const filePath = join(dataDir, row.storagePath);
 
@@ -111,15 +156,19 @@ export async function buildAttachmentContent(
   return { parts, warnings, sentChars };
 }
 
+/** `imaged`: scanned sources sent as images, so their OCR text is left out. */
 export async function attachmentText(
   dataDir: string,
   row: Attachment,
+  imaged: Set<string> = new Set(),
 ): Promise<string | undefined> {
+  let text: string | undefined;
   if (isTextMimeType(row.mimeType)) {
-    return await readAttachmentText(dataDir, row.storagePath);
+    text = await readAttachmentText(dataDir, row.storagePath);
+  } else if (row.extractedTextPath) {
+    text = await readAttachmentText(dataDir, row.extractedTextPath);
   }
-  if (row.extractedTextPath) {
-    return await readAttachmentText(dataDir, row.extractedTextPath);
-  }
-  return undefined;
+  return text !== undefined && row.scan
+    ? composeScannedText(text, row.scan, imaged)
+    : text;
 }

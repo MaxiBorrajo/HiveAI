@@ -27,6 +27,7 @@ import {
 } from "../../../core/attachments/build-attachment-content.ts";
 import { toHumanContent } from "../../../core/attachments/to-human-content.ts";
 import { scheduleAttachmentIndexing } from "../../../core/attachments/attachment-index.ts";
+import { ensureScansRead } from "../../../core/attachments/scan-recognition.ts";
 import {
   retrieveAttachmentExcerpts,
   type Retrieval,
@@ -105,9 +106,9 @@ async function searchChatFiles(
   try {
     const repo = new AttachmentRepository(db);
     // Files from before search existed, or whose indexing a restart cut short.
-    for (const id of await repo.findUnindexedChatIds(chatId)) {
-      scheduleAttachmentIndexing(dataDir, repo, id);
-    }
+    const unindexed = await repo.findUnindexedChatIds(chatId);
+    for (const id of unindexed) scheduleAttachmentIndexing(dataDir, repo, id);
+    await ensureScansRead(dataDir, repo, unindexed);
     return await retrieveAttachmentExcerpts({
       repo,
       chatId,

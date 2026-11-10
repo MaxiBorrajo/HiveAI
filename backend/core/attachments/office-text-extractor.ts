@@ -1,10 +1,19 @@
-import { TextWriter, Uint8ArrayReader, ZipReader } from "@zip-js/zip-js";
+import {
+  TextWriter,
+  Uint8ArrayReader,
+  Uint8ArrayWriter,
+  ZipReader,
+} from "@zip-js/zip-js";
+import { scanMarker, type ExtractedDocument, type ScanSource } from "./scanned-content.ts";
 
 // A few MB of zipped XML can expand a lot: refuse to inflate past this.
 const MAX_XML_BYTES = 50 * 1024 * 1024;
 
 const WORD_DOCUMENT = "word/document.xml";
 const SLIDE_PATH = /^ppt\/slides\/slide(\d+)\.xml$/;
+// Formats Tesseract and every vision model read; drawings like EMF are skipped.
+const IMAGE_PATH = /^(?:word|ppt)\/media\/[^/]*?(\d*)\.(png|jpe?g)$/i;
+export const MAX_DOCUMENT_IMAGES = 20;
 
 const WORD_TOKEN =
   /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:tab\/>|<w:br(?:\s[^>]*)?\/>|<w:tc(?:\s[^>]*)?>|<\/w:p>|<\/w:tc>|<\/w:tr>/g;
@@ -33,20 +42,54 @@ function decodeXml(text: string): string {
 async function readZipTexts(
   bytes: Uint8Array,
   wanted: (path: string) => boolean,
-): Promise<Map<string, string>> {
+): Promise<{ texts: Map<string, string>; images: ScanSource[] }> {
   const reader = new ZipReader(new Uint8ArrayReader(bytes), {
     useWebWorkers: false,
   });
   try {
     const texts = new Map<string, string>();
+    const imagePaths: string[] = [];
     let inflated = 0;
     for (const entry of await reader.getEntries()) {
-      if (entry.directory || !wanted(entry.filename)) continue;
+      if (entry.directory) continue;
+      if (IMAGE_PATH.test(entry.filename)) imagePaths.push(entry.filename);
+      if (!wanted(entry.filename)) continue;
       inflated += entry.uncompressedSize;
       if (inflated > MAX_XML_BYTES) throw new Error("the document is too large");
       texts.set(entry.filename, await entry.getData(new TextWriter()));
     }
-    return texts;
+    return { texts, images: imageSources(imagePaths) };
+  } finally {
+    await reader.close();
+  }
+}
+
+function imageSources(paths: string[]): ScanSource[] {
+  const order = (path: string) => Number(IMAGE_PATH.exec(path)![1] || 0);
+  return paths
+    .sort((a, b) => order(a) - order(b) || a.localeCompare(b))
+    .slice(0, MAX_DOCUMENT_IMAGES)
+    .map((path, i) => ({
+      key: `m${i + 1}`,
+      label: `Image ${path.slice(path.lastIndexOf("/") + 1)}`,
+      mediaPath: path,
+      mimeType: IMAGE_PATH.exec(path)![2].toLowerCase() === "png"
+        ? "image/png"
+        : "image/jpeg",
+    }));
+}
+
+export async function readZipEntry(
+  bytes: Uint8Array,
+  path: string,
+): Promise<Uint8Array> {
+  const reader = new ZipReader(new Uint8ArrayReader(bytes), {
+    useWebWorkers: false,
+  });
+  try {
+    const entry = (await reader.getEntries()).find((e) => e.filename === path);
+    if (!entry || entry.directory) throw new Error(`'${path}' is not in the document`);
+    return await entry.getData(new Uint8ArrayWriter());
   } finally {
     await reader.close();
   }
@@ -78,20 +121,32 @@ function slideXmlToText(xml: string): string {
   return out.replace(/\n{2,}/g, "\n").trim();
 }
 
-function requireText(text: string): string {
-  if (!text) throw new Error("the document has no text to extract");
-  return text;
+/** Images go last, each with a marker where OCR text will go. */
+function withImages(text: string, images: ScanSource[]): ExtractedDocument {
+  if (!text && images.length === 0) {
+    throw new Error("the document has no text or images to read");
+  }
+  if (images.length === 0) return { text, sources: [] };
+  const markers = images.map((image) => scanMarker(image.key)).join("\n\n");
+  return {
+    text: `${text}\n\n--- Images in the document ---\n${markers}`.trimStart(),
+    sources: images,
+  };
 }
 
-export async function extractTextFromDocx(bytes: Uint8Array): Promise<string> {
-  const xml = (await readZipTexts(bytes, (p) => p === WORD_DOCUMENT))
-    .get(WORD_DOCUMENT);
+export async function extractTextFromDocx(
+  bytes: Uint8Array,
+): Promise<ExtractedDocument> {
+  const { texts, images } = await readZipTexts(bytes, (p) => p === WORD_DOCUMENT);
+  const xml = texts.get(WORD_DOCUMENT);
   if (xml === undefined) throw new Error("it is not a valid Word document");
-  return requireText(wordXmlToText(xml));
+  return withImages(wordXmlToText(xml), images);
 }
 
-export async function extractTextFromPptx(bytes: Uint8Array): Promise<string> {
-  const slides = await readZipTexts(bytes, (p) => SLIDE_PATH.test(p));
+export async function extractTextFromPptx(
+  bytes: Uint8Array,
+): Promise<ExtractedDocument> {
+  const { texts: slides, images } = await readZipTexts(bytes, (p) => SLIDE_PATH.test(p));
   if (slides.size === 0) throw new Error("it is not a valid PowerPoint file");
 
   const slideNumber = (path: string) => Number(SLIDE_PATH.exec(path)![1]);
@@ -102,7 +157,8 @@ export async function extractTextFromPptx(bytes: Uint8Array): Promise<string> {
       text: slideXmlToText(slides.get(path)!),
     }))
     .filter((slide) => slide.text);
-  return requireText(
+  return withImages(
     sections.map((s) => `--- Slide ${s.number} ---\n${s.text}`).join("\n\n"),
+    images,
   );
 }

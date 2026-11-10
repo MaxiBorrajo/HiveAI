@@ -5,6 +5,8 @@ import { ResponseBuilder } from "../../core/api/response.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
 import { AttachmentRepository } from "../../infrastructure/db/repositories/attachment-repository.ts";
 import { scheduleAttachmentIndexing } from "../../core/attachments/attachment-index.ts";
+import { scheduleAttachmentRecognition } from "../../core/attachments/scan-recognition.ts";
+import { toAttachmentDto } from "./types.ts";
 import { createAttachment } from "./use-cases/create-attachment.ts";
 import { getChatAttachments } from "./use-cases/get-chat-attachments.ts";
 import {
@@ -26,6 +28,7 @@ function depsFor(hive: HiveMicrokernel): AttachmentDeps {
     repo,
     dataDir,
     scheduleIndexing: (id) => scheduleAttachmentIndexing(dataDir, repo, id),
+    scheduleRecognition: (id) => scheduleAttachmentRecognition(dataDir, repo, id),
   };
 }
 
@@ -106,6 +109,19 @@ attachmentsRouter.get("/execution-history/:historyId/attachments", async (c) => 
     const historyId = parseId(c.req.param("historyId"), "historyId");
     const dtos = await getExecutionHistoryAttachments(depsFor(c.get("hive")), historyId);
     return ResponseBuilder.success(dtos, { headers });
+  } catch (error) {
+    return handleAppError(error, headers);
+  }
+});
+
+// Polled by the UI to show how far OCR got on a file.
+attachmentsRouter.get("/attachments/:id", async (c) => {
+  const headers = { "content-type": "application/json" };
+  try {
+    const id = parseId(c.req.param("id"), "id");
+    const row = await depsFor(c.get("hive")).repo.findById(id);
+    if (!row) throw new AppError("Attachment not found.", 404);
+    return ResponseBuilder.success(toAttachmentDto(row), { headers });
   } catch (error) {
     return handleAppError(error, headers);
   }

@@ -48,7 +48,8 @@ export async function indexAttachment(
   embed: Embed,
 ): Promise<void> {
   const row = await repo.findById(id);
-  if (!row || row.indexedAt !== null) return;
+  // A file with scanned pages is indexed once OCR has read them.
+  if (!row || row.indexedAt !== null || row.scan?.status === "pending") return;
   const text = await attachmentText(dataDir, row);
   if (text === undefined) return;
 

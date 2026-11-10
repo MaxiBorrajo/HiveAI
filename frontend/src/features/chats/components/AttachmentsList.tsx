@@ -19,6 +19,12 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function scanLabel(scan: AttachmentDto["scan"]): string | null {
+  if (scan?.status === "pending") return `Reading images ${scan.done}/${scan.total}`;
+  if (scan?.status === "failed") return "Images could not be read";
+  return null;
+}
+
 function statusLabel(status: AttachmentDto["status"]): string | null {
   switch (status) {
     case "rejected_size":
@@ -70,7 +76,9 @@ export function AttachmentsList({
                 {attachment.originalName}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                {problem ?? formatSize(attachment.sizeBytes)}
+                {problem ??
+                  scanLabel(attachment.scan) ??
+                  formatSize(attachment.sizeBytes)}
               </p>
             </div>
 

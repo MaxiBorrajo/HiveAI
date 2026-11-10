@@ -22,6 +22,10 @@ import {
   extractTextFromDocx,
   extractTextFromPptx,
 } from "../../../core/attachments/office-text-extractor.ts";
+import type {
+  ExtractedDocument,
+  ScanState,
+} from "../../../core/attachments/scanned-content.ts";
 import type { AttachmentDeps, AttachmentDto } from "../types.ts";
 import { toAttachmentDto } from "../types.ts";
 
@@ -30,7 +34,9 @@ export interface AttachmentOwner {
   executionId?: number;
 }
 
-type TextExtractor = (bytes: Uint8Array) => string | Promise<string>;
+type TextExtractor = (
+  bytes: Uint8Array,
+) => string | Promise<string | ExtractedDocument>;
 
 function textExtractorFor(mimeType: string): TextExtractor | undefined {
   if (isPdfMimeType(mimeType)) return extractTextFromPdf;
@@ -71,13 +77,16 @@ export async function createAttachment(
   const storagePath = await saveAttachment(deps.dataDir, bytes, file.name);
 
   let extractedTextPath: string | undefined;
+  let scan: ScanState | null = null;
   const extractor = textExtractorFor(mimeType);
   if (extractor) {
     try {
-      extractedTextPath = await saveExtractedText(
-        deps.dataDir,
-        await extractor(bytes),
-      );
+      const extracted = await extractor(bytes);
+      const { text, sources } = typeof extracted === "string"
+        ? { text: extracted, sources: [] }
+        : extracted;
+      extractedTextPath = await saveExtractedText(deps.dataDir, text);
+      if (sources.length > 0) scan = { sources, texts: {}, status: "pending" };
     } catch (error) {
       await deleteAttachmentFile(deps.dataDir, storagePath);
       const detail = error instanceof Error ? error.message : String(error);
@@ -98,10 +107,14 @@ export async function createAttachment(
     extractedTextPath: extractedTextPath ?? null,
     status: "ready",
     createdAt: Date.now(),
+    scan,
   });
 
-  // Runs read their files whole: only chats search them.
-  if (owner.executionId === undefined && !isImageMimeType(mimeType)) {
+  // OCR indexes a chat file itself once its scanned pages are read. Runs
+  // read their files whole: only chats search them.
+  if (scan) {
+    deps.scheduleRecognition?.(row.id);
+  } else if (owner.executionId === undefined && !isImageMimeType(mimeType)) {
     deps.scheduleIndexing?.(row.id);
   }
 
