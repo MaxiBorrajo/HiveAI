@@ -1,6 +1,7 @@
 import { AppError } from "../../../core/api/errors.ts";
 import {
   MAX_FILE_SIZE_BYTES,
+  MAX_IMAGE_SIZE_BYTES,
   SUPPORTED_FORMATS_LABEL,
   isDocxMimeType,
   isExcelMimeType,
@@ -50,9 +51,11 @@ export async function createAttachment(
     file.type || "application/octet-stream",
   );
 
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  const isImage = isImageMimeType(mimeType);
+  const maxBytes = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+  if (file.size > maxBytes) {
     throw new AppError(
-      `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit.`,
+      `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${maxBytes / 1024 / 1024}MB limit for ${isImage ? "images" : "files"}.`,
       413,
     );
   }

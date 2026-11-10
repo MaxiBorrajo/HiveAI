@@ -20,7 +20,9 @@ const SUPPORTED_EXTENSIONS = [
   ".gif",
   ".webp",
 ];
-const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 export const ACCEPTED_ATTACHMENT_TYPES = SUPPORTED_EXTENSIONS.join(",");
 
@@ -31,8 +33,10 @@ export function attachmentProblem(file: File): string | null {
   if (!SUPPORTED_EXTENSIONS.includes(extension)) {
     return `'${file.name}' is not a supported file type. Supported: ${SUPPORTED_EXTENSIONS.join(", ")}.`;
   }
-  if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-    return `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${MAX_ATTACHMENT_SIZE_BYTES / 1024 / 1024}MB limit.`;
+  const isImage = IMAGE_EXTENSIONS.includes(extension);
+  const maxBytes = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+  if (file.size > maxBytes) {
+    return `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${maxBytes / 1024 / 1024}MB limit for ${isImage ? "images" : "files"}.`;
   }
   return null;
 }

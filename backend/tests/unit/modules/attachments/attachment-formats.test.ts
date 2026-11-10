@@ -135,6 +135,17 @@ Deno.test("an image becomes an image part on a vision model", async () => {
   ]);
 });
 
+Deno.test("documents may weigh up to 50MB, images only up to 5MB", async () => {
+  const { upload } = await setup();
+  const megabytes = (n: number) => new Uint8Array(n * 1024 * 1024).fill(97);
+
+  assertEquals((await upload("big.txt", megabytes(20))).sizeBytes, 20 * 1024 * 1024);
+  const tooBig = await assertRejects(() => upload("huge.txt", megabytes(51)), AppError);
+  assertEquals(tooBig.status, 413);
+  const image = await assertRejects(() => upload("photo.png", megabytes(6)), AppError);
+  assertStringIncludes(image.message, "5MB limit for images");
+});
+
 Deno.test("an unsupported format is rejected naming the supported ones", async () => {
   const { upload } = await setup();
   const error = await assertRejects(() => upload("a.exe", "x"), AppError);

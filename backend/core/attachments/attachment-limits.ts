@@ -1,6 +1,8 @@
 import { extname } from "node:path";
 
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+// Anthropic rejects larger images; failing on upload beats failing on send.
+export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 export const MAX_TOTAL_CONTEXT_CHARS = 100_000;
 
 export const TEXT_MIME_TYPES = new Set([

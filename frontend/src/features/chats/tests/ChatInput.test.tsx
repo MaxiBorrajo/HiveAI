@@ -93,20 +93,34 @@ describe("ChatInput attachments", () => {
     expect(uploadChatAttachment).not.toHaveBeenCalled();
   });
 
-  it("does not upload a file over the size limit", async () => {
+  it.each([
+    ["huge.pdf", 51, "exceeds the 50MB limit for files"],
+    ["huge.png", 6, "exceeds the 5MB limit for images"],
+  ])("does not upload %s, over its size limit", async (name, megabytes, message) => {
     const { container } = render(<Harness />);
-    const huge = new File(["x"], "huge.pdf");
-    Object.defineProperty(huge, "size", { value: 11 * 1024 * 1024 });
+    const huge = new File(["x"], name);
+    Object.defineProperty(huge, "size", { value: megabytes * 1024 * 1024 });
 
     fireEvent.change(container.querySelector('input[type="file"]')!, {
       target: { files: [huge] },
     });
 
     await waitFor(() =>
-      expect(reportError).toHaveBeenCalledWith([
-        expect.stringContaining("exceeds the 10MB limit"),
-      ]),
+      expect(reportError).toHaveBeenCalledWith([expect.stringContaining(message)]),
     );
     expect(uploadChatAttachment).not.toHaveBeenCalled();
+  });
+
+  it("uploads a document over the old 10MB limit", async () => {
+    vi.mocked(uploadChatAttachment).mockResolvedValueOnce({ data: dto(1, "big.pdf") } as never);
+    const { container } = render(<Harness />);
+    const big = new File(["x"], "big.pdf");
+    Object.defineProperty(big, "size", { value: 20 * 1024 * 1024 });
+
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [big] },
+    });
+
+    await waitFor(() => expect(screen.getByText("big.pdf")).toBeTruthy());
   });
 });

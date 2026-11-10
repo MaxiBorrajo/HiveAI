@@ -25,7 +25,8 @@ The legacy binary formats `.doc` and `.ppt` are not supported.
 
 - The extension decides the format. The type reported by the browser is only
   used when the extension is unknown, because it varies by operating system.
-- Files are limited to 10 MB. The UI and the backend both check it.
+- Files are limited to 50 MB, and images to 5 MB because providers reject
+  larger ones. The UI and the backend both check it.
 - A file that cannot be read, or a Word or PowerPoint file with no text, is
   rejected on upload.
 - An image sent to a model without vision rejects the message.
