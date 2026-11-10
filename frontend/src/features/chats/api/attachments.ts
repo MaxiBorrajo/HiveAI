@@ -3,8 +3,43 @@ import type { ResponseEntity } from "../../../lib/config";
 
 const quiet = { silenceErrorToast: true };
 
-export const ACCEPTED_ATTACHMENT_TYPES =
-  ".txt,.md,.csv,.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp";
+const SUPPORTED_EXTENSIONS = [
+  ".txt",
+  ".md",
+  ".markdown",
+  ".csv",
+  ".json",
+  ".pdf",
+  ".docx",
+  ".xlsx",
+  ".xls",
+  ".pptx",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+];
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+export const ACCEPTED_ATTACHMENT_TYPES = SUPPORTED_EXTENSIONS.join(",");
+
+/** Why this file cannot be attached, or null when it can. */
+export function attachmentProblem(file: File): string | null {
+  const dot = file.name.lastIndexOf(".");
+  const extension = dot === -1 ? "" : file.name.slice(dot).toLowerCase();
+  if (!SUPPORTED_EXTENSIONS.includes(extension)) {
+    return `'${file.name}' is not a supported file type. Supported: ${SUPPORTED_EXTENSIONS.join(", ")}.`;
+  }
+  const isImage = IMAGE_EXTENSIONS.includes(extension);
+  const maxBytes = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+  if (file.size > maxBytes) {
+    return `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${maxBytes / 1024 / 1024}MB limit for ${isImage ? "images" : "files"}.`;
+  }
+  return null;
+}
 
 export type AttachmentDirection = "input" | "output";
 export type AttachmentStatus =

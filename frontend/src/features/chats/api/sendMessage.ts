@@ -26,6 +26,7 @@ export interface StreamHandlers {
     conversationUsage: ConversationUsage | null,
   ) => void;
   onError: (message: string, rejected: boolean) => void;
+  onWarning?: (message: string) => void;
 }
 
 export async function sendMessage(
@@ -67,6 +68,8 @@ export async function sendMessage(
         );
       } else if (eventName === "error") {
         handlers.onError(payload.message, payload.rejected === true);
+      } else if (eventName === "warning") {
+        handlers.onWarning?.(payload.message);
       }
     },
     signal,

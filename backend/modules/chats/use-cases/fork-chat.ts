@@ -95,7 +95,7 @@ export async function forkChat(
           ? await copyAttachmentFile(dataDir, attachment.extractedTextPath)
           : null;
 
-        await attachmentRepo.create({
+        const copy = await attachmentRepo.create({
           chatId: newChatId,
           messageId: newMessageId,
           executionId: null,
@@ -108,7 +108,9 @@ export async function forkChat(
           extractedTextPath: newExtractedTextPath,
           status: attachment.status,
           createdAt: now,
+          indexedAt: attachment.indexedAt,
         });
+        attachmentRepo.copyChunks(attachment.id, copy.id);
       }
     }
 

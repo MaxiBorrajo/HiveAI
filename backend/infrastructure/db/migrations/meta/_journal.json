@@ -85,6 +85,20 @@
       "when": 1794097185203,
       "tag": "0011_massive_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794321518389,
+      "tag": "0012_backfill_attachment_chat_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794321520146,
+      "tag": "0013_attachment_search_index",
+      "breakpoints": true
     }
   ]
 }

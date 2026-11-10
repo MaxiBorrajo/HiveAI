@@ -34,7 +34,15 @@ import { ModelUsageRepository } from "../../../../infrastructure/db/repositories
 import { AttachmentRepository } from "../../../../infrastructure/db/repositories/attachment-repository.ts";
 import { saveAttachment } from "../../../../core/attachments/attachment-storage.ts";
 import { buildAttachmentContent } from "../../../../core/attachments/build-attachment-content.ts";
-import { normalizeModelRef } from "../../../../core/ai/providers/types.ts";
+import {
+  attachmentBudget,
+  OLLAMA_DEFAULT_NUM_CTX,
+} from "../../../../core/attachments/context-budget.ts";
+import { resolveLocalNumCtx } from "../../../../core/ai/providers/local-context.ts";
+import {
+  isCloudProvider,
+  normalizeModelRef,
+} from "../../../../core/ai/providers/types.ts";
 
 type CompiledGraph = ReturnType<typeof compileGraph>;
 type FinalState = Record<string, any>;
@@ -218,12 +226,20 @@ async function resolveInputAttachments(
     keyId: config.get("modelKeyId"),
   });
 
-  const { parts } = await buildAttachmentContent(
+  const { parts, warnings } = await buildAttachmentContent(
     config.get("dataDir"),
     new AttachmentRepository(db),
     attachmentIds,
     modelRef,
+    attachmentBudget(
+      isCloudProvider(modelRef.provider)
+        ? undefined
+        : await resolveLocalNumCtx(modelRef.model) ?? OLLAMA_DEFAULT_NUM_CTX,
+    ).attachmentChars,
   );
+  if (warnings.length > 0) {
+    send("warning", { warnings: warnings.map((reason) => ({ reason })) });
+  }
 
   return parts.length > 0 ? { attachments: parts } : {};
 }

@@ -2,11 +2,8 @@ import { join } from "node:path";
 import { AppError } from "../api/errors.ts";
 import type { ModelRef } from "../ai/providers/types.ts";
 import {
-  isPdfMimeType,
   isTextMimeType,
   isImageMimeType,
-  isExcelMimeType,
-  MAX_TOTAL_CONTEXT_CHARS,
 } from "./attachment-limits.ts";
 import {
   readAttachment,
@@ -37,19 +34,26 @@ function toBase64(bytes: Uint8Array): string {
 
 /**
  * Loads every attachment for the given ids and turns them into message
- * content parts the model can use: text/markdown, PDF, and Excel (already
+ * content parts the model can use: text files and documents (already
  * extracted) become text blocks labeled with the file name; images become an inline
  * base64 block only if the active model reports vision support, otherwise
- * the call fails with an explicit error — nothing is silently dropped or
- * truncated.
+ * the call fails with an explicit error. Text past the context budget is cut:
+ * the model reads a marker where it stops and `warnings` tells the user.
  */
 export async function buildAttachmentContent(
   dataDir: string,
   repo: AttachmentRepository,
   attachmentIds: number[],
   modelRef: ModelRef,
-): Promise<{ parts: AttachmentContentPart[] }> {
+  maxChars: number,
+): Promise<{
+  parts: AttachmentContentPart[];
+  warnings: string[];
+  sentChars: Map<number, number>;
+}> {
   const parts: AttachmentContentPart[] = [];
+  const warnings: string[] = [];
+  const sentChars = new Map<number, number>();
   let totalTextChars = 0;
   let visionChecked = false;
   let hasVision = false;
@@ -78,34 +82,43 @@ export async function buildAttachmentContent(
     if (text === undefined) continue;
     const filePath = join(dataDir, row.storagePath);
 
-    if (totalTextChars + text.length > MAX_TOTAL_CONTEXT_CHARS) {
-      await repo.updateStatus(id, "context_overflow");
-      throw new AppError(
-        `'${row.originalName}' does not fit in the model's context (the attached text would exceed ${MAX_TOTAL_CONTEXT_CHARS} characters). Remove an attachment or use a shorter file.`,
-        413,
+    const available = maxChars - totalTextChars;
+    if (available <= 0) {
+      sentChars.set(id, 0);
+      warnings.push(
+        `'${row.originalName}' was left out: the attachments already reach the limit of ${maxChars} characters for this model.`,
+      );
+      continue;
+    }
+    const included = text.slice(0, available);
+    const truncated = included.length < text.length;
+    if (truncated) {
+      warnings.push(
+        `'${row.originalName}' was cut: the model only reads its first ${included.length} of ${text.length} characters.`,
       );
     }
-    totalTextChars += text.length;
+    totalTextChars += included.length;
+    sentChars.set(id, truncated ? included.length : Infinity);
+    const marker = truncated
+      ? `\n[… file truncated: only the first ${included.length} of ${text.length} characters are shown …]`
+      : "";
     parts.push({
       type: "text",
-      text: `--- Attached file: ${row.originalName} (saved at: ${filePath}, read-only: never modify or write next to it) ---\n${text}`,
+      text: `--- Attached file: ${row.originalName} (saved at: ${filePath}, read-only: never modify or write next to it) ---\n${included}${marker}`,
     });
   }
 
-  return { parts };
+  return { parts, warnings, sentChars };
 }
 
-async function attachmentText(
+export async function attachmentText(
   dataDir: string,
   row: Attachment,
 ): Promise<string | undefined> {
   if (isTextMimeType(row.mimeType)) {
     return await readAttachmentText(dataDir, row.storagePath);
   }
-  if (
-    (isPdfMimeType(row.mimeType) || isExcelMimeType(row.mimeType)) &&
-    row.extractedTextPath
-  ) {
+  if (row.extractedTextPath) {
     return await readAttachmentText(dataDir, row.extractedTextPath);
   }
   return undefined;

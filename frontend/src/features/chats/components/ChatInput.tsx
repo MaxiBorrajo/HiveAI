@@ -21,6 +21,7 @@ import { reportError } from "@/lib/toastManager";
 import { AttachmentsList } from "./AttachmentsList.tsx";
 import {
   ACCEPTED_ATTACHMENT_TYPES,
+  attachmentProblem,
   uploadChatAttachment,
   type AttachmentDto,
 } from "../api/attachments.ts";
@@ -80,12 +81,19 @@ export function ChatInput({
     if (!fileList || fileList.length === 0 || !onAttachmentsChange) return;
     const files = Array.from(fileList);
     setIsUploading(true);
+    let uploaded = attachments;
     try {
       for (const file of files) {
+        const problem = attachmentProblem(file);
+        if (problem) {
+          reportError([problem]);
+          continue;
+        }
         try {
           const response = await uploadChatAttachment(chatId, file);
           if (response.data) {
-            onAttachmentsChange([...attachments, response.data]);
+            uploaded = [...uploaded, response.data];
+            onAttachmentsChange(uploaded);
           }
         } catch (error) {
           reportError([
