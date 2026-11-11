@@ -74,8 +74,23 @@ its content; the extension decides the format:
   later messages can ask about it.
 - A failed file (bad JSON, unsupported format, over 50 MB) does not end the
   turn: the model gets the reason and can fix it, and the user gets a warning.
-- The tool exists only in chat turns. Execution runs produce files through
-  plugins instead.
+- The tool exists only in chat turns; execution nodes cannot call it.
+
+## Files an execution delivers
+
+An execution whose end node has the `file` output type delivers a file:
+
+- If a plugin node wrote that file to disk (`file_ops`, `excel_write`), the
+  run copies it, as before.
+- Otherwise the run builds it from the end node's content (usually the last
+  LLM node's text), named as the end node declares (`result.md` if it declares
+  no name), with the same formats as the chat. Reasoning that some local models
+  write into their answer (`<think>` blocks) is left out.
+
+The file is attached to the run, where the result panel lists it with a
+preview and a download button. If it cannot be built (for example, a name
+ending in `.pdf`), the run still ends with its text result and shows a warning.
+See `modules/executions/use-cases/run-execution/deliverable-files.ts`.
 
 ## Searching files in a chat
 

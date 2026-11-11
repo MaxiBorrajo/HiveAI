@@ -9,11 +9,13 @@ import type {
   AttachmentRepository,
 } from "../../infrastructure/db/repositories/attachment-repository.ts";
 
-/** Where the files a chat turn creates go, and who hears about failures. */
+/** Where created files go (a chat or a run), and who hears about failures. */
 export interface GeneratedFilesContext {
   dataDir: string;
   repo: AttachmentRepository;
-  chatId: number;
+  chatId?: number;
+  executionId?: number;
+  executionHistoryId?: number;
   files: Attachment[];
   onFailure: (message: string) => void;
 }
@@ -82,10 +84,10 @@ export async function createGeneratedFile(
 
   const storagePath = await saveAttachment(context.dataDir, bytes, name);
   const row = await context.repo.create({
-    chatId: context.chatId,
+    chatId: context.chatId ?? null,
     messageId: null,
-    executionId: null,
-    executionHistoryId: null,
+    executionId: context.executionId ?? null,
+    executionHistoryId: context.executionHistoryId ?? null,
     direction: "output",
     originalName: name,
     mimeType,

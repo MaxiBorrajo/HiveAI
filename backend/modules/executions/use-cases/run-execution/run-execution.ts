@@ -35,6 +35,8 @@ import { AttachmentRepository } from "../../../../infrastructure/db/repositories
 import { saveAttachment } from "../../../../core/attachments/attachment-storage.ts";
 import { buildAttachmentContent } from "../../../../core/attachments/build-attachment-content.ts";
 import { ensureScansRead } from "../../../../core/attachments/scan-recognition.ts";
+import { createDeliverableFiles } from "./deliverable-files.ts";
+import type { ExecutionResult } from "../../../../core/ai/visual-builder/types.ts";
 import {
   attachmentBudget,
   OLLAMA_DEFAULT_NUM_CTX,
@@ -378,6 +380,14 @@ export async function runExecution(
               id,
               historyId,
               finalState,
+            );
+            await createDeliverableFiles(
+              hive.getConfig().get("dataDir"),
+              new AttachmentRepository(db),
+              id,
+              historyId,
+              finalState.result as ExecutionResult,
+              (reason) => send("warning", { warnings: [{ reason }] }),
             );
             send("done", {
               historyId,
