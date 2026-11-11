@@ -225,7 +225,7 @@ export function useChatSession() {
             }
             patchAgentMessage((m) => ({ ...m, content: m.content + token }));
           },
-          onDone: (finalContent, usedTools, steps, usage, conversationUsage) => {
+          onDone: (finalContent, usedTools, steps, usage, conversationUsage, files) => {
             patchAgentMessage((m) => ({
               ...m,
               content: finalContent,
@@ -233,6 +233,7 @@ export function useChatSession() {
               steps,
               thinkingRuns,
               usage,
+              ...(files.length > 0 ? { attachments: files } : {}),
             }));
             if (conversationUsage) usageState.set(conversationUsage, key);
             refreshChats();

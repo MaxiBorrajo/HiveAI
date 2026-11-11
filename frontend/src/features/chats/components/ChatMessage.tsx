@@ -85,6 +85,9 @@ export const ChatMessage = memo(function ChatMessage({
             <MessageMarkdown content={message.content} />
           )}
         </div>
+        {!!message.attachments?.length && (
+          <AttachmentsList attachments={message.attachments} className="mt-2" />
+        )}
         {message.wasStopped && (
           <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             <OctagonXIcon className="size-3.5 shrink-0" />

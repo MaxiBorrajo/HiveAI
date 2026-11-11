@@ -1,10 +1,12 @@
-import { Download, FileText, Image as ImageIcon, X } from "lucide-react";
+import { useState } from "react";
+import { Download, Eye, FileText, Image as ImageIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   attachmentDownloadUrl,
   type AttachmentDto,
 } from "../api/attachments";
+import { AttachmentPreview, canPreview } from "./AttachmentPreview";
 
 interface AttachmentsListProps {
   attachments: AttachmentDto[];
@@ -44,6 +46,7 @@ export function AttachmentsList({
   removing,
   className,
 }: AttachmentsListProps) {
+  const [previewing, setPreviewing] = useState<AttachmentDto | null>(null);
   if (attachments.length === 0) return null;
 
   return (
@@ -82,6 +85,17 @@ export function AttachmentsList({
               </p>
             </div>
 
+            {!problem && !onRemove && canPreview(attachment) && (
+              <button
+                type="button"
+                onClick={() => setPreviewing(attachment)}
+                title="Preview"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <Eye className="size-3.5" />
+              </button>
+            )}
+
             {!problem && !onRemove && (
               <a
                 href={attachmentDownloadUrl(attachment.id)}
@@ -109,6 +123,10 @@ export function AttachmentsList({
           </div>
         );
       })}
+      <AttachmentPreview
+        attachment={previewing}
+        onClose={() => setPreviewing(null)}
+      />
     </div>
   );
 }

@@ -55,6 +55,28 @@ language data is downloaded once into the data folder (`ocr/`); after that, OCR
 works offline. The recognized text is truncated and indexed for search like any
 other text: a chat file is indexed once OCR finishes.
 
+## Files the chat creates
+
+During a chat turn the model has a `create_file` tool
+(`backend/core/ai/strategy/shared/native-tools.ts`). It takes a file name and
+its content; the extension decides the format:
+
+| Extension | Saved as |
+| --- | --- |
+| `.md`, `.txt`, `.csv`, `.json` | The text as written. JSON must be valid |
+| `.docx` | A Word document built from the Markdown the model writes: headings, paragraphs, lists, quotes, code blocks, tables, bold, italic and links |
+| Code (`.py`, `.js`, `.html`, `.sql`, ...) | Plain text |
+
+- The file is saved as an output attachment of the reply, shown under it with
+  a download button and a preview (Markdown rendered, CSV as a table, JSON
+  indented, the text of Word documents).
+- It belongs to the chat: it is indexed for search like any other file, so
+  later messages can ask about it.
+- A failed file (bad JSON, unsupported format, over 50 MB) does not end the
+  turn: the model gets the reason and can fix it, and the user gets a warning.
+- The tool exists only in chat turns. Execution runs produce files through
+  plugins instead.
+
 ## Searching files in a chat
 
 Chat files are split into chunks and embedded locally with

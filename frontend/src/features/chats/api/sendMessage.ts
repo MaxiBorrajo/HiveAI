@@ -1,4 +1,5 @@
 import { postSse } from "../../../lib/sse";
+import type { AttachmentDto } from "./attachments";
 import type {
   ChatStep,
   ConversationUsage,
@@ -24,6 +25,7 @@ export interface StreamHandlers {
     steps: ChatStep[],
     usage: MessageUsage | null,
     conversationUsage: ConversationUsage | null,
+    files: AttachmentDto[],
   ) => void;
   onError: (message: string, rejected: boolean) => void;
   onWarning?: (message: string) => void;
@@ -65,6 +67,7 @@ export async function sendMessage(
           payload.steps ?? [],
           payload.usage ?? null,
           payload.conversationUsage ?? null,
+          payload.files ?? [],
         );
       } else if (eventName === "error") {
         handlers.onError(payload.message, payload.rejected === true);

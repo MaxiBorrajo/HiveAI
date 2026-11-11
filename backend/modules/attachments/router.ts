@@ -7,6 +7,7 @@ import { AttachmentRepository } from "../../infrastructure/db/repositories/attac
 import { scheduleAttachmentIndexing } from "../../core/attachments/attachment-index.ts";
 import { scheduleAttachmentRecognition } from "../../core/attachments/scan-recognition.ts";
 import { toAttachmentDto } from "./types.ts";
+import { attachmentText } from "../../core/attachments/build-attachment-content.ts";
 import { createAttachment } from "./use-cases/create-attachment.ts";
 import { getChatAttachments } from "./use-cases/get-chat-attachments.ts";
 import {
@@ -114,6 +115,28 @@ attachmentsRouter.get("/execution-history/:historyId/attachments", async (c) => 
   }
 });
 
+// The plain filename is ASCII for old clients; filename* keeps accents and spaces.
+function contentDisposition(fileName: string): string {
+  const ascii = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+// The file as text, for previews: documents give the text extracted from them.
+attachmentsRouter.get("/attachments/:id/text", async (c) => {
+  const headers = { "content-type": "application/json" };
+  try {
+    const id = parseId(c.req.param("id"), "id");
+    const deps = depsFor(c.get("hive"));
+    const row = await deps.repo.findById(id);
+    if (!row) throw new AppError("Attachment not found.", 404);
+    const text = await attachmentText(deps.dataDir, row);
+    if (text === undefined) throw new AppError("This file has no text to preview.", 415);
+    return ResponseBuilder.success({ text }, { headers });
+  } catch (error) {
+    return handleAppError(error, headers);
+  }
+});
+
 // Polled by the UI to show how far OCR got on a file.
 attachmentsRouter.get("/attachments/:id", async (c) => {
   const headers = { "content-type": "application/json" };
@@ -138,7 +161,7 @@ attachmentsRouter.get("/attachments/:id/download", async (c) => {
     return new Response(bytes as BodyInit, {
       headers: {
         "Content-Type": mimeType,
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+        "Content-Disposition": contentDisposition(fileName),
       },
     });
   } catch (error) {

@@ -131,6 +131,12 @@ export async function getAttachment(
   return (await apiClient.get(`/api/attachments/${id}`, quiet)).data;
 }
 
+export async function getAttachmentText(
+  id: number,
+): Promise<ResponseEntity<{ text: string }>> {
+  return (await apiClient.get(`/api/attachments/${id}/text`, quiet)).data;
+}
+
 export async function deleteAttachment(
   id: number,
 ): Promise<ResponseEntity<undefined>> {

@@ -3,6 +3,12 @@ import { z } from "zod";
 import { getORM } from "../../../../infrastructure/db/orm.ts";
 import { MessageRepository } from "../../../../infrastructure/db/repositories/message-repository.ts";
 import { humanInteractionQueue } from "../../../microkernel/human-interaction.ts";
+import {
+  createGeneratedFile,
+  GENERATED_FORMATS_LABEL,
+  generatedFilesStorage,
+  type GeneratedFilesContext,
+} from "../../../attachments/generated-files.ts";
 
 const RECALL_TOOL_NAME = "recall_past_conversations";
 const ASK_USER_TOOL_NAME = "ask_user";
@@ -24,6 +30,19 @@ const AskUserSchema = z.object({
     .optional()
     .describe(
       "If the answer is naturally one of a small, known set of choices (e.g. the candidate file paths you found, or a fixed set of preferences), list them here so the user can pick with one click instead of typing. Omit this entirely for open-ended questions (e.g. asking for a name, a value, free text).",
+    ),
+});
+
+const CREATE_FILE_TOOL_NAME = "create_file";
+
+const CreateFileSchema = z.object({
+  fileName: z
+    .string()
+    .describe("File name with its extension, e.g. 'report.docx', 'sales.csv', 'notes.md', 'script.py'."),
+  content: z
+    .string()
+    .describe(
+      "The whole content of the file. For .docx write Markdown (# headings, paragraphs, - or 1. lists, **bold**, *italic*, | tables |): it is turned into a Word document. For .csv use a header row.",
     ),
 });
 
@@ -89,8 +108,34 @@ function buildAskUserTool(): NativeTool {
   );
 }
 
+function buildCreateFileTool(context: GeneratedFilesContext): NativeTool {
+  return tool(
+    async ({ fileName, content }: z.infer<typeof CreateFileSchema>) => {
+      try {
+        const file = await createGeneratedFile(context, fileName, content);
+        return `Created '${file.originalName}' (${file.sizeBytes} bytes). It is attached to your reply, where the user can preview and download it: mention it briefly instead of repeating its content.`;
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        context.onFailure(`Could not create '${fileName}': ${detail}`);
+        throw new Error(`the file was not created. ${detail}`);
+      }
+    },
+    {
+      name: CREATE_FILE_TOOL_NAME,
+      description:
+        `Creates a file and attaches it to your reply in this chat, where the user can preview and download it. USE CASES: the user wants a result as a file (a document, report, table, CSV, JSON, Markdown, Word document or code file): "give me this as a CSV", "generate a Word document with...", "write a script that...". The format comes from the extension: ${GENERATED_FORMATS_LABEL}. Do not use it to save a file at a path on the user's computer: use file_ops for that.`,
+      schema: CreateFileSchema,
+    },
+  );
+}
+
 export function buildNativeTools(chatId: number | string): NativeTool[] {
-  return [buildRecallTool(Number(chatId)), buildAskUserTool()];
+  const generatedFiles = generatedFilesStorage.getStore();
+  return [
+    buildRecallTool(Number(chatId)),
+    buildAskUserTool(),
+    ...(generatedFiles ? [buildCreateFileTool(generatedFiles)] : []),
+  ];
 }
 
 export function getNativeTool(
