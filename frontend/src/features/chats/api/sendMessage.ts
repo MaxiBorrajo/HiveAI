@@ -4,6 +4,7 @@ import type {
   ChatStep,
   ConversationUsage,
   MessageUsage,
+  ModelSuggestion,
 } from "@/features/chats/types";
 
 export interface LiveToolCall {
@@ -19,6 +20,8 @@ export interface StreamHandlers {
   onStatus: (phase: "loading_model" | "processing" | "compacting") => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
+  /** Arrives just before `done`, only when a better model exists for the task. */
+  onModelSuggestion?: (suggestion: ModelSuggestion) => void;
   onDone: (
     content: string,
     usedTools: string[],
@@ -60,6 +63,8 @@ export async function sendMessage(
         handlers.onThinkingDelta(payload.content, payload.node);
       } else if (eventName === "token") {
         handlers.onToken(payload.content);
+      } else if (eventName === "model_suggestion") {
+        handlers.onModelSuggestion?.(payload);
       } else if (eventName === "done") {
         handlers.onDone(
           payload.content,

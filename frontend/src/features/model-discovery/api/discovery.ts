@@ -1,6 +1,7 @@
 import { apiClient } from "../../../lib/apiClient";
 import type { ResponseEntity } from "../../../lib/config";
-import type { HardwareReport, ModelDetail, ModelSource, SearchParams, SearchResult } from "../types";
+import type { ModelChoice } from "@/features/models/lib/modelChoices";
+import type { HardwareReport, ModelDetail, ModelSource, SearchParams, SearchResult, SuggestResult } from "../types";
 
 export async function getHardwareReport(): Promise<ResponseEntity<HardwareReport>> {
   const response = await apiClient.get("/api/hardware");
@@ -30,5 +31,14 @@ export async function getModelDetail(
   const params: Record<string, string> = { id };
   if (source !== "ollama") params.source = source;
   const response = await apiClient.get("/api/model-discovery/model", { params });
+  return response.data;
+}
+
+/** Asks `model` which library models suit `query`. The answer is a list of real models, never free text. */
+export async function suggestModels(
+  query: string,
+  model: ModelChoice,
+): Promise<ResponseEntity<SuggestResult>> {
+  const response = await apiClient.post("/api/model-discovery/suggest", { query, model });
   return response.data;
 }

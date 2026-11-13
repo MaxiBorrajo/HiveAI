@@ -19,6 +19,13 @@ vi.mock("@/features/models/DownloadsContext", () => ({
   }),
 }));
 
+vi.mock("@/features/models/ModelsContext", () => ({
+  useModels: () => ({
+    optionGroups: [],
+    current: { model: "", provider: "ollama", keyId: "" },
+  }),
+}));
+
 import { Dialog } from "@/components/ui/dialog";
 import { ExploreModelsModal } from "./ExploreModelsModal";
 import { ModelListView } from "./ModelListView";

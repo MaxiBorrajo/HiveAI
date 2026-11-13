@@ -9,6 +9,7 @@ import type {
   ChatStep,
   ConversationUsage,
   Message,
+  ModelSuggestion,
   StoredMessage,
   ThinkingRun,
 } from "../types.ts";
@@ -65,6 +66,7 @@ function toMessage(stored: StoredMessage): Message {
     steps: stored.metadata?.steps,
     thinkingRuns: stored.metadata?.thinkingRuns,
     wasStopped: stored.metadata?.wasStopped,
+    modelSuggestion: stored.metadata?.modelSuggestion,
     usage: stored.usage ?? null,
     attachments: stored.attachments,
   };
@@ -140,6 +142,7 @@ export function useChatSession() {
     const agentMessageId = crypto.randomUUID();
     let streamStarted = false;
     let thinkingRuns: ThinkingRun[] = [];
+    let modelSuggestion: ModelSuggestion | undefined;
 
     const appendMessage = (message: Message) =>
       messagesState.set((prev) => [...prev, message], key);
@@ -225,6 +228,9 @@ export function useChatSession() {
             }
             patchAgentMessage((m) => ({ ...m, content: m.content + token }));
           },
+          onModelSuggestion: (suggestion) => {
+            modelSuggestion = suggestion;
+          },
           onDone: (finalContent, usedTools, steps, usage, conversationUsage, files) => {
             patchAgentMessage((m) => ({
               ...m,
@@ -233,6 +239,7 @@ export function useChatSession() {
               steps,
               thinkingRuns,
               usage,
+              modelSuggestion,
               ...(files.length > 0 ? { attachments: files } : {}),
             }));
             if (conversationUsage) usageState.set(conversationUsage, key);
