@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { TextReader, Uint8ArrayReader, Uint8ArrayWriter, ZipWriter } from "@zip-js/zip-js";
 import { initORM } from "../../../../infrastructure/db/orm.ts";
 import { AttachmentRepository } from "../../../../infrastructure/db/repositories/attachment-repository.ts";
@@ -219,6 +219,50 @@ Deno.test("Word - a document that is only images is accepted", async () => {
   const dto = await upload("poster.docx", await docx("", ["image1.png"]));
 
   assertEquals(dto.scan?.total, 1);
+});
+
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+
+Deno.test("image - is queued for OCR on upload", async () => {
+  const { upload, scheduled } = await setup();
+
+  const dto = await upload("screenshot.png", png);
+
+  assertEquals(dto.scan, { status: "pending", done: 0, total: 1 });
+  assertEquals(scheduled, { recognition: [dto.id], indexing: [] });
+});
+
+Deno.test("image - a vision model sees it, not its OCR text", async () => {
+  const { dataDir, repo, upload, content } = await setup();
+  const { id } = await upload("screenshot.png", png);
+  await recognizeAttachment(dataDir, repo, id, reads(["OCR TEXT"]));
+
+  const { parts, warnings } = await content(id, visionModel);
+
+  assertEquals(parts.map((p) => p.type), ["image"]);
+  assertEquals(warnings, []);
+});
+
+Deno.test("image - without vision, the model gets the text read from it", async () => {
+  const { dataDir, repo, upload, content } = await setup();
+  const { id } = await upload("screenshot.png", png);
+  await recognizeAttachment(dataDir, repo, id, reads(["Total a pagar: $500"]));
+
+  const { parts, warnings } = await content(id);
+
+  assertEquals(parts.length, 1);
+  assertStringIncludes((parts[0] as TextContentPart).text, "[Image, text read from the image]\nTotal a pagar: $500");
+  assertStringIncludes(warnings[0], "it only gets the text read from it");
+});
+
+Deno.test("image - without vision, an image with no text or still being read is refused", async () => {
+  const { dataDir, repo, upload, content } = await setup();
+  const { id } = await upload("logo.png", png);
+
+  await assertRejects(() => content(id), Error, "still being read");
+
+  await recognizeAttachment(dataDir, repo, id, reads([""]));
+  await assertRejects(() => content(id), Error, "no text could be read from it");
 });
 
 Deno.test("search - a scanned file is indexed only once OCR read it", async () => {

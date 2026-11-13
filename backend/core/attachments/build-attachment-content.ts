@@ -46,8 +46,9 @@ function toBase64(bytes: Uint8Array): string {
  * Loads every attachment for the given ids and turns them into message
  * content parts the model can use: text files and documents (already
  * extracted) become text blocks labeled with the file name; images become an inline
- * base64 block only if the active model reports vision support, otherwise
- * the call fails with an explicit error. Text past the context budget is cut:
+ * base64 block if the active model reports vision support, otherwise the text
+ * OCR read from them, and the call fails with an explicit error when there is
+ * none. Text past the context budget is cut:
  * the model reads a marker where it stops and `warnings` tells the user.
  */
 export async function buildAttachmentContent(
@@ -73,22 +74,29 @@ export async function buildAttachmentContent(
     const row = await repo.findById(id);
     if (!row) throw new AppError(`Attachment ${id} not found.`, 404);
 
-    if (isImageMimeType(row.mimeType)) {
-      if (!(await vision())) {
-        throw new AppError(
-          `'${row.originalName}' is an image, but the active model (${modelRef.model}) does not support image input. Remove it or switch to a vision model.`,
-          422,
-        );
-      }
+    const isImage = isImageMimeType(row.mimeType);
+    if (isImage && (await vision())) {
       const bytes = await readAttachment(dataDir, row.storagePath);
       parts.push({ type: "image", mimeType: row.mimeType, data: toBase64(bytes) });
       continue;
+    }
+    if (isImage) {
+      // Without vision the model only gets the text OCR found in the image.
+      const unseen = `'${row.originalName}' is an image, but the active model (${modelRef.model}) does not support image input`;
+      const recognized = row.scan?.texts.image;
+      if (row.scan?.status === "pending") {
+        throw new AppError(`${unseen}, and the text in it is still being read. Try again in a moment, or switch to a vision model.`, 422);
+      }
+      if (!recognized) {
+        throw new AppError(`${unseen}, and no text could be read from it. Remove it or switch to a vision model.`, 422);
+      }
+      warnings.push(`${unseen}: it only gets the text read from it.`);
     }
 
     // Scanned pages and images in documents: the model sees them itself when
     // it can, and reads the OCR text otherwise.
     const imaged = new Set<string>();
-    if (row.scan) {
+    if (row.scan && !isImage) {
       const { scan } = row;
       if (await vision()) {
         for (const source of scan.sources) {

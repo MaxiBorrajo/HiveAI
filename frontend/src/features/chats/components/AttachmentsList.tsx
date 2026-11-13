@@ -21,7 +21,11 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function scanLabel(scan: AttachmentDto["scan"]): string | null {
+function scanLabel({ scan, mimeType }: AttachmentDto): string | null {
+  // An image's text only matters to models that cannot see it.
+  if (mimeType.startsWith("image/")) {
+    return scan?.status === "pending" ? "Reading its text" : null;
+  }
   if (scan?.status === "pending") return `Reading images ${scan.done}/${scan.total}`;
   if (scan?.status === "failed") return "Images could not be read";
   return null;
@@ -80,7 +84,7 @@ export function AttachmentsList({
               </p>
               <p className="text-[10px] text-muted-foreground">
                 {problem ??
-                  scanLabel(attachment.scan) ??
+                  scanLabel(attachment) ??
                   formatSize(attachment.sizeBytes)}
               </p>
             </div>

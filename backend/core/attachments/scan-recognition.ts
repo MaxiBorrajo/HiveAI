@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { loadScanImage, type ScanState } from "./scanned-content.ts";
 import { scheduleAttachmentIndexing } from "./attachment-index.ts";
+import { isImageMimeType } from "./attachment-limits.ts";
 import type { AttachmentRepository } from "../../infrastructure/db/repositories/attachment-repository.ts";
 
 export type Recognize = (image: Uint8Array) => Promise<string>;
@@ -121,7 +122,8 @@ export function scheduleAttachmentRecognition(
     .then(async () => {
       await recognizeAttachment(dataDir, repo, id, withTesseract);
       const row = await repo.findById(id);
-      if (row?.scan?.status === "done" && row.executionId === null) {
+      // Images are sent whole, never searched.
+      if (row?.scan?.status === "done" && row.executionId === null && !isImageMimeType(row.mimeType)) {
         await repo.resetIndex(id);
         scheduleAttachmentIndexing(dataDir, repo, id);
       }

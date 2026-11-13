@@ -22,9 +22,10 @@ import {
   extractTextFromDocx,
   extractTextFromPptx,
 } from "../../../core/attachments/office-text-extractor.ts";
-import type {
-  ExtractedDocument,
-  ScanState,
+import {
+  type ExtractedDocument,
+  imageDocument,
+  type ScanState,
 } from "../../../core/attachments/scanned-content.ts";
 import type { AttachmentDeps, AttachmentDto } from "../types.ts";
 import { toAttachmentDto } from "../types.ts";
@@ -36,13 +37,15 @@ export interface AttachmentOwner {
 
 type TextExtractor = (
   bytes: Uint8Array,
-) => string | Promise<string | ExtractedDocument>;
+) => string | ExtractedDocument | Promise<string | ExtractedDocument>;
 
 function textExtractorFor(mimeType: string): TextExtractor | undefined {
   if (isPdfMimeType(mimeType)) return extractTextFromPdf;
   if (isExcelMimeType(mimeType)) return extractTextFromExcel;
   if (isDocxMimeType(mimeType)) return extractTextFromDocx;
   if (isPptxMimeType(mimeType)) return extractTextFromPptx;
+  // Read by OCR for models that cannot see images.
+  if (isImageMimeType(mimeType)) return imageDocument;
   return undefined;
 }
 

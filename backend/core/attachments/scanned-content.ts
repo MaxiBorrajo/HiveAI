@@ -3,7 +3,10 @@ import { readAttachment } from "./attachment-storage.ts";
 import { readZipEntry } from "./office-text-extractor.ts";
 import type { Attachment } from "../../infrastructure/db/repositories/attachment-repository.ts";
 
-/** A scanned PDF page or an image inside a document, read by OCR. */
+/**
+ * A scanned PDF page, an image inside a document, or an image file itself
+ * (neither `page` nor `mediaPath`), read by OCR.
+ */
 export interface ScanSource {
   key: string;
   label: string;
@@ -86,8 +89,16 @@ export async function loadScanImage(
       bytes: await renderPdfPage(file, source.page, scale),
     };
   }
+  if (source.mediaPath === undefined) {
+    return { mimeType: row.mimeType, bytes: file };
+  }
   return {
     mimeType: source.mimeType ?? "image/png",
-    bytes: await readZipEntry(file, source.mediaPath!),
+    bytes: await readZipEntry(file, source.mediaPath),
   };
+}
+
+/** An image file is read whole: its text is all there is to extract. */
+export function imageDocument(): ExtractedDocument {
+  return { text: scanMarker("image"), sources: [{ key: "image", label: "Image" }] };
 }
