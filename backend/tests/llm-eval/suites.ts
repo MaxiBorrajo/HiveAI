@@ -17,17 +17,19 @@ export async function runSuite(
   judgeRef: ModelRef | undefined,
   runId: string,
   lang: EvalLang,
+  quick = false,
+  only?: string[],
 ): Promise<EvalVerdict[]> {
   switch (suite) {
     case "routing":
-      return await runRoutingSuite(executorRef, runId, lang);
+      return await runRoutingSuite(executorRef, runId, lang, quick, only);
     case "generation":
-      return await runGeneratorSuite(executorRef, runId, lang);
+      return await runGeneratorSuite(executorRef, runId, lang, quick);
     case "execution":
-      return await runExecutionSuite(runId, executorRef);
+      return await runExecutionSuite(runId, executorRef, quick);
     case "summarization":
       if (!judgeRef) throw new Error("The summarization suite needs a judge model.");
-      return await runJudgedSuite(executorRef, judgeRef, runId, lang);
+      return await runJudgedSuite(executorRef, judgeRef, runId, lang, quick);
   }
 }
 

@@ -2,12 +2,17 @@ import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatInput } from "../components/ChatInput";
-import { uploadChatAttachment, type AttachmentDto } from "../api/attachments";
+import {
+  getAttachment,
+  uploadChatAttachment,
+  type AttachmentDto,
+} from "../api/attachments";
 import { reportError } from "@/lib/toastManager";
 
 vi.mock("../api/attachments", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/attachments")>()),
   uploadChatAttachment: vi.fn(),
+  getAttachment: vi.fn(),
 }));
 vi.mock("@/features/models/ModelsContext", () => ({
   useModels: () => ({
@@ -122,5 +127,25 @@ describe("ChatInput attachments", () => {
     });
 
     await waitFor(() => expect(screen.getByText("big.pdf")).toBeTruthy());
+  });
+
+  it("shows how far OCR got on a scanned file and keeps it updated", async () => {
+    vi.mocked(uploadChatAttachment).mockResolvedValueOnce({
+      data: { ...dto(1, "scan.pdf"), scan: { status: "pending", done: 0, total: 3 } },
+    } as never);
+    vi.mocked(getAttachment).mockResolvedValue({
+      data: { ...dto(1, "scan.pdf"), scan: { status: "pending", done: 2, total: 3 } },
+    } as never);
+    const { container } = render(<Harness />);
+
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(["x"], "scan.pdf")] },
+    });
+
+    await waitFor(() => expect(screen.getByText("Reading images 0/3")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Reading images 2/3")).toBeTruthy(), {
+      timeout: 4000,
+    });
+    expect(getAttachment).toHaveBeenCalledWith(1);
   });
 });

@@ -89,6 +89,9 @@ export const ChatMessage = memo(function ChatMessage({
             <MessageMarkdown content={message.content} />
           )}
         </div>
+        {!!message.attachments?.length && (
+          <AttachmentsList attachments={message.attachments} className="mt-2" />
+        )}
         {isLast && !message.isError && !message.wasStopped && message.modelSuggestion && (
           <ModelSuggestionFooter suggestion={message.modelSuggestion} />
         )}

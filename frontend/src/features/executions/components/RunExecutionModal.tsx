@@ -18,6 +18,7 @@ import {
 } from "@/features/chats/api/attachments";
 import { reportError } from "@/lib/toastManager";
 import { getErrorMessage } from "@/lib/errors";
+import { useScanProgress } from "@/features/chats/hooks/useScanProgress";
 import type { LangGraphAbstraction } from "@/features/executions/types";
 
 export interface RunExecutionModalProps {
@@ -47,6 +48,7 @@ export function RunExecutionModal({
 }: RunExecutionModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  useScanProgress(runAttachments, setRunAttachments);
 
   async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList || fileList.length === 0 || !executionId) return;

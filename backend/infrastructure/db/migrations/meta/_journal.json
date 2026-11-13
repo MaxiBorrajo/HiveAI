@@ -99,6 +99,13 @@
       "when": 1794321520146,
       "tag": "0013_attachment_search_index",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1794331448972,
+      "tag": "0014_attachment_scan",
+      "breakpoints": true
     }
   ]
 }

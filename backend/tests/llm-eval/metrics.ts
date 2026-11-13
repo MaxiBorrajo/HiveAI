@@ -7,6 +7,7 @@ export type EvalVerdictCategory =
   | "abstention"
   | "param-extraction"
   | "multi-turn"
+  | "file-creation"
   | "generation"
   | "execution"
   | "summarization";

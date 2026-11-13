@@ -231,7 +231,7 @@ export function useChatSession() {
           onModelSuggestion: (suggestion) => {
             modelSuggestion = suggestion;
           },
-          onDone: (finalContent, usedTools, steps, usage, conversationUsage) => {
+          onDone: (finalContent, usedTools, steps, usage, conversationUsage, files) => {
             patchAgentMessage((m) => ({
               ...m,
               content: finalContent,
@@ -240,6 +240,7 @@ export function useChatSession() {
               thinkingRuns,
               usage,
               modelSuggestion,
+              ...(files.length > 0 ? { attachments: files } : {}),
             }));
             if (conversationUsage) usageState.set(conversationUsage, key);
             refreshChats();

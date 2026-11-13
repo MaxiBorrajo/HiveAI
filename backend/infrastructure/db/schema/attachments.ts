@@ -5,6 +5,7 @@ import {
   text,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import type { ScanState } from "../../../core/attachments/scanned-content.ts";
 import { chats } from "./chats.ts";
 import { messages } from "./messages.ts";
 import { executions, executionHistory } from "./executions.ts";
@@ -39,6 +40,8 @@ export const attachments = sqliteTable("attachments", {
   createdAt: integer("createdAt").notNull(),
   // Null until every chunk of the file is stored in attachment_chunks.
   indexedAt: integer("indexedAt"),
+  // Scanned pages and images inside the file, and what OCR read from them.
+  scan: text("scan", { mode: "json" }).$type<ScanState>(),
 });
 
 export const attachmentChunks = sqliteTable(

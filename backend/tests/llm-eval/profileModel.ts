@@ -31,7 +31,7 @@ export const EXIT_NEEDS_CONFIRMATION = 2;
 
 const USAGE =
   "Usage: deno task eval:profile -- --executor=<model> [--judge=<model>] " +
-  `[--categories=all|${ALL_SUITES.join(",")}] [--confirm] [--estimate]`;
+  `[--categories=all|${ALL_SUITES.join(",")}] [--quick] [--confirm] [--estimate]`;
 
 /**
  * Profiles one model: runs the chosen suites against it and records each
@@ -52,8 +52,15 @@ export async function runProfile(
   const rawArgs = argv[0] === "--" ? argv.slice(1) : argv;
   const args = parseArgs(rawArgs, {
     string: ["executor", "judge", "executor-key", "judge-key", "categories", "lang"],
-    boolean: ["confirm", "estimate", "allow-self-judge"],
-    default: { categories: "all", lang: "en", confirm: false, estimate: false, "allow-self-judge": false },
+    boolean: ["confirm", "estimate", "allow-self-judge", "quick"],
+    default: {
+      categories: "all",
+      lang: "en",
+      confirm: false,
+      estimate: false,
+      "allow-self-judge": false,
+      quick: false,
+    },
   });
 
   if (!args.executor) {
@@ -95,7 +102,7 @@ export async function runProfile(
   const fileSafe = modelFileSafe(label);
   let profile = await loadProfile(fileSafe, label);
 
-  const estimate = estimateRun(executorRef, judgeRef, runnable, profile, JUDGED_SUITES);
+  const estimate = estimateRun(executorRef, judgeRef, runnable, profile, JUDGED_SUITES, args.quick);
   if (args.estimate) {
     console.log(JSON.stringify(estimate));
     return 0;
@@ -126,7 +133,7 @@ export async function runProfile(
 
     let verdicts;
     try {
-      verdicts = await runSuite(suite, executorRef, judgeRef, `${runId}-${suite}`, lang);
+      verdicts = await runSuite(suite, executorRef, judgeRef, `${runId}-${suite}`, lang, args.quick);
     } catch (error) {
       console.error(
         `\nProfiling '${suite}' failed (${error instanceof Error ? error.message : String(error)}).\n` +
@@ -151,12 +158,17 @@ export async function runProfile(
     const results = buildMetricResults(annotated, categoryVersions, {
       modelVersion,
       runId: annotated[0].run_id,
+      quick: args.quick,
     });
     for (const r of results) {
       const prior = profile.latest[r.category];
       const stale = prior ? checkStaleness(prior, r) : { stale: false, reasons: [] };
       console.log(
-        `${r.category}: ${(r.value * 100).toFixed(0)}% -> ${r.level}` +
+        `${r.category}: ${(r.value * 100).toFixed(0)}%` +
+          (r.interval
+            ? ` (95% range ${(r.interval.low * 100).toFixed(0)}-${(r.interval.high * 100).toFixed(0)}%)`
+            : "") +
+          ` -> ${r.level}` +
           (r.lowConfidence ? ` (low confidence: only ${r.casesGraded} cases)` : "") +
           (r.casesUnjudged > 0 ? `, ${r.casesUnjudged} unjudged` : "") +
           (stale.stale ? ` [previous result was stale: ${stale.reasons.join("; ")}]` : ""),

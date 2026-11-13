@@ -36,6 +36,62 @@ The legacy binary formats `.doc` and `.ppt` are not supported.
   the text is cut, the model sees a marker where it stops, and the user gets a
   warning. Files that no longer fit are left out.
 
+## Scanned pages and images in documents
+
+A PDF page with almost no text but with an image is treated as a scan. Blank
+pages are not. Images inside Word and PowerPoint files (PNG and JPEG, up to 20
+per file) are treated the same way, since they often carry text such as a logo
+or a stamp. They reach the model in this order:
+
+1. A page with a text layer goes as text, as before.
+2. If the model has vision, scanned pages and images go as images, up to 10 per
+   message.
+3. Otherwise, and past that limit, they go as text read by OCR.
+4. If OCR could not read them, the user gets a warning that says why.
+
+OCR runs locally with Tesseract (Spanish and English) in the background right
+after upload, one file at a time, and the attachment shows its progress. Its
+language data is downloaded once into the data folder (`ocr/`); after that, OCR
+works offline. The recognized text is truncated and indexed for search like any
+other text: a chat file is indexed once OCR finishes.
+
+## Files the chat creates
+
+During a chat turn the model has a `create_file` tool
+(`backend/core/ai/strategy/shared/native-tools.ts`). It takes a file name and
+its content; the extension decides the format:
+
+| Extension | Saved as |
+| --- | --- |
+| `.md`, `.txt`, `.csv`, `.json` | The text as written. JSON must be valid |
+| `.docx` | A Word document built from the Markdown the model writes: headings, paragraphs, lists, quotes, code blocks, tables, bold, italic and links |
+| Code (`.py`, `.js`, `.html`, `.sql`, ...) | Plain text |
+
+- The file is saved as an output attachment of the reply, shown under it with
+  a download button and a preview (Markdown rendered, CSV as a table, JSON
+  indented, the text of Word documents).
+- It belongs to the chat: it is indexed for search like any other file, so
+  later messages can ask about it.
+- A failed file (bad JSON, unsupported format, over 50 MB) does not end the
+  turn: the model gets the reason and can fix it, and the user gets a warning.
+- The tool exists only in chat turns; execution nodes cannot call it.
+
+## Files an execution delivers
+
+An execution whose end node has the `file` output type delivers a file:
+
+- If a plugin node wrote that file to disk (`file_ops`, `excel_write`), the
+  run copies it, as before.
+- Otherwise the run builds it from the end node's content (usually the last
+  LLM node's text), named as the end node declares (`result.md` if it declares
+  no name), with the same formats as the chat. Reasoning that some local models
+  write into their answer (`<think>` blocks) is left out.
+
+The file is attached to the run, where the result panel lists it with a
+preview and a download button. If it cannot be built (for example, a name
+ending in `.pdf`), the run still ends with its text result and shows a warning.
+See `modules/executions/use-cases/run-execution/deliverable-files.ts`.
+
 ## Searching files in a chat
 
 Chat files are split into chunks and embedded locally with

@@ -207,6 +207,13 @@ export function normalizeExecutionResult(
 }
 
 
+const DEFAULT_DELIVERABLE_NAME = "result.md";
+
+function deliverableNames(files: { name: string }[] | undefined): string[] {
+  const names = [...new Set((files ?? []).map((file) => file.name))];
+  return names.length > 0 ? names : [DEFAULT_DELIVERABLE_NAME];
+}
+
 export function finalizeExecutionResult(
   finalState: Record<string, any>,
   nodes: GraphNode[],
@@ -272,7 +279,24 @@ export function finalizeExecutionResult(
       }
     });
 
-    if (outputSpec.type === "file" && existingFiles.length === 0) {
+    if (
+      outputSpec.type === "file" && existingFiles.length === 0 &&
+      typeof content === "string" && content.trim()
+    ) {
+      // No plugin wrote the file to disk: the run builds it from this text
+      // and attaches it (see deliverable-files.ts).
+      normalizedResult = {
+        type: "file",
+        summary: outputSpec.summary ||
+          "Workflow deliverable completed successfully.",
+        content,
+        files: [],
+        metadata: {
+          ...outputSpec.metadata,
+          deliverableFiles: deliverableNames(resolvedFiles),
+        },
+      };
+    } else if (outputSpec.type === "file" && existingFiles.length === 0) {
       const booleanVar = Object.keys(finalState).find(
         (k) =>
           typeof finalState[k] === "boolean" &&

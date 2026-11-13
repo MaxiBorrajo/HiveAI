@@ -2,6 +2,7 @@ import { evalCases } from "./cases.ts";
 import { generatorEvalCases } from "./generatorCases.ts";
 import { buildExecutionCases } from "./executionCases.ts";
 import { judgedEvalCases } from "./judgedCases.ts";
+import { selectCases } from "./caseSelection.ts";
 
 export type SuiteName = "routing" | "generation" | "execution" | "summarization";
 
@@ -9,7 +10,7 @@ export const ALL_SUITES: SuiteName[] = ["routing", "generation", "execution", "s
 
 /** Which verdict categories each suite produces — what a profile shows as metrics. */
 export const SUITE_CATEGORIES: Record<SuiteName, string[]> = {
-  routing: ["routing", "abstention", "param-extraction", "multi-turn"],
+  routing: ["routing", "abstention", "param-extraction", "multi-turn", "file-creation"],
   generation: ["generation"],
   execution: ["execution"],
   summarization: ["summarization"],
@@ -64,7 +65,12 @@ export async function allCasesVersions(): Promise<Record<SuiteName, string>> {
   return Object.fromEntries(entries) as Record<SuiteName, string>;
 }
 
-/** How many cases a suite runs — used to estimate a run's cost up front. */
-export function suiteCaseCount(suite: SuiteName): number {
-  return suiteCases(suite).length;
+/** How many cases a run of this suite grades, in full or quick mode — used
+ *  to estimate a run's cost up front. */
+export function suiteCaseCount(suite: SuiteName, quick = false): number {
+  return selectCases(
+    suiteCases(suite),
+    (c) => (suite === "routing" ? (c as { category: string }).category : suite),
+    quick,
+  ).length;
 }

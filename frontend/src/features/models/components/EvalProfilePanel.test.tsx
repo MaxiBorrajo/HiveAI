@@ -140,6 +140,7 @@ describe("Eval profile — what the model is good and bad at", () => {
       casesGraded: 3,
       casesUnjudged: 1,
       lowConfidence: true,
+      interval: { low: 0.21, high: 0.94 },
       judgeModel: "claude-sonnet-5",
     });
     setRoutes([
@@ -175,10 +176,70 @@ describe("Eval profile — what the model is good and bad at", () => {
     const cases = within(summarization).getByTestId("eval-metric-cases");
     expect(cases).toHaveTextContent(/1 unjudged \(not counted\)/);
     expect(cases).toHaveTextContent(/judge claude-sonnet-5/);
+    expect(within(summarization).getByTestId("eval-metric-range")).toHaveTextContent("likely 21%–94%");
     expect(within(summarization).getByTestId("eval-metric-low-confidence")).toBeInTheDocument();
+    expect(within(routing).queryByTestId("eval-metric-range")).not.toBeInTheDocument();
     expect(within(summarization).getByTestId("eval-metric-evolution")).toHaveTextContent(
       /Evolution: 60% → 75% \(judge changed in the last run\)/,
     );
+  });
+
+  test("a quick run is estimated and started with fewer cases", async () => {
+    const estimateBodies: { quick?: boolean }[] = [];
+    const startBodies: { quick?: boolean }[] = [];
+    setRoutes([
+      { method: "get", match: LOCAL_BASE, handler: () => ok(response()) },
+      {
+        method: "post",
+        match: `${LOCAL_BASE}/estimate`,
+        handler: (body) => {
+          estimateBodies.push(body as { quick?: boolean });
+          return ok(FREE);
+        },
+      },
+      {
+        method: "post",
+        match: `${LOCAL_BASE}/run`,
+        handler: (body) => {
+          startBodies.push(body as { quick?: boolean });
+          return ok(runningJob());
+        },
+      },
+    ]);
+    await renderPanel();
+    await userEvent.click(await screen.findByTestId("eval-profile-evaluate"));
+    const form = screen.getByTestId("eval-form");
+    await userEvent.click(within(form).getByTestId("eval-form-suite-summarization"));
+
+    await userEvent.click(within(form).getByTestId("eval-form-quick"));
+    await waitFor(() => expect(estimateBodies.at(-1)?.quick).toBe(true));
+    await waitFor(() => expect(within(form).getByTestId("eval-form-start")).toBeEnabled());
+    await userEvent.click(within(form).getByTestId("eval-form-start"));
+
+    await waitFor(() => expect(startBodies[0]?.quick).toBe(true));
+  });
+
+  test("a result from a quick run says so", async () => {
+    setRoutes([
+      {
+        method: "get",
+        match: LOCAL_BASE,
+        handler: () =>
+          ok(
+            response({
+              profile: {
+                model: "qwen3:8b",
+                latest: { routing: metric({ quick: true, casesGraded: 5, lowConfidence: true }) },
+                history: { routing: [metric({ quick: true })] },
+              },
+            }),
+          ),
+      },
+    ]);
+    await renderPanel();
+
+    const routing = await screen.findByTestId("eval-metric-routing");
+    expect(within(routing).getByTestId("eval-metric-quick")).toHaveTextContent("(quick run)");
   });
 
   test("when the profile can't be loaded it says so, and Retry loads it again", async () => {
@@ -258,6 +319,7 @@ describe("Eval profile — what the model is good and bad at", () => {
       executor: { provider: "ollama", model: "qwen3:8b", keyId: undefined },
       judge: { provider: "ollama", model: "lfm2.5", keyId: undefined },
       suites: ["routing", "summarization"],
+      quick: false,
       confirm: false,
     });
 

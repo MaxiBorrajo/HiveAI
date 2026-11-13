@@ -1,6 +1,7 @@
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
 import { isImageMimeType } from "../../../core/attachments/attachment-limits.ts";
+import type { ScanState } from "../../../core/attachments/scanned-content.ts";
 import {
   attachmentChunks,
   attachments,
@@ -107,6 +108,24 @@ export class AttachmentRepository {
 
   async addChunk(chunk: AttachmentChunk): Promise<void> {
     await this.db.insert(attachmentChunks).values(chunk);
+  }
+
+  async updateScan(id: number, scan: ScanState): Promise<void> {
+    await this.db
+      .update(attachments)
+      .set({ scan })
+      .where(eq(attachments.id, id));
+  }
+
+  /** Drops the file's search index so it is built again from its text. */
+  async resetIndex(id: number): Promise<void> {
+    await this.db
+      .delete(attachmentChunks)
+      .where(eq(attachmentChunks.attachmentId, id));
+    await this.db
+      .update(attachments)
+      .set({ indexedAt: null })
+      .where(eq(attachments.id, id));
   }
 
   async markIndexed(id: number, indexedAt: number): Promise<void> {

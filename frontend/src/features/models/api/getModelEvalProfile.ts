@@ -9,6 +9,8 @@ export type EvalSuite = "routing" | "generation" | "execution" | "summarization"
 export interface MetricResult {
   category: string;
   value: number;
+  /** Where the true value lies with 95% confidence; absent in old profiles. */
+  interval?: { low: number; high: number };
   level: ProfileLevel;
   casesGraded: number;
   casesUnjudged: number;
@@ -19,6 +21,8 @@ export interface MetricResult {
   rubricVersion?: string;
   modelVersion?: string;
   runId?: string;
+  /** Graded on a few cases per category (quick mode). */
+  quick?: boolean;
   inputTokens: number;
   outputTokens: number;
   durationMs: number;
@@ -80,6 +84,8 @@ export interface EvalRunRequest {
   executor: ModelChoice;
   judge?: ModelChoice;
   suites: EvalSuite[];
+  /** A few cases per category instead of all of them. */
+  quick?: boolean;
   confirm?: boolean;
 }
 
@@ -101,6 +107,7 @@ function toBody(request: EvalRunRequest) {
     executor: toRef(request.executor),
     judge: request.judge ? toRef(request.judge) : undefined,
     suites: request.suites,
+    quick: request.quick,
     confirm: request.confirm,
   };
 }

@@ -469,5 +469,53 @@ export function buildExecutionCases(
       expectedResultDescription:
         "summary is populated by the first node and the second node classifies it as 'technology'",
     },
+    {
+      name: "execution: a plugin node increments a fresh counter by the given amount",
+      activePlugins: ["counter"],
+      inputState: { counter_name: "eval-squats", action: "increment", amount: 5 },
+      buildGraph: counterGraph,
+      expectedResultCheck: (state) =>
+        typeof state.count_result === "string" && /value of 5\b/.test(state.count_result),
+      expectedResultDescription: "count_result says the fresh counter now has a value of 5",
+    },
+    {
+      name: "execution (branching, español): clasifica un mensaje claramente negativo y toma la rama correcta",
+      activePlugins: [],
+      inputState: { input: "Esto es horrible, nada funciona y estoy muy enojado." },
+      buildGraph: () => classifyAndBranchGraph(executorModel, provider, keyId),
+      expectedResultCheck: (state) =>
+        typeof state.final_reply === "string" &&
+        stripThinkTags(state.final_reply) === "Sorry to hear that, let us help.",
+      expectedResultDescription: "final_reply matches the negative branch's fixed reply for Spanish input",
+    },
+    {
+      name: "execution (reasoning): an llm node summarizes a short everyday text",
+      activePlugins: [],
+      inputState: {
+        input:
+          "The library will open on Saturdays from 9 to 1 starting in March, and members can now borrow up to ten books at a time instead of five.",
+      },
+      buildGraph: () => reasoningSummaryGraph(executorModel, provider, keyId),
+      expectedResultCheck: (state) => {
+        const summary = typeof state.summary === "string" ? stripThinkTags(state.summary) : "";
+        return summary.length > 0 && summary.length < 300;
+      },
+      expectedResultDescription: "summary is a short non-empty string",
+    },
+    {
+      name: "execution (deep graph): summarize, then classify a finance text as 'finance'",
+      activePlugins: [],
+      inputState: {
+        input:
+          "The central bank raised interest rates by half a point to slow inflation, and stock markets fell sharply after the announcement.",
+      },
+      buildGraph: () => summarizeThenClassifyGraph(executorModel, provider, keyId),
+      expectedResultCheck: (state) => {
+        const topic = typeof state.topic === "string" ? stripThinkTags(state.topic).toLowerCase() : "";
+        const summary = typeof state.summary === "string" ? stripThinkTags(state.summary) : "";
+        return summary.length > 0 && topic.includes("finance");
+      },
+      expectedResultDescription: "the second node classifies the summary as 'finance'",
+    },
   ];
 }

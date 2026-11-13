@@ -1,10 +1,12 @@
-import { Download, FileText, Image as ImageIcon, X } from "lucide-react";
+import { useState } from "react";
+import { Download, Eye, FileText, Image as ImageIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   attachmentDownloadUrl,
   type AttachmentDto,
 } from "../api/attachments";
+import { AttachmentPreview, canPreview } from "./AttachmentPreview";
 
 interface AttachmentsListProps {
   attachments: AttachmentDto[];
@@ -17,6 +19,12 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function scanLabel(scan: AttachmentDto["scan"]): string | null {
+  if (scan?.status === "pending") return `Reading images ${scan.done}/${scan.total}`;
+  if (scan?.status === "failed") return "Images could not be read";
+  return null;
 }
 
 function statusLabel(status: AttachmentDto["status"]): string | null {
@@ -38,6 +46,7 @@ export function AttachmentsList({
   removing,
   className,
 }: AttachmentsListProps) {
+  const [previewing, setPreviewing] = useState<AttachmentDto | null>(null);
   if (attachments.length === 0) return null;
 
   return (
@@ -70,9 +79,22 @@ export function AttachmentsList({
                 {attachment.originalName}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                {problem ?? formatSize(attachment.sizeBytes)}
+                {problem ??
+                  scanLabel(attachment.scan) ??
+                  formatSize(attachment.sizeBytes)}
               </p>
             </div>
+
+            {!problem && !onRemove && canPreview(attachment) && (
+              <button
+                type="button"
+                onClick={() => setPreviewing(attachment)}
+                title="Preview"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <Eye className="size-3.5" />
+              </button>
+            )}
 
             {!problem && !onRemove && (
               <a
@@ -101,6 +123,10 @@ export function AttachmentsList({
           </div>
         );
       })}
+      <AttachmentPreview
+        attachment={previewing}
+        onClose={() => setPreviewing(null)}
+      />
     </div>
   );
 }

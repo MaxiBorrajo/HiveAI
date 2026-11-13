@@ -26,7 +26,14 @@ import {
   type AttachmentContentPart,
 } from "../../../core/attachments/build-attachment-content.ts";
 import { toHumanContent } from "../../../core/attachments/to-human-content.ts";
+import {
+  generatedFilesStorage,
+  type GeneratedFilesContext,
+} from "../../../core/attachments/generated-files.ts";
+import { toAttachmentDto, type AttachmentDto } from "../../attachments/types.ts";
+import type { Attachment } from "../../../infrastructure/db/repositories/attachment-repository.ts";
 import { scheduleAttachmentIndexing } from "../../../core/attachments/attachment-index.ts";
+import { ensureScansRead } from "../../../core/attachments/scan-recognition.ts";
 import {
   retrieveAttachmentExcerpts,
   type Retrieval,
@@ -106,9 +113,9 @@ async function searchChatFiles(
   try {
     const repo = new AttachmentRepository(db);
     // Files from before search existed, or whose indexing a restart cut short.
-    for (const id of await repo.findUnindexedChatIds(chatId)) {
-      scheduleAttachmentIndexing(dataDir, repo, id);
-    }
+    const unindexed = await repo.findUnindexedChatIds(chatId);
+    for (const id of unindexed) scheduleAttachmentIndexing(dataDir, repo, id);
+    await ensureScansRead(dataDir, repo, unindexed);
     return await retrieveAttachmentExcerpts({
       repo,
       chatId,
@@ -121,6 +128,22 @@ async function searchChatFiles(
     console.error("[Attachments] Could not search the chat's files:", error);
     return { warnings: [] };
   }
+}
+
+/** Files the model created belong to its reply, and can be searched later. */
+async function attachGeneratedFiles(
+  db: AppDatabase,
+  dataDir: string,
+  chatId: number,
+  messageId: number,
+  files: Attachment[],
+): Promise<AttachmentDto[]> {
+  const repo = new AttachmentRepository(db);
+  for (const file of files) {
+    await repo.linkToMessage(file.id, messageId, chatId);
+    scheduleAttachmentIndexing(dataDir, repo, file.id);
+  }
+  return files.map((file) => toAttachmentDto({ ...file, messageId, chatId }));
 }
 
 async function persistAssistantMessage(
@@ -182,10 +205,10 @@ async function persistStoppedMessage(
   chatId: number,
   { fullContent, steps, thinkingRuns }: StreamResult,
   usageGroupId: string,
-) {
+): Promise<number | undefined> {
   if (!fullContent) return;
   try {
-    await persistAssistantMessage(
+    return await persistAssistantMessage(
       db,
       chatId,
       fullContent,
@@ -463,6 +486,13 @@ export async function sendMessage(
       thinkingRuns: [],
     };
     const usageGroupId = crypto.randomUUID();
+    const generatedFiles: GeneratedFilesContext = {
+      dataDir: config.get("dataDir"),
+      repo: new AttachmentRepository(db),
+      chatId: resolvedChatId,
+      files: [],
+      onFailure: (message) => send("warning", { message }),
+    };
     let streamResult: StreamResult;
     const endModelActivity = modelProvider === "ollama"
       ? beginModelActivity(model)
@@ -472,7 +502,7 @@ export async function sendMessage(
         ? await watchModelLoad(model, (phase) => send("status", { phase }))
         : () => {};
     try {
-      streamResult = await withUsageContext(
+      streamResult = await generatedFilesStorage.run(generatedFiles, () => withUsageContext(
         {
           kind: "chat",
           role: "orchestrator",
@@ -508,10 +538,13 @@ export async function sendMessage(
             },
           );
         },
-      );
+      ));
     } catch (error) {
       if (req.signal.aborted) {
-        await persistStoppedMessage(db, resolvedChatId, progress, usageGroupId);
+        const stoppedId = await persistStoppedMessage(db, resolvedChatId, progress, usageGroupId);
+        if (stoppedId !== undefined) {
+          await attachGeneratedFiles(db, config.get("dataDir"), resolvedChatId, stoppedId, generatedFiles.files);
+        }
         throw error;
       }
       throw normalizeProviderError(error, modelProvider);
@@ -549,12 +582,20 @@ export async function sendMessage(
       usageGroupId,
       modelSuggestion,
     );
+    const files = await attachGeneratedFiles(
+      db,
+      config.get("dataDir"),
+      resolvedChatId,
+      messageId,
+      generatedFiles.files,
+    );
 
     send("done", {
       content: fullContent,
       usedTools,
       steps,
       thinkingRuns,
+      files,
       ...(await usageForDone(db, resolvedChatId, messageId)),
     });
   });

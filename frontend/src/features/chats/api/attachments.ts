@@ -56,6 +56,8 @@ export interface AttachmentDto {
   direction: AttachmentDirection;
   status: AttachmentStatus;
   createdAt: number;
+  /** OCR progress on the file's scanned pages and images, if it has any. */
+  scan?: { status: "pending" | "done" | "failed"; done: number; total: number } | null;
 }
 
 async function upload(
@@ -121,6 +123,18 @@ export async function getExecutionHistoryAttachments(
 
 export function attachmentDownloadUrl(id: number): string {
   return `${apiClient.defaults.baseURL ?? ""}/api/attachments/${id}/download`;
+}
+
+export async function getAttachment(
+  id: number,
+): Promise<ResponseEntity<AttachmentDto>> {
+  return (await apiClient.get(`/api/attachments/${id}`, quiet)).data;
+}
+
+export async function getAttachmentText(
+  id: number,
+): Promise<ResponseEntity<{ text: string }>> {
+  return (await apiClient.get(`/api/attachments/${id}/text`, quiet)).data;
 }
 
 export async function deleteAttachment(

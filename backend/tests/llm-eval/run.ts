@@ -3,7 +3,7 @@ import { parseModelArg, withKeyId, modelRefLabel, envSecretResolver } from "./mo
 import { setSecretResolver } from "../../core/ai/providers/create-chat-model.ts";
 import { makeRunId, writeReport, type EvalVerdict, type EvalLang } from "./metrics.ts";
 import { installInMemoryUsageRecorder } from "./usage-capture.ts";
-import { ALL_SUITES, allCasesVersions, type SuiteName } from "./casesVersion.ts";
+import { ALL_SUITES, allCasesVersions, SUITE_CATEGORIES, type SuiteName } from "./casesVersion.ts";
 import { JUDGED_SUITES, judgeProblem, runSuite } from "./suites.ts";
 import { annotateRun, parseConfigFlags } from "./runMeta.ts";
 
@@ -20,7 +20,7 @@ async function main() {
   // unless it's stripped first.
   const rawArgs = Deno.args[0] === "--" ? Deno.args.slice(1) : Deno.args;
   const args = parseArgs(rawArgs, {
-    string: ["executor", "judge", "executor-key", "judge-key", "suite", "lang"],
+    string: ["executor", "judge", "executor-key", "judge-key", "suite", "lang", "only"],
     boolean: ["allow-self-judge"],
     collect: ["config"],
     default: { suite: "all", lang: "en", "allow-self-judge": false },
@@ -40,6 +40,13 @@ async function main() {
     Deno.exit(1);
   }
   const suites = suite === "all" ? ALL_SUITES : [suite as SuiteName];
+  // --only=file-creation,abstention runs just those routing categories.
+  const only = args.only ? args.only.split(",").map((c) => c.trim()) : undefined;
+  const unknownOnly = (only ?? []).filter((c) => !SUITE_CATEGORIES.routing.includes(c));
+  if (unknownOnly.length > 0) {
+    console.error(`Unknown --only categories: ${unknownOnly.join(", ")}. Available: ${SUITE_CATEGORIES.routing.join(", ")}`);
+    Deno.exit(1);
+  }
 
   // Exact-match suites never need a judge. A judged suite without a valid,
   // independent judge is skipped when running "all" (so the rest still runs)
@@ -60,7 +67,7 @@ async function main() {
 
   const verdicts: EvalVerdict[] = [];
   for (const s of runnable) {
-    verdicts.push(...(await runSuite(s, executorRef, judgeRef, runId, lang)));
+    verdicts.push(...(await runSuite(s, executorRef, judgeRef, runId, lang, false, only)));
   }
 
   if (verdicts.length === 0) {
