@@ -19,8 +19,40 @@ export const LEVEL_THRESHOLDS: Record<ProfileLevel, number> = {
   poor: 0,
 };
 
-/** A metric is low-confidence when fewer than this many cases were graded. */
-export const LOW_CONFIDENCE_MIN_CASES = 5;
+/**
+ * A metric is low-confidence when fewer than this many cases were graded:
+ * below it, the 95% interval of a pass rate is still about 50 points wide.
+ */
+export const LOW_CONFIDENCE_MIN_CASES = 15;
+
+const Z_95 = 1.96;
+
+/** Range that holds the true pass rate with 95% confidence (Wilson score). */
+export function passRateInterval(passed: number, graded: number): MetricInterval {
+  if (graded === 0) return { low: 0, high: 1 };
+  const p = passed / graded;
+  const z2 = Z_95 * Z_95;
+  const center = (p + z2 / (2 * graded)) / (1 + z2 / graded);
+  const half = (Z_95 * Math.sqrt(p * (1 - p) / graded + z2 / (4 * graded * graded))) /
+    (1 + z2 / graded);
+  return { low: Math.max(0, center - half), high: Math.min(1, center + half) };
+}
+
+// Student's t for a 95% interval, by degrees of freedom 1-30; normal beyond.
+const T_95 = [
+  12.71, 4.3, 3.18, 2.78, 2.57, 2.45, 2.36, 2.31, 2.26, 2.23, 2.2, 2.18, 2.16, 2.14, 2.13,
+  2.12, 2.11, 2.1, 2.09, 2.09, 2.08, 2.07, 2.07, 2.06, 2.06, 2.06, 2.05, 2.05, 2.05, 2.04,
+];
+
+/** Range that holds the true average of 0-1 scores with 95% confidence. */
+export function averageInterval(values: number[]): MetricInterval {
+  const n = values.length;
+  if (n < 2) return { low: 0, high: 1 };
+  const mean = values.reduce((sum, v) => sum + v, 0) / n;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (n - 1);
+  const half = (T_95[n - 2] ?? Z_95) * Math.sqrt(variance / n);
+  return { low: Math.max(0, mean - half), high: Math.min(1, mean + half) };
+}
 
 export function classifyLevel(value: number): ProfileLevel {
   if (value >= LEVEL_THRESHOLDS["very-good"]) return "very-good";
@@ -29,10 +61,17 @@ export function classifyLevel(value: number): ProfileLevel {
   return "poor";
 }
 
+export interface MetricInterval {
+  low: number;
+  high: number;
+}
+
 export interface MetricResult {
   category: string;
   /** passRate for exact-match categories, avgScore/100 when judge-scored. */
   value: number;
+  /** Where the true value lies with 95% confidence; absent in old profiles. */
+  interval?: MetricInterval;
   level: ProfileLevel;
   casesGraded: number;
   casesUnjudged: number;
@@ -47,6 +86,8 @@ export interface MetricResult {
   modelVersion?: string;
   /** Run this result came from — its .jsonl lives in the results dir. */
   runId?: string;
+  /** Graded on a few cases per category (quick mode), not the full set. */
+  quick?: boolean;
   /** Average executor tokens per case. */
   inputTokens: number;
   outputTokens: number;
@@ -73,6 +114,7 @@ export function emptyProfile(model: string): ModelProfile {
 export interface MetricExtras {
   modelVersion?: string;
   runId?: string;
+  quick?: boolean;
 }
 
 /**
@@ -92,9 +134,15 @@ export function buildMetricResults(
     const judged = categoryVerdicts.filter((v) => v.judged_by !== "exact");
     const judgeModels = new Set(judged.map((v) => v.judge_model));
     const rubricVersions = new Set(judged.map((v) => v.rubric_version).filter((v): v is string => v !== undefined));
+    const scores = categoryVerdicts
+      .filter((v) => v.judged_by !== "unjudged" && v.score !== undefined)
+      .map((v) => v.score! / 100);
     return {
       category: s.category,
       value,
+      interval: s.avgScore !== undefined
+        ? averageInterval(scores)
+        : passRateInterval(s.passed, s.graded),
       level: classifyLevel(value),
       casesGraded: s.graded,
       casesUnjudged: s.unjudged,
@@ -105,6 +153,7 @@ export function buildMetricResults(
       rubricVersion: rubricVersions.size === 1 ? [...rubricVersions][0] : undefined,
       modelVersion: extras.modelVersion,
       runId: extras.runId,
+      ...(extras.quick ? { quick: true } : {}),
       inputTokens: s.avgInputTokens,
       outputTokens: s.avgOutputTokens,
       durationMs: s.avgDurationMs,
@@ -229,9 +278,10 @@ export function estimateRun(
   suites: SuiteName[],
   profile: ModelProfile,
   judgedSuites: SuiteName[],
+  quick = false,
 ): RunEstimate {
   const estimates = suites.map((suite): SuiteEstimate => {
-    const cases = suiteCaseCount(suite);
+    const cases = suiteCaseCount(suite, quick);
     const own = SUITE_CATEGORIES[suite]
       .map((c) => profile.latest[c])
       .filter((m): m is MetricResult => m !== undefined);

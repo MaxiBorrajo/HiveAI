@@ -77,6 +77,7 @@ export interface EvalRunRequest {
   executor: ModelRef;
   judge?: ModelRef;
   suites: SuiteName[];
+  quick?: boolean;
   confirm?: boolean;
 }
 
@@ -108,7 +109,13 @@ export function parseEvalRunRequest(body: unknown): { request?: EvalRunRequest; 
 
   if (errors.length > 0) return { errors };
   return {
-    request: { executor: executor!, judge, suites: suites as SuiteName[], confirm: b.confirm === true },
+    request: {
+      executor: executor!,
+      judge,
+      suites: suites as SuiteName[],
+      quick: b.quick === true,
+      confirm: b.confirm === true,
+    },
     errors,
   };
 }
@@ -116,7 +123,7 @@ export function parseEvalRunRequest(body: unknown): { request?: EvalRunRequest; 
 export async function estimateEvalRun(request: EvalRunRequest): Promise<RunEstimate> {
   const label = modelRefLabel(request.executor);
   const profile = await loadProfile(modelFileSafe(label), label);
-  return estimateRun(request.executor, request.judge, request.suites, profile, JUDGED_SUITES);
+  return estimateRun(request.executor, request.judge, request.suites, profile, JUDGED_SUITES, request.quick);
 }
 
 export async function handleEstimateEvalRun(body: unknown, headers: Record<string, string>) {

@@ -39,6 +39,8 @@ export interface StartEvalOptions {
   executor: ModelRef;
   judge?: ModelRef;
   suites: SuiteName[];
+  /** A few cases per category instead of all of them. */
+  quick?: boolean;
   /** The user saw the cost estimate and accepted it (cloud models). */
   confirm: boolean;
 }
@@ -54,6 +56,7 @@ export function buildProfileArgs(opts: StartEvalOptions): string[] {
     args.push(`--judge=${modelRefLabel(opts.judge)}`);
     if (opts.judge.keyId) args.push(`--judge-key=${opts.judge.keyId}`);
   }
+  if (opts.quick) args.push("--quick");
   if (opts.confirm) args.push("--confirm");
   return args;
 }

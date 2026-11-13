@@ -10,6 +10,8 @@ import {
   profileStatus,
   saveProfile,
   LOW_CONFIDENCE_MIN_CASES,
+  averageInterval,
+  passRateInterval,
   type MetricResult,
 } from "../../../tests/llm-eval/profile.ts";
 import type { EvalVerdict } from "../../../tests/llm-eval/metrics.ts";
@@ -280,4 +282,41 @@ Deno.test("saveProfile/loadProfile - round-trips through the eval dir without le
     else Deno.env.set("HIVEAI_EVAL_DIR", previous);
     await Deno.remove(dir, { recursive: true });
   }
+});
+
+Deno.test("passRateInterval - few cases leave a wide range, many narrow it", () => {
+  const few = passRateInterval(2, 3);
+  assertEquals([few.low.toFixed(2), few.high.toFixed(2)], ["0.21", "0.94"]);
+  const many = passRateInterval(25, 30);
+  assertEquals([many.low.toFixed(2), many.high.toFixed(2)], ["0.66", "0.93"]);
+});
+
+Deno.test("passRateInterval - stays within 0 and 1 at the extremes", () => {
+  const all = passRateInterval(5, 5);
+  assertEquals(all.high, 1);
+  assertEquals(all.low > 0.5, true);
+  assertEquals(passRateInterval(0, 0), { low: 0, high: 1 });
+});
+
+Deno.test("averageInterval - spread scores and few cases widen the range", () => {
+  const steady = averageInterval([0.8, 0.8, 0.8]);
+  assertEquals([steady.low, steady.high].map((v) => v.toFixed(2)), ["0.80", "0.80"]);
+  const spread = averageInterval([0.5, 0.8, 1]);
+  assertEquals(spread.low < 0.3 && spread.high === 1, true);
+  assertEquals(averageInterval([0.9]), { low: 0, high: 1 });
+});
+
+Deno.test("buildMetricResults - every metric carries its 95% range", () => {
+  const exact = Array.from({ length: 6 }, (_, i) =>
+    verdict({ category: "routing", judged_by: "exact", score: undefined, pass: i < 5 })
+  );
+  const judged = [90, 70, 80].map((score) => verdict({ score }));
+
+  const results = buildMetricResults([...exact, ...judged], "v1");
+  const routing = results.find((r) => r.category === "routing")!;
+  const summarization = results.find((r) => r.category === "summarization")!;
+
+  assertEquals([routing.interval!.low.toFixed(2), routing.interval!.high.toFixed(2)], ["0.44", "0.97"]);
+  assertEquals(summarization.value.toFixed(2), "0.80");
+  assertEquals(summarization.interval!.low < 0.6 && summarization.interval!.high > 0.99, true);
 });

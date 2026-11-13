@@ -46,6 +46,9 @@ function thresholdsLine(): string {
 function metricNotes(m: MetricResult, s: MetricStatus | undefined): string {
   const notes: string[] = [];
   if (m.casesUnjudged > 0) notes.push(`${m.casesUnjudged} unjudged`);
+  if (m.interval) {
+    notes.push(`95% range ${(m.interval.low * 100).toFixed(0)}–${(m.interval.high * 100).toFixed(0)}%`);
+  }
   if (m.lowConfidence) notes.push("low confidence");
   if (s?.stale) notes.push(`stale: ${s.reasons.join("; ")}`);
   return notes.join(", ") || "-";

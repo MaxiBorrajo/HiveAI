@@ -9,10 +9,24 @@ text where there's no single right answer. Code lives in
 
 | Suite | Metrics (categories) it produces | Graded by |
 |---|---|---|
-| `routing` | `routing`, `abstention`, `param-extraction`, `multi-turn` | exact match (expected tool / params) |
+| `routing` | `routing`, `abstention`, `param-extraction`, `multi-turn`, `file-creation` | exact match (expected tool / params) |
 | `generation` | `generation` (code / flow generation) | exact checks on the generated graph |
 | `execution` | `execution` (tool calling inside a flow) | exact checks on the final state |
 | `summarization` | `summarization` | an LLM judge |
+
+- `file-creation` checks the model picks the right way to produce a file:
+  the chat's `create_file` for a file the user gets as a result, `file_ops`
+  for a path on their disk, `excel_write` for a real `.xlsx`, and nothing for
+  a question about files.
+- Routing cases are graded on the model's first tool call, and the run stops
+  there. Their plugins are dry runs (`dryRun` in `runRouting.ts`): the model
+  sees and calls them as usual, but they don't do anything, since some
+  (`file_ops`, `excel_write`) write to disk without asking.
+- Parameters are compared ignoring case and surrounding spaces. A case can
+  give `expectedParamsEs` when its Spanish phrasing names things differently.
+- Every metric has at least 15 cases (checked by
+  `tests/unit/llm-eval/cases.test.ts`), the point below which a metric is
+  marked low confidence.
 
 ## Running evals
 
@@ -114,8 +128,19 @@ for exact-match metrics, or the average judge score ÷ 100 for judged ones.
 
 - **Unjudged** cases don't count toward the value, and the profile shows how
   many there were.
-- **Low confidence**: a metric graded on fewer than 5 cases
-  (`LOW_CONFIDENCE_MIN_CASES`).
+- **Range**: each metric shows where its true value lies with 95%
+  confidence: a Wilson interval for pass rates, and a Student's t interval of
+  the mean for judge scores. With 3 cases a 2/3 pass rate could really be
+  anything from 21% to 94%; with 30 cases a 25/30 one lies between 66% and 93%.
+  Compare models by their ranges, not by single numbers: overlapping ranges
+  mean the data cannot tell them apart.
+- **Low confidence**: a metric graded on fewer than 15 cases
+  (`LOW_CONFIDENCE_MIN_CASES`), where the range is still around 50 points wide.
+- **Quick run** (`--quick`, or "Quick run" in the app): 5 cases per category
+  (`QUICK_CASES_PER_CATEGORY`) spread across the case list, instead of all of
+  them. It takes about a third of the time, which matters on slow local models,
+  but its metrics are low confidence and marked as a quick run: use it for a
+  first look at a model, and a full run to compare models.
 - **Out of date**: the case set or the model build changed since the result
   was recorded. The evolution also notes when the judge changed between runs.
 - **Cloud models**: before running, the estimated cost is shown and has to be

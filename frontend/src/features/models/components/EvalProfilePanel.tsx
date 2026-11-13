@@ -226,6 +226,15 @@ function MetricRow({
       </div>
       <p className="text-xs text-muted-foreground" data-testid="eval-metric-cases">
         {metric.casesGraded} case{metric.casesGraded === 1 ? "" : "s"} graded
+        {metric.quick && <span data-testid="eval-metric-quick"> (quick run)</span>}
+        {metric.interval && (
+          <span
+            title="The true value lies in this range with 95% confidence. Fewer cases make it wider."
+            data-testid="eval-metric-range"
+          >
+            {` · likely ${pct(metric.interval.low)}–${pct(metric.interval.high)}`}
+          </span>
+        )}
         {metric.casesUnjudged > 0 && `, ${metric.casesUnjudged} unjudged (not counted)`}
         {metric.judgeModel && ` · judge ${metric.judgeModel}`}
         {" · "}
@@ -245,7 +254,7 @@ function MetricRow({
       )}
       {metric.lowConfidence && (
         <p className="text-xs text-amber-600 dark:text-amber-500" data-testid="eval-metric-low-confidence">
-          Low confidence — based on few cases.
+          Low confidence — too few cases to tell this model apart from others.
         </p>
       )}
       {status?.stale && (
@@ -332,6 +341,7 @@ function EvaluateForm({
 }) {
   const [selected, setSelected] = useState<EvalSuite[]>(suites.map((s) => s.suite));
   const [judgeValue, setJudgeValue] = useState("");
+  const [quick, setQuick] = useState(false);
   const [estimate, setEstimate] = useState<RunEstimate | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -350,12 +360,12 @@ function EvaluateForm({
       return;
     }
     const id = ++requestId.current;
-    estimateEvalRun({ executor: model, judge, suites: selected })
+    estimateEvalRun({ executor: model, judge, suites: selected, quick })
       .then((result) => id === requestId.current && setEstimate(result))
       .catch(() => id === requestId.current && setEstimate(null));
     // `judge` is derived from judgeValue, which is the dependency that matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, judgeValue, selected, missingJudge]);
+  }, [model, judgeValue, selected, missingJudge, quick]);
 
   const needsConfirmation = !!estimate?.requiresConfirmation;
   const canStart =
@@ -364,7 +374,7 @@ function EvaluateForm({
   async function start() {
     setStarting(true);
     try {
-      const job = await startEvalRun({ executor: model, judge, suites: selected, confirm: accepted });
+      const job = await startEvalRun({ executor: model, judge, suites: selected, quick, confirm: accepted });
       if (job) onStarted();
     } catch {
       // The API client already shows the error.
@@ -402,6 +412,23 @@ function EvaluateForm({
           </label>
         ))}
       </fieldset>
+
+      <label className="flex items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5 size-3.5 accent-primary"
+          checked={quick}
+          onChange={(e) => setQuick(e.target.checked)}
+          data-testid="eval-form-quick"
+        />
+        <span>
+          <span className="font-medium">Quick run</span>
+          <span className="text-muted-foreground">
+            {" "}— 5 cases per category instead of all. Good for a first look at a model; too few
+            to compare it with others, so its results are marked low confidence.
+          </span>
+        </span>
+      </label>
 
       {needsJudge && (
         <label className="flex flex-col gap-1 text-xs">

@@ -1,4 +1,5 @@
 import { AIMessage, HumanMessage, type BaseMessage } from "@langchain/core/messages";
+import { selectCases } from "./caseSelection.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
 import { Scout } from "../../core/ai/strategy/scout/graph.ts";
@@ -35,6 +36,7 @@ export async function runJudgedSuite(
   judgeRef: ModelRef,
   runId: string,
   lang: EvalLang = "en",
+  quick = false,
 ): Promise<EvalVerdict[]> {
   if (executorRef.provider === "ollama") {
     const available = await ensureOllamaModelAvailable(executorRef.model);
@@ -65,8 +67,9 @@ export async function runJudgedSuite(
   const judgeLabel = modelRefLabel(judgeRef);
 
   const verdicts: EvalVerdict[] = [];
-  for (const [index, testCase] of judgedEvalCases.entries()) {
-    reportCaseStart("summarization", index, judgedEvalCases.length, testCase.name);
+  const cases = selectCases(judgedEvalCases, () => "summarization", quick);
+  for (const [index, testCase] of cases.entries()) {
+    reportCaseStart("summarization", index, cases.length, testCase.name);
     const verdict = await runOneCase(hive, executorRef, judgeRef, testCase, lang, runId, executorLabel, judgeLabel);
     console.log(
       verdict.judged_by === "unjudged"
