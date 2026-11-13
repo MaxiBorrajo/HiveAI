@@ -1,23 +1,13 @@
 import { TextReader, Uint8ArrayWriter, ZipWriter } from "@zip-js/zip-js";
+import { parseInline, parseMarkdown, type Block, type Span } from "./markdown-blocks.ts";
 
-/**
- * Turns the Markdown a model writes into a Word document: headings,
- * paragraphs, bullet and numbered lists, quotes, code blocks, tables, and
- * bold, italic, code and links inside the text.
- */
+/** Turns the Markdown a model writes into a Word document. */
 
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 
 // XML 1.0 forbids these control characters even when escaped.
 const INVALID_XML_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
-const INLINE = /\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)/g;
-
-interface RunStyle {
-  bold?: boolean;
-  italic?: boolean;
-  code?: boolean;
-}
 
 function escapeXml(text: string): string {
   return text
@@ -27,27 +17,16 @@ function escapeXml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function run(text: string, style: RunStyle = {}): string {
+function run({ text, bold, italic, code }: Span): string {
   if (!text) return "";
-  const props = (style.bold ? "<w:b/>" : "") +
-    (style.italic ? "<w:i/>" : "") +
-    (style.code ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>' : "");
+  const props = (bold ? "<w:b/>" : "") +
+    (italic ? "<w:i/>" : "") +
+    (code ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>' : "");
   return `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
 }
 
-function runs(text: string, base: RunStyle = {}): string {
-  let out = "";
-  let last = 0;
-  for (const match of text.matchAll(INLINE)) {
-    out += run(text.slice(last, match.index), base);
-    const [, bold, italic, code, linkText, url] = match;
-    if (bold !== undefined) out += run(bold, { ...base, bold: true });
-    else if (italic !== undefined) out += run(italic, { ...base, italic: true });
-    else if (code !== undefined) out += run(code, { ...base, code: true });
-    else out += run(`${linkText} (${url})`, base);
-    last = match.index + match[0].length;
-  }
-  return out + run(text.slice(last), base);
+function runs(text: string, base: Omit<Span, "text"> = {}): string {
+  return parseInline(text, base).map(run).join("");
 }
 
 function paragraph(content: string, props = ""): string {
@@ -56,10 +35,6 @@ function paragraph(content: string, props = ""): string {
 
 const style = (id: string) => `<w:pStyle w:val="${id}"/>`;
 const indent = '<w:ind w:left="720" w:hanging="360"/>';
-
-function splitRow(line: string): string[] {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
-}
 
 function table(rows: string[][]): string {
   const columns = Math.max(...rows.map((row) => row.length));
@@ -74,54 +49,29 @@ function table(rows: string[][]): string {
   return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>${grid}${body}</w:tbl>`;
 }
 
-function markdownToBody(markdown: string): string {
-  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
-  const body: string[] = [];
-  let text: string[] = [];
-  const flush = () => {
-    if (text.length > 0) body.push(paragraph(runs(text.join(" "))));
-    text = [];
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    let match: RegExpExecArray | null;
-    if (/^\s*```/.test(line)) {
-      flush();
-      while (++i < lines.length && !/^\s*```/.test(lines[i])) {
-        body.push(paragraph(run(lines[i] || " ", { code: true }), style("Code")));
-      }
-      body.push(paragraph(""));
-    } else if ((match = /^(#{1,6})\s+(.*)$/.exec(line))) {
-      flush();
-      body.push(paragraph(runs(match[2]), style(`Heading${Math.min(match[1].length, 3)}`)));
-    } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
-      flush();
-    } else if ((match = /^\s*[-*+]\s+(.*)$/.exec(line))) {
-      flush();
-      body.push(paragraph(run("•\t") + runs(match[1]), indent));
-    } else if ((match = /^\s*(\d+)[.)]\s+(.*)$/.exec(line))) {
-      flush();
-      body.push(paragraph(run(`${match[1]}.\t`) + runs(match[2]), indent));
-    } else if ((match = /^>\s?(.*)$/.exec(line))) {
-      flush();
-      body.push(paragraph(runs(match[1], { italic: true }), '<w:ind w:left="720"/>'));
-    } else if (line.trim().startsWith("|")) {
-      flush();
-      const rows: string[][] = [];
-      for (; i < lines.length && lines[i].trim().startsWith("|"); i++) {
-        if (!/^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i])) rows.push(splitRow(lines[i]));
-      }
-      i--;
-      if (rows.length > 0) body.push(table(rows), paragraph(""));
-    } else if (!line.trim()) {
-      flush();
-    } else {
-      text.push(line.trim());
-    }
+function blockXml(block: Block): string {
+  switch (block.type) {
+    case "heading":
+      return paragraph(runs(block.text), style(`Heading${block.level}`));
+    case "paragraph":
+      return paragraph(runs(block.text));
+    case "bullet":
+      return paragraph(run({ text: "•\t" }) + runs(block.text), indent);
+    case "numbered":
+      return paragraph(run({ text: `${block.number}.\t` }) + runs(block.text), indent);
+    case "quote":
+      return paragraph(runs(block.text, { italic: true }), '<w:ind w:left="720"/>');
+    case "code":
+      return block.lines
+        .map((line) => paragraph(run({ text: line || " ", code: true }), style("Code")))
+        .join("") + paragraph("");
+    case "table":
+      return table(block.rows) + paragraph("");
   }
-  flush();
-  return body.join("") || paragraph("");
+}
+
+function markdownToBody(markdown: string): string {
+  return parseMarkdown(markdown).map(blockXml).join("") || paragraph("");
 }
 
 const heading = (level: number, size: number) =>

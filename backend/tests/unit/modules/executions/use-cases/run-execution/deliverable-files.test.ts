@@ -100,12 +100,12 @@ Deno.test("createDeliverableFiles - a name it cannot build is reported and the r
     repo,
     executionId,
     historyId,
-    { type: "file", summary: "", content: "x", metadata: { deliverableFiles: ["slides.pdf"] } },
+    { type: "file", summary: "", content: "x", metadata: { deliverableFiles: ["slides.pptx"] } },
     (message) => warnings.push(message),
   );
 
   assertEquals(created, 0);
-  assertStringIncludes(warnings[0], "Could not create 'slides.pdf'");
+  assertStringIncludes(warnings[0], "Could not create 'slides.pptx'");
 });
 
 Deno.test("withoutReasoning - the model's reasoning never reaches the file", () => {

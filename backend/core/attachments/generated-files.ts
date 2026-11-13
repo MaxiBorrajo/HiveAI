@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import { DOCX_MIME_TYPE, MAX_FILE_SIZE_BYTES } from "./attachment-limits.ts";
 import { saveAttachment, saveExtractedText } from "./attachment-storage.ts";
 import { markdownToDocx } from "./markdown-docx.ts";
+import { markdownToPdf } from "./markdown-pdf.ts";
 import { sanitizeFilename } from "../files/save-to-downloads.ts";
 import type {
   Attachment,
@@ -37,15 +38,20 @@ const CODE_EXTENSIONS = new Set([
   ".cpp", ".cs", ".go", ".rs", ".rb", ".php", ".swift",
 ]);
 
+// Written by the model as Markdown and laid out into the document.
+const DOCUMENT_FORMATS: Record<string, { mimeType: string; build: (markdown: string) => Promise<Uint8Array> }> = {
+  ".docx": { mimeType: DOCX_MIME_TYPE, build: markdownToDocx },
+  ".pdf": { mimeType: "application/pdf", build: markdownToPdf },
+};
+
 export const GENERATED_FORMATS_LABEL =
-  ".md, .txt, .csv, .json, .docx, or a code file extension such as .py, .js or .html";
+  ".md, .txt, .csv, .json, .docx, .pdf, or a code file extension such as .py, .js or .html";
 
 /** The message reaches the model so it can fix the call. */
 export class GeneratedFileError extends Error {}
 
 function mimeTypeFor(extension: string): string | undefined {
-  if (extension === ".docx") return DOCX_MIME_TYPE;
-  return TEXT_FORMATS[extension] ??
+  return DOCUMENT_FORMATS[extension]?.mimeType ?? TEXT_FORMATS[extension] ??
     (CODE_EXTENSIONS.has(extension) ? "text/plain" : undefined);
 }
 
@@ -72,9 +78,9 @@ export async function createGeneratedFile(
     }
   }
 
-  const isDocx = extension === ".docx";
-  const bytes = isDocx
-    ? await markdownToDocx(content)
+  const document = DOCUMENT_FORMATS[extension];
+  const bytes = document
+    ? await document.build(content)
     : new TextEncoder().encode(content);
   if (bytes.length > MAX_FILE_SIZE_BYTES) {
     throw new GeneratedFileError(
@@ -93,8 +99,8 @@ export async function createGeneratedFile(
     mimeType,
     sizeBytes: bytes.length,
     storagePath,
-    // The Markdown is the Word document's text: no need to extract it back.
-    extractedTextPath: isDocx
+    // The Markdown is the document's text: no need to extract it back.
+    extractedTextPath: document
       ? await saveExtractedText(context.dataDir, content)
       : null,
     status: "ready",

@@ -6,6 +6,9 @@ import { readAttachment } from "../../../../core/attachments/attachment-storage.
 import { attachmentText } from "../../../../core/attachments/build-attachment-content.ts";
 import { extractTextFromDocx } from "../../../../core/attachments/office-text-extractor.ts";
 import { markdownToDocx } from "../../../../core/attachments/markdown-docx.ts";
+import { markdownToPdf } from "../../../../core/attachments/markdown-pdf.ts";
+import { extractTextFromPdf } from "../../../../core/attachments/pdf-text-extractor.ts";
+import { getDocumentProxy } from "unpdf";
 import {
   createGeneratedFile,
   GeneratedFileError,
@@ -109,13 +112,51 @@ Deno.test("markdownToDocx - keeps headings, lists, quotes, code, tables and esca
   );
 });
 
+Deno.test("a PDF is built from Markdown, and its text stays searchable", async () => {
+  const { dataDir, context } = await setup();
+  const markdown = "# Informe de ventas\n\nTodo **bien** en año 2026 ✅.\n\n- Señal: ¿sí?";
+
+  const file = await createGeneratedFile(context, "informe.pdf", markdown);
+
+  assertEquals(file.mimeType, "application/pdf");
+  const { text } = await extractTextFromPdf(await readAttachment(dataDir, file.storagePath));
+  assertStringIncludes(text, "Informe de ventas");
+  assertStringIncludes(text, "Todo bien en año 2026");
+  assertStringIncludes(text, "Señal: ¿sí?");
+  assertEquals(await attachmentText(dataDir, file), markdown);
+});
+
+Deno.test("markdownToPdf - lays out lists, code and tables, and flows onto new pages", async () => {
+  const markdown = [
+    "# Title",
+    "1. one",
+    "```",
+    "let a = 1 < 2;",
+    "```",
+    "| Name | Price |",
+    "|------|------:|",
+    "| Book | 10 |",
+    "",
+    ...Array.from({ length: 80 }, (_, i) => `Paragraph ${i} ${"word ".repeat(30)}\n`),
+    "A_very_long_identifier_without_spaces_".repeat(10),
+  ].join("\n");
+
+  const bytes = await markdownToPdf(markdown);
+
+  const { text } = await extractTextFromPdf(bytes);
+  for (const expected of ["Title", "one", "let a = 1 < 2;", "Name", "Price", "Book", "Paragraph 79"]) {
+    assertStringIncludes(text, expected);
+  }
+  assert((await getDocumentProxy(bytes)).numPages > 1);
+});
+
 Deno.test("the model gets errors it can fix, and the user hears about them", async () => {
   const { context } = await setup();
 
   const json = await assertRejects(() => createGeneratedFile(context, "a.json", "{oops"), GeneratedFileError);
   assertStringIncludes(json.message, "not valid JSON");
   const format = await assertRejects(() => createGeneratedFile(context, "a.exe", "x"), GeneratedFileError);
-  assertStringIncludes(format.message, ".md, .txt, .csv, .json, .docx");
+  assertStringIncludes(format.message, ".md, .txt, .csv, .json, .docx, .pdf");
   await assertRejects(() => createGeneratedFile(context, "a.md", "  \n"), GeneratedFileError, "empty");
   assertEquals(context.files, []);
 });

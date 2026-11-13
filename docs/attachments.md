@@ -29,7 +29,9 @@ The legacy binary formats `.doc` and `.ppt` are not supported.
   larger ones. The UI and the backend both check it.
 - A file that cannot be read, or a Word or PowerPoint file with no text, is
   rejected on upload.
-- An image sent to a model without vision rejects the message.
+- An image sent to a model without vision goes as the text OCR read from it,
+  with a warning that the model does not see the image. If it has no text, or
+  OCR is still reading it, the message is rejected.
 - The text of all the attachments in one message is limited to 100,000
   characters on cloud models and to about half of the context window on local
   models, because Ollama silently drops whatever exceeds it. Past the limit,
@@ -65,11 +67,12 @@ its content; the extension decides the format:
 | --- | --- |
 | `.md`, `.txt`, `.csv`, `.json` | The text as written. JSON must be valid |
 | `.docx` | A Word document built from the Markdown the model writes: headings, paragraphs, lists, quotes, code blocks, tables, bold, italic and links |
+| `.pdf` | A PDF built from the same Markdown, laid out with the standard PDF fonts (`pdf-lib`), so it works offline. Those fonts cover Western European text: other accented letters lose the accent and emoji are left out |
 | Code (`.py`, `.js`, `.html`, `.sql`, ...) | Plain text |
 
 - The file is saved as an output attachment of the reply, shown under it with
   a download button and a preview (Markdown rendered, CSV as a table, JSON
-  indented, the text of Word documents).
+  indented, the text of Word documents and PDFs).
 - It belongs to the chat: it is indexed for search like any other file, so
   later messages can ask about it.
 - A failed file (bad JSON, unsupported format, over 50 MB) does not end the

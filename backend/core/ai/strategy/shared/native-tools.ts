@@ -42,7 +42,7 @@ const CreateFileSchema = z.object({
   content: z
     .string()
     .describe(
-      "The whole content of the file. For .docx write Markdown (# headings, paragraphs, - or 1. lists, **bold**, *italic*, | tables |): it is turned into a Word document. For .csv use a header row.",
+      "The whole content of the file. For .docx and .pdf write Markdown (# headings, paragraphs, - or 1. lists, **bold**, *italic*, | tables |): it is turned into a Word document or a PDF. For .csv use a header row.",
     ),
 });
 
@@ -123,7 +123,7 @@ function buildCreateFileTool(context: GeneratedFilesContext): NativeTool {
     {
       name: CREATE_FILE_TOOL_NAME,
       description:
-        `Creates a file and attaches it to your reply in this chat, where the user can preview and download it. USE CASES: the user wants a result as a file (a document, report, table, CSV, JSON, Markdown, Word document or code file): "give me this as a CSV", "generate a Word document with...", "write a script that...". The format comes from the extension: ${GENERATED_FORMATS_LABEL}. Do not use it to save a file at a path on the user's computer: use file_ops for that.`,
+        `Creates a file and attaches it to your reply in this chat, where the user can preview and download it. USE CASES: the user wants a result as a file (a document, report, table, CSV, JSON, Markdown, Word document, PDF or code file): "give me this as a CSV", "generate a Word document with...", "make me a PDF of...", "write a script that...". The format comes from the extension: ${GENERATED_FORMATS_LABEL}. Do not use it to save a file at a path on the user's computer: use file_ops for that.`,
       schema: CreateFileSchema,
     },
   );
