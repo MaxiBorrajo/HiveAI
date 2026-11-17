@@ -1,21 +1,24 @@
 import { useEffect, useState } from "react";
+import { CheckIcon, ChevronLeft, ChevronRight, CopyIcon, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getErrorMessage } from "@/lib/errors";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import {
   attachmentDownloadUrl,
-  getAttachmentText,
+  attachmentInlineUrl,
   type AttachmentDto,
 } from "../api/attachments";
+import { useAttachmentText } from "../hooks/useAttachmentText";
+import { codeLanguage, fileKind, formatSize, type FileKind } from "../lib/fileKind";
+import { FileKindIcon } from "./FileKindIcon";
 import { MessageMarkdown } from "./MessageMarkdown";
 
 const MAX_PREVIEW_ROWS = 200;
-
-const isImage = (a: AttachmentDto) => a.mimeType.startsWith("image/");
 
 /** Text files, documents with extracted text, and images can be previewed. */
 export function canPreview(attachment: AttachmentDto): boolean {
@@ -106,72 +109,208 @@ function prettyJson(text: string): string {
   }
 }
 
-function PreviewBody({ attachment }: { attachment: AttachmentDto }) {
-  const [loaded, setLoaded] = useState<{ text?: string; error?: string }>();
+/** Code with colors, through the same renderer as the chat's code blocks. */
+function CodeView({ text, language }: { text: string; language: string }) {
+  // A fence longer than any run of backticks inside, so the code cannot close it.
+  const longest = Math.max(2, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return <MessageMarkdown content={`${fence}${language}\n${text}\n${fence}`} />;
+}
 
-  useEffect(() => {
-    if (isImage(attachment)) return;
-    let cancelled = false;
-    getAttachmentText(attachment.id)
-      .then((response) => {
-        if (cancelled) return;
-        setLoaded(
-          response.data
-            ? { text: response.data.text }
-            : { error: response.errors?.[0] ?? "Could not load the preview." },
-        );
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setLoaded({ error: getErrorMessage(error, "Could not load the preview.") });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [attachment]);
+function Tabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="mb-2 flex gap-1 text-xs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          onClick={() => onChange(tab.value)}
+          className={`rounded-md px-2 py-1 ${
+            value === tab.value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-  if (isImage(attachment)) {
+function TextBody({ attachment, kind, text }: { attachment: AttachmentDto; kind: FileKind; text: string }) {
+  const [view, setView] = useState<"rendered" | "source">("rendered");
+
+  if (attachment.mimeType === "text/csv") return <CsvTable text={text} />;
+  if (kind === "json") return <CodeView text={prettyJson(text)} language="json" />;
+  if (kind === "code") return <CodeView text={text} language={codeLanguage(attachment.originalName)} />;
+  if (kind === "text") return <pre className="whitespace-pre-wrap font-mono text-xs">{text}</pre>;
+  if (kind === "html") {
+    return (
+      <>
+        <Tabs
+          tabs={[{ value: "rendered", label: "Preview" }, { value: "source", label: "Code" }]}
+          value={view}
+          onChange={setView}
+        />
+        {view === "rendered" ? (
+          <iframe
+            title={`${attachment.originalName} preview`}
+            srcDoc={text}
+            // Scripts run, but in an isolated page with no access to the app.
+            sandbox="allow-scripts"
+            className="h-[65vh] w-full rounded-md border border-border bg-white"
+          />
+        ) : (
+          <CodeView text={text} language="html" />
+        )}
+      </>
+    );
+  }
+  // Markdown, and the text of Word, Excel, PowerPoint and PDF files.
+  return <MessageMarkdown content={text} />;
+}
+
+function PreviewBody({ attachment, text }: { attachment: AttachmentDto; text: ReturnType<typeof useAttachmentText> }) {
+  const kind = fileKind(attachment.originalName, attachment.mimeType);
+  const [pdfView, setPdfView] = useState<"document" | "text">("document");
+
+  if (kind === "image") {
     return (
       <img
         src={attachmentDownloadUrl(attachment.id)}
         alt={attachment.originalName}
-        className="max-h-[60vh] w-auto object-contain"
+        className="mx-auto max-h-[70vh] w-auto object-contain"
       />
     );
   }
-  if (!loaded) return <p className="text-muted-foreground">Loading…</p>;
-  if (loaded.error) return <p className="text-destructive">{loaded.error}</p>;
 
-  const text = loaded.text ?? "";
-  const { mimeType } = attachment;
-  if (mimeType === "text/csv") return <CsvTable text={text} />;
-  if (mimeType === "application/json") {
-    return <pre className="whitespace-pre-wrap text-xs font-mono">{prettyJson(text)}</pre>;
+  if (kind === "pdf") {
+    return (
+      <>
+        <Tabs
+          tabs={[{ value: "document", label: "Document" }, { value: "text", label: "Text" }]}
+          value={pdfView}
+          onChange={setPdfView}
+        />
+        {pdfView === "document" ? (
+          <iframe
+            title={`${attachment.originalName} document`}
+            src={attachmentInlineUrl(attachment.id)}
+            className="h-[68vh] w-full rounded-md border border-border"
+          />
+        ) : (
+          <TextOrStatus attachment={attachment} kind={kind} text={text} />
+        )}
+      </>
+    );
   }
-  if (mimeType === "text/plain") {
-    return <pre className="whitespace-pre-wrap text-xs font-mono">{text}</pre>;
-  }
-  // Markdown, and the text of Word, PowerPoint and PDF files.
-  return <MessageMarkdown content={text} />;
+
+  return <TextOrStatus attachment={attachment} kind={kind} text={text} />;
 }
 
-export function AttachmentPreview({
+function TextOrStatus({
   attachment,
+  kind,
+  text,
+}: {
+  attachment: AttachmentDto;
+  kind: FileKind;
+  text: ReturnType<typeof useAttachmentText>;
+}) {
+  if (!text) return <p className="text-muted-foreground">Loading…</p>;
+  if ("error" in text) return <p className="text-destructive">{text.error}</p>;
+  return <TextBody attachment={attachment} kind={kind} text={text.text} />;
+}
+
+/**
+ * A file opened large. With several files, arrows (or ← →) move between them.
+ */
+export function AttachmentPreview({
+  attachments,
+  index,
+  onIndexChange,
   onClose,
 }: {
-  attachment: AttachmentDto | null;
+  attachments: AttachmentDto[];
+  index: number | null;
+  onIndexChange: (index: number) => void;
   onClose: () => void;
 }) {
+  const attachment = index === null ? null : (attachments[index] ?? null);
+  const isImage = attachment?.mimeType.startsWith("image/") ?? false;
+  const text = useAttachmentText(attachment, !!attachment && !isImage);
+  const { copied, copy } = useCopyFeedback();
+  const count = attachments.length;
+
+  const go = (step: number) => {
+    if (index === null || count < 2) return;
+    onIndexChange((index + step + count) % count);
+  };
+
+  useEffect(() => {
+    if (index === null || count < 2) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "ArrowRight") onIndexChange((index + 1) % count);
+      if (event.key === "ArrowLeft") onIndexChange((index - 1 + count) % count);
+    };
+    globalThis.addEventListener("keydown", onKey);
+    return () => globalThis.removeEventListener("keydown", onKey);
+  }, [index, count, onIndexChange]);
+
+  const iconButton = "rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground";
+
   return (
     <Dialog open={attachment !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-[90vw] max-w-3xl sm:max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="truncate pr-6">{attachment?.originalName}</DialogTitle>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-auto text-sm">
-          {attachment && <PreviewBody key={attachment.id} attachment={attachment} />}
-        </div>
+      <DialogContent className="flex h-[88vh] w-[94vw] max-w-5xl flex-col sm:max-w-5xl">
+        {attachment && (
+          <>
+            <DialogHeader className="flex-row items-center gap-3 pr-8">
+              <FileKindIcon attachment={attachment} />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="truncate">{attachment.originalName}</DialogTitle>
+                <DialogDescription className="text-xs">
+                  {formatSize(attachment.sizeBytes)}
+                  {count > 1 && ` · ${index! + 1} of ${count}`}
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-0.5">
+                {count > 1 && (
+                  <>
+                    <button type="button" className={iconButton} onClick={() => go(-1)} title="Previous file">
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    <button type="button" className={iconButton} onClick={() => go(1)} title="Next file">
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </>
+                )}
+                {text && "text" in text && (
+                  <button
+                    type="button"
+                    className={iconButton}
+                    onClick={() => copy(text.text)}
+                    title={copied ? "Copied" : "Copy text"}
+                  >
+                    {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                  </button>
+                )}
+                <a href={attachmentDownloadUrl(attachment.id)} className={iconButton} title="Download">
+                  <Download className="size-4" />
+                </a>
+              </div>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-auto text-sm">
+              <PreviewBody key={attachment.id} attachment={attachment} text={text} />
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

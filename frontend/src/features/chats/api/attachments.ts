@@ -125,6 +125,11 @@ export function attachmentDownloadUrl(id: number): string {
   return `${apiClient.defaults.baseURL ?? ""}/api/attachments/${id}/download`;
 }
 
+/** The file shown in place rather than downloaded (a PDF opens in the viewer). */
+export function attachmentInlineUrl(id: number): string {
+  return `${attachmentDownloadUrl(id)}?inline=1`;
+}
+
 export async function getAttachment(
   id: number,
 ): Promise<ResponseEntity<AttachmentDto>> {

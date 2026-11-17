@@ -89,6 +89,10 @@ export function ChatInput({
     setInput(input.trim() ? `${input.trimEnd()} ${text}` : text)
   );
 
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const carriesFiles = (event: React.DragEvent) =>
+    !!onAttachmentsChange && event.dataTransfer.types.includes("Files");
+
   async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList || fileList.length === 0 || !onAttachmentsChange) return;
     const audioFiles = Array.from(fileList).filter(isAudioFile);
@@ -250,12 +254,43 @@ export function ChatInput({
         />
       )}
 
-      <div className="relative flex w-full flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring">
+      <div
+        className={cn(
+          "relative flex w-full flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring",
+          isDraggingFiles && "ring-2 ring-primary/60",
+        )}
+        // Files dropped on the box are attached, as with the paperclip.
+        onDragOver={(event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setIsDraggingFiles(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingFiles(false);
+        }}
+        onDrop={(event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setIsDraggingFiles(false);
+          void handleFilesSelected(event.dataTransfer.files);
+        }}
+      >
+        {isDraggingFiles && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/85 text-sm font-medium text-foreground">
+            Drop files to attach them
+          </div>
+        )}
         <Textarea
           ref={textareaRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
+          // A pasted screenshot or copied file is attached; pasted text stays text.
+          onPaste={(event) => {
+            if (!onAttachmentsChange || event.clipboardData.files.length === 0) return;
+            event.preventDefault();
+            void handleFilesSelected(event.clipboardData.files);
+          }}
           placeholder={
             placeholder ||
             (hidePluginsAndModes

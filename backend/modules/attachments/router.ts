@@ -116,9 +116,10 @@ attachmentsRouter.get("/execution-history/:historyId/attachments", async (c) => 
 });
 
 // The plain filename is ASCII for old clients; filename* keeps accents and spaces.
-function contentDisposition(fileName: string): string {
+// `inline` shows the file in the page (a PDF in its viewer) instead of downloading it.
+function contentDisposition(fileName: string, inline = false): string {
   const ascii = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+  return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 // The file as text, for previews: documents give the text extracted from them.
@@ -161,7 +162,7 @@ attachmentsRouter.get("/attachments/:id/download", async (c) => {
     return new Response(bytes as BodyInit, {
       headers: {
         "Content-Type": mimeType,
-        "Content-Disposition": contentDisposition(fileName),
+        "Content-Disposition": contentDisposition(fileName, c.req.query("inline") === "1"),
       },
     });
   } catch (error) {
