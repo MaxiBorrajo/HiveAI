@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { GraphEdge, GraphNode } from "../../types";
 import { useInstalledPlugins } from "./usePlugins";
 import { Field, TextInput } from "./fields";
+import { ConfigView } from "./ConfigView";
 import {
   ConditionNodeForm,
   EndNodeForm,
@@ -154,10 +155,7 @@ function NodeBody({
             <label className={LABEL}>Name</label>
             <p className="text-sm">{node.name}</p>
           </div>
-          <div>
-            <label className={LABEL}>Config</label>
-            <pre className={CODE}>{JSON.stringify(node.config, null, 2)}</pre>
-          </div>
+          <ConfigView config={node.config} />
         </div>
       )}
     </>

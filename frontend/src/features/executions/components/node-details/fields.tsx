@@ -17,8 +17,9 @@ export function TextInput(props: React.ComponentProps<typeof Input>) {
   return <Input {...props} className="h-8 text-xs" />;
 }
 
+/** Grows with its text up to a cap, then scrolls, so a long prompt cannot hide the rest of the form. */
 export function TextArea(props: React.ComponentProps<typeof Textarea>) {
-  return <Textarea {...props} className="min-h-24 text-xs" />;
+  return <Textarea {...props} className="min-h-24 max-h-60 overflow-y-auto text-xs" />;
 }
 
 export function Select({
