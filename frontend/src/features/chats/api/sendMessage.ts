@@ -1,4 +1,5 @@
 import { postSse } from "../../../lib/sse";
+import { announceAlwaysThinking } from "@/features/model-settings/api/alwaysThinking";
 import type { AttachmentDto } from "./attachments";
 import type {
   ChatStep,
@@ -85,6 +86,8 @@ export async function sendMessage(
         handlers.onError(payload.message, payload.rejected === true);
       } else if (eventName === "warning") {
         handlers.onWarning?.(payload.message);
+      } else if (eventName === "always_thinking") {
+        announceAlwaysThinking(payload.model);
       }
     },
     signal,

@@ -12,9 +12,18 @@ import { executionContextStorage } from "../../../core/microkernel/human-interac
 import { beginModelActivity } from "../../../core/ai/activity-tracker.ts";
 import { watchModelLoad } from "../../../core/ollama/model-load.ts";
 import { resolveModelOptions } from "../../model-settings/lib/resolve-model-options.ts";
+import {
+  ALWAYS_THINKING_NOTICE,
+  rememberAlwaysThinking,
+} from "../../model-settings/lib/always-thinking-store.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { embedText } from "../../../core/memory/embeddings.ts";
 import { splitContent } from "../../../core/ai/providers/capabilities.ts";
+import { InlineThinkingSplitter } from "../../../core/ai/providers/inline-thinking.ts";
+import {
+  REPETITION_LOOP_WARNING,
+  RepetitionWatcher,
+} from "../../../core/ai/providers/repetition-loop.ts";
 import { normalizeProviderError } from "../../../core/ai/providers/errors.ts";
 import type { BeePlugin } from "../../../core/microkernel/bee-plugin.ts";
 import { withUsageContext } from "../../../core/ai/usage/usage-context.ts";
@@ -199,6 +208,23 @@ async function persistAssistantMessage(
   return messageId;
 }
 
+/** Thinking was off and the model reasoned all the same: record it, and say so the first time. */
+async function noteIfReasonedAnyway(
+  model: string,
+  thinkingRuns: ThinkingRun[],
+  send: (event: string, data: unknown) => void,
+): Promise<void> {
+  if (!thinkingRuns.some((run) => run.text.trim())) return;
+  try {
+    if (await rememberAlwaysThinking(model)) {
+      send("warning", { message: ALWAYS_THINKING_NOTICE });
+      send("always_thinking", { model });
+    }
+  } catch (error) {
+    console.error("[Chat] Could not record that the model always thinks:", error);
+  }
+}
+
 async function linkUsageToMessage(
   db: AppDatabase,
   groupId: string,
@@ -276,6 +302,8 @@ export interface StreamResult {
   fullContent: string;
   steps: ChatStep[];
   thinkingRuns: ThinkingRun[];
+  /** The model fell into a loop and was stopped; the text is cut where it began. */
+  repetitionLoop?: boolean;
 }
 
 export async function consumeStream(
@@ -283,72 +311,122 @@ export async function consumeStream(
   finalNodeName: string,
   send: (event: string, data: unknown) => void,
   progress: StreamResult = { fullContent: "", steps: [], thinkingRuns: [] },
+  /** Stops the model; called when it falls into a loop. */
+  stop: () => void = () => {},
 ): Promise<StreamResult> {
   const { steps, thinkingRuns } = progress;
   let seenMessages = 0;
+  const splitters = new Map<string | undefined, InlineThinkingSplitter>();
+  const splitterFor = (node: string | undefined) => {
+    let splitter = splitters.get(node);
+    if (!splitter) splitters.set(node, splitter = new InlineThinkingSplitter());
+    return splitter;
+  };
+  const textWatcher = new RepetitionWatcher();
+  const thinkingWatchers = new WeakMap<ThinkingRun, RepetitionWatcher>();
+  const loopedAt = (run: ThinkingRun) => {
+    let watcher = thinkingWatchers.get(run);
+    if (!watcher) thinkingWatchers.set(run, watcher = new RepetitionWatcher());
+    return watcher.check(run.text);
+  };
+  const stopForLoop = () => {
+    progress.repetitionLoop = true;
+    stop();
+  };
 
-  for await (const chunk of streamIterable) {
-    const [mode, payload] = chunk as
-      | [
-          "messages",
-          [
-            {
-              content?: unknown;
-              additional_kwargs?: { reasoning_content?: string };
-            },
-            { langgraph_node?: string },
-          ],
-        ]
-      | ["values", { steps: ChatStep[]; messages?: unknown[] }];
+  try {
+    for await (const chunk of streamIterable) {
+      // Stopped: drain what is still in flight until the abort ends the stream.
+      if (progress.repetitionLoop) continue;
+      const [mode, payload] = chunk as
+        | [
+            "messages",
+            [
+              {
+                content?: unknown;
+                additional_kwargs?: { reasoning_content?: string };
+              },
+              { langgraph_node?: string },
+            ],
+          ]
+        | ["values", { steps: ChatStep[]; messages?: unknown[] }];
 
-    if (mode === "messages") {
-      const [message, metadata] = payload;
+      if (mode === "messages") {
+        const [message, metadata] = payload;
 
-      const { text: contentText, thinking: contentThinking } = splitContent(
-        message.content,
-      );
-      const reasoningChunk =
-        message.additional_kwargs?.reasoning_content || contentThinking;
-      if (reasoningChunk) {
-        appendThinkingDelta(
-          thinkingRuns,
-          reasoningChunk,
-          metadata.langgraph_node,
+        const { text: contentText, thinking: contentThinking } = splitContent(
+          message.content,
         );
-        send("thinking_delta", {
-          content: reasoningChunk,
-          node: metadata.langgraph_node,
-        });
+        // Thinking written inline as <think>…</think> (see inline-thinking.ts).
+        const inline = splitterFor(metadata.langgraph_node).push(contentText);
+        const reasoningChunk =
+          (message.additional_kwargs?.reasoning_content || contentThinking) +
+          inline.thinking;
+        if (reasoningChunk) {
+          appendThinkingDelta(
+            thinkingRuns,
+            reasoningChunk,
+            metadata.langgraph_node,
+          );
+          send("thinking_delta", {
+            content: reasoningChunk,
+            node: metadata.langgraph_node,
+          });
+          const run = thinkingRuns[thinkingRuns.length - 1];
+          const cut = loopedAt(run);
+          if (cut !== null) {
+            run.text = run.text.slice(0, cut);
+            stopForLoop();
+            continue;
+          }
+        }
+
+        if (metadata.langgraph_node !== finalNodeName) continue;
+
+        const chunkText = inline.text;
+        if (!chunkText) continue;
+        progress.fullContent += chunkText;
+        send("token", { content: chunkText });
+        const cut = textWatcher.check(progress.fullContent);
+        if (cut !== null) {
+          progress.fullContent = progress.fullContent.slice(0, cut);
+          stopForLoop();
+        }
+        continue;
       }
 
-      if (metadata.langgraph_node !== finalNodeName) continue;
+      const alreadySent = steps.length;
+      steps.length = 0;
+      steps.push(...payload.steps);
+      for (const step of payload.steps.slice(alreadySent)) send("step", step);
 
-      const chunkText = contentText;
-      if (!chunkText) continue;
-      progress.fullContent += chunkText;
-      send("token", { content: chunkText });
-      continue;
-    }
-
-    const alreadySent = steps.length;
-    steps.length = 0;
-    steps.push(...payload.steps);
-    for (const step of payload.steps.slice(alreadySent)) send("step", step);
-
-    const messages = payload.messages ?? [];
-    if (messages.length > seenMessages) {
-      seenMessages = messages.length;
-      const last = messages[messages.length - 1] as {
-        tool_calls?: { name: string; args: Record<string, unknown> }[];
-      };
-      if (last?.tool_calls?.length) {
-        send("tool_calls", {
-          calls: last.tool_calls.map(({ name, args }) => ({ name, args })),
-        });
+      const messages = payload.messages ?? [];
+      if (messages.length > seenMessages) {
+        seenMessages = messages.length;
+        const last = messages[messages.length - 1] as {
+          tool_calls?: { name: string; args: Record<string, unknown> }[];
+        };
+        if (last?.tool_calls?.length) {
+          send("tool_calls", {
+            calls: last.tool_calls.map(({ name, args }) => ({ name, args })),
+          });
+        }
       }
     }
+  } catch (error) {
+    // The abort that stopped the loop, not a failure.
+    if (progress.repetitionLoop) return progress;
+    throw error;
   }
 
+  if (!progress.repetitionLoop) {
+    // Text held back in case it was the start of a tag.
+    const rest = splitterFor(finalNodeName).flush().text;
+    if (rest) {
+      progress.fullContent += rest;
+      send("token", { content: rest });
+    }
+  }
   return progress;
 }
 
@@ -514,6 +592,7 @@ export async function sendMessage(
       onFailure: (message) => send("warning", { message }),
     };
     let streamResult: StreamResult;
+    const loopStop = new AbortController();
     const endModelActivity = modelProvider === "ollama"
       ? beginModelActivity(model)
       : () => {};
@@ -545,13 +624,17 @@ export async function sendMessage(
                   modelKeyId,
                   modelOptions: modelProvider === "ollama" ? modelOptions : {},
                 },
-                { streamMode: ["messages", "values"], signal: req.signal },
+                {
+                  streamMode: ["messages", "values"],
+                  signal: AbortSignal.any([req.signal, loopStop.signal]),
+                },
               );
               return await consumeStream(
                 streamIterable,
                 "Agent",
                 send,
                 progress,
+                () => loopStop.abort(),
               );
                 },
               );
@@ -573,6 +656,10 @@ export async function sendMessage(
       endModelActivity();
     }
     const { fullContent, steps, thinkingRuns } = streamResult;
+    if (streamResult.repetitionLoop) send("warning", { message: REPETITION_LOOP_WARNING });
+    if (modelProvider === "ollama" && modelOptions.think === false) {
+      await noteIfReasonedAnyway(model, thinkingRuns, send);
+    }
 
     const usedTools = usedToolsOf(steps);
 

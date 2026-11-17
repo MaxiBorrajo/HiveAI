@@ -17,6 +17,7 @@ import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
 import { withLocalNumCtx } from "../../providers/local-context.ts";
 import { splitContent } from "../../providers/capabilities.ts";
+import { splitInlineThinking } from "../../providers/inline-thinking.ts";
 import { streamToMessage } from "./stream-model.ts";
 import type { AttachmentContentPart } from "../../../attachments/build-attachment-content.ts";
 import { toHumanContent } from "../../../attachments/to-human-content.ts";
@@ -597,7 +598,10 @@ export function mapResponseToState(
     resultValue = coerceStructuredScalar(response, config.structuredOutput.type);
   } else {
     const content = (response as AIMessage).content;
-    resultValue = Array.isArray(content) ? splitContent(content).text : content;
+    // A model that thinks inline must not leave its <think> block in the output.
+    resultValue = splitInlineThinking(
+      Array.isArray(content) ? splitContent(content).text : content,
+    ).text;
   }
 
   const outKey = config.outputKey;

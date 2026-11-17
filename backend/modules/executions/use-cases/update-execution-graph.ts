@@ -9,7 +9,7 @@ import { validateGraph } from "../../../core/ai/visual-builder/validation/valida
 import type { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import { ExecutionRepository } from "../../../infrastructure/db/repositories/execution-repository.ts";
-import { describeActivePlugins } from "./generate-execution/describe-plugins.ts";
+import { describeInstalledPlugins } from "./generate-execution/describe-plugins.ts";
 
 export type PersistGraphResult =
   | { ok: true; newGraph: { id: number }; normalized: LangGraphAbstraction }
@@ -85,7 +85,8 @@ export async function updateExecutionGraph(
     }
 
     const saved = await persistValidatedGraph(repo, execution, graph, stateSchema, {
-      availablePlugins: describeActivePlugins(hive),
+      // Installed is enough: "active" is the chat's switch, and the run checks what must be running.
+      availablePlugins: describeInstalledPlugins(hive),
     });
     if (!saved.ok) {
       return ResponseBuilder.error(
