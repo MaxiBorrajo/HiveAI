@@ -118,3 +118,85 @@ Deno.test("forkChat - copies attachments linked to messages up to the cutoff, as
   const originalAttachments = await attachmentRepo.findByChatId(chatId);
   assertEquals(originalAttachments.length, 1, "original attachment untouched");
 });
+
+Deno.test("forkChat - before: stops just short of the message, leaving it and its files out", async () => {
+  const dataDir = await Deno.makeTempDir();
+  const db = await initORM(dataDir);
+  const chats = new ChatRepository(db);
+  const messages = new MessageRepository(db);
+  const attachmentRepo = new AttachmentRepository(db);
+
+  const chatId = await chats.create({
+    title: "branch me",
+    createdAt: 1,
+    updatedAt: 1,
+    messageCount: 0,
+  });
+  const add = (role: string, content: string) =>
+    messages.create({
+      chatId,
+      role,
+      content,
+      timestamp: Date.now(),
+      metadata: null,
+      vector: "[]",
+    });
+
+  await add("user", "first question");
+  await add("agent", "first answer");
+  const edited = await add("user", "question to rewrite");
+  await attachmentRepo.create({
+    chatId,
+    messageId: edited,
+    executionId: null,
+    executionHistoryId: null,
+    direction: "input",
+    originalName: "notes.txt",
+    mimeType: "text/plain",
+    sizeBytes: 11,
+    storagePath: await saveAttachment(
+      dataDir,
+      new TextEncoder().encode("hello world"),
+      "notes.txt",
+    ),
+    extractedTextPath: null,
+    status: "ready",
+    createdAt: Date.now(),
+  });
+
+  const response = await forkChat(db, chatId, edited, dataDir, {}, { before: true });
+  assertEquals(response.status, 200);
+  const newChatId = Number((await response.json()).data.id);
+
+  const forked = await messages.findByChatId(newChatId);
+  assertEquals(forked.map((m) => m.content), ["first question", "first answer"]);
+  assertEquals((await chats.findById(newChatId))!.messageCount, 2);
+  assertEquals(await attachmentRepo.findByChatId(newChatId), []);
+});
+
+Deno.test("forkChat - before the first message: an empty chat to start over in", async () => {
+  const dataDir = await Deno.makeTempDir();
+  const db = await initORM(dataDir);
+  const chats = new ChatRepository(db);
+  const messages = new MessageRepository(db);
+
+  const chatId = await chats.create({
+    title: "start over",
+    createdAt: 1,
+    updatedAt: 1,
+    messageCount: 0,
+  });
+  const first = await messages.create({
+    chatId,
+    role: "user",
+    content: "only question",
+    timestamp: Date.now(),
+    metadata: null,
+    vector: "[]",
+  });
+
+  const response = await forkChat(db, chatId, first, dataDir, {}, { before: true });
+  assertEquals(response.status, 200);
+  const newChatId = Number((await response.json()).data.id);
+  assertEquals(await messages.findByChatId(newChatId), []);
+});

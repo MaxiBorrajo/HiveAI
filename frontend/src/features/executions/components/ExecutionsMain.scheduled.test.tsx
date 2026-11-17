@@ -157,6 +157,14 @@ describe("ExecutionsMain with the scheduler", () => {
     expect(screen.getByRole("button", { name: /^result$/i })).toBeInTheDocument();
   });
 
+  test("screen hidden behind the chat: nothing opens, the toast tells you", async () => {
+    render(<ExecutionsMain active={false} />);
+    await screen.findByRole("button", { name: /run execution/i });
+    currentLastResult = lastResult("finished while away", 1);
+    expect(await deliver(finished("ok"))).toBe(false);
+    expect(screen.queryByText("finished while away")).not.toBeInTheDocument();
+  });
+
   test("finished somewhere else: nothing opens here (a toast is the caller's job)", async () => {
     render(<ExecutionsMain />);
     await screen.findByRole("button", { name: /run execution/i });

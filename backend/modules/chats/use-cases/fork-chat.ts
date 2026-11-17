@@ -2,7 +2,7 @@ import { ResponseBuilder } from "../../../core/api/response.ts";
 import { ChatRepository } from "../../../infrastructure/db/repositories/chat-repository.ts";
 import { MessageRepository } from "../../../infrastructure/db/repositories/message-repository.ts";
 import { AttachmentRepository } from "../../../infrastructure/db/repositories/attachment-repository.ts";
-import { copyAttachmentFile } from "../../../core/attachments/attachment-storage.ts";
+import { duplicateAttachment } from "../../../core/attachments/duplicate-attachment.ts";
 import type { AppDatabase } from "../../../infrastructure/db/orm.ts";
 import type { FrontendChat } from "../types.ts";
 
@@ -21,6 +21,8 @@ export async function forkChat(
   messageId: number,
   dataDir: string,
   headers: Record<string, string>,
+  /** `before`: stop just short of the message, to send an edited version of it. */
+  options: { before?: boolean } = {},
 ): Promise<Response> {
   try {
     if (isNaN(chatId) || isNaN(messageId)) {
@@ -42,21 +44,25 @@ export async function forkChat(
       });
     }
 
-    const messagesToCopy = await msgRepo.findUpToId(chatId, messageId);
-    if (messagesToCopy.length === 0) {
+    const upToMessage = await msgRepo.findUpToId(chatId, messageId);
+    if (upToMessage.length === 0) {
       return ResponseBuilder.error(
         [`Message ${messageId} not found in chat ${chatId}`],
         undefined,
         { status: 404, headers },
       );
     }
-    if (messagesToCopy[messagesToCopy.length - 1].id !== messageId) {
+    if (upToMessage[upToMessage.length - 1].id !== messageId) {
       return ResponseBuilder.error(
         [`Message ${messageId} not found in chat ${chatId}`],
         undefined,
         { status: 404, headers },
       );
     }
+    // Before the first message this is empty: a fresh chat to start over in.
+    const messagesToCopy = options.before
+      ? upToMessage.slice(0, -1)
+      : upToMessage;
 
     const originalAttachments = await attachmentRepo.findByChatId(chatId);
     const attachmentsByMessage = new Map<number, typeof originalAttachments>();
@@ -87,30 +93,13 @@ export async function forkChat(
 
       const attachmentsForMessage = attachmentsByMessage.get(message.id) ?? [];
       for (const attachment of attachmentsForMessage) {
-        const newStoragePath = await copyAttachmentFile(
+        await duplicateAttachment(
           dataDir,
-          attachment.storagePath,
+          attachmentRepo,
+          attachment,
+          { chatId: newChatId, messageId: newMessageId },
+          now,
         );
-        const newExtractedTextPath = attachment.extractedTextPath
-          ? await copyAttachmentFile(dataDir, attachment.extractedTextPath)
-          : null;
-
-        const copy = await attachmentRepo.create({
-          chatId: newChatId,
-          messageId: newMessageId,
-          executionId: null,
-          executionHistoryId: null,
-          direction: attachment.direction,
-          originalName: attachment.originalName,
-          mimeType: attachment.mimeType,
-          sizeBytes: attachment.sizeBytes,
-          storagePath: newStoragePath,
-          extractedTextPath: newExtractedTextPath,
-          status: attachment.status,
-          createdAt: now,
-          indexedAt: attachment.indexedAt,
-        });
-        attachmentRepo.copyChunks(attachment.id, copy.id);
       }
     }
 

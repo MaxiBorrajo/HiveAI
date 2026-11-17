@@ -33,6 +33,7 @@ import {
 import { toAttachmentDto, type AttachmentDto } from "../../attachments/types.ts";
 import type { Attachment } from "../../../infrastructure/db/repositories/attachment-repository.ts";
 import { scheduleAttachmentIndexing } from "../../../core/attachments/attachment-index.ts";
+import { duplicateAttachment } from "../../../core/attachments/duplicate-attachment.ts";
 import { ensureScansRead } from "../../../core/attachments/scan-recognition.ts";
 import {
   retrieveAttachmentExcerpts,
@@ -67,6 +68,7 @@ export interface SendMessageOptions {
 
 async function persistUserMessage(
   db: AppDatabase,
+  dataDir: string,
   chatId: number,
   userText: string,
   attachmentIds: number[],
@@ -94,7 +96,16 @@ async function persistUserMessage(
   if (attachmentIds.length > 0) {
     const attachmentRepo = new AttachmentRepository(db);
     for (const id of attachmentIds) {
-      await attachmentRepo.linkToMessage(id, messageId, chat.id);
+      const attachment = await attachmentRepo.findById(id);
+      // A file reused from an earlier message stays with that message too.
+      if (attachment?.messageId != null) {
+        await duplicateAttachment(dataDir, attachmentRepo, attachment, {
+          chatId: chat.id,
+          messageId,
+        });
+      } else {
+        await attachmentRepo.linkToMessage(id, messageId, chat.id);
+      }
     }
   }
 
@@ -433,7 +444,16 @@ export async function sendMessage(
         .join(", ")}]`,
     );
 
-    await persistUserMessage(db, resolvedChatId, userText, attachmentIds);
+    const userMessageId = await persistUserMessage(
+      db,
+      hive.getConfig().get("dataDir"),
+      resolvedChatId,
+      userText,
+      attachmentIds,
+    );
+    // The client shows the message under a temporary id until it gets this one;
+    // forking from it needs the stored id.
+    send("user_message", { messageId: userMessageId.toString() });
 
     send("thinking", {});
 
@@ -591,6 +611,7 @@ export async function sendMessage(
     );
 
     send("done", {
+      messageId: messageId.toString(),
       content: fullContent,
       usedTools,
       steps,

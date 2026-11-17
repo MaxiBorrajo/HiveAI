@@ -84,5 +84,7 @@ chatsRouter.post("/:id/fork", async (c) => {
   const dataDir = c.get("hive").getConfig().get("dataDir");
   const body = await c.req.json().catch(() => ({}));
   const messageId = Number(body.messageId);
-  return forkChat(db, parseId(c.req.param("id")), messageId, dataDir, headers);
+  return forkChat(db, parseId(c.req.param("id")), messageId, dataDir, headers, {
+    before: body.before === true,
+  });
 });

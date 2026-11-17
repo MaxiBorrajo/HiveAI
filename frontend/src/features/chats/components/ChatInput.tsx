@@ -42,6 +42,7 @@ interface ChatInputProps {
   chatId?: string | null;
   attachments?: AttachmentDto[];
   onAttachmentsChange?: (attachments: AttachmentDto[]) => void;
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
 }
 
 export function ChatInput({
@@ -56,6 +57,7 @@ export function ChatInput({
   chatId = null,
   attachments = [],
   onAttachmentsChange,
+  textareaRef,
 }: ChatInputProps) {
   const {
     hasModel,
@@ -234,6 +236,7 @@ export function ChatInput({
 
       <div className="relative flex w-full flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring">
         <Textarea
+          ref={textareaRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}

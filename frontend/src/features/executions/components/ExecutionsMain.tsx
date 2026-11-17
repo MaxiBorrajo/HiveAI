@@ -26,7 +26,11 @@ import { totalMissed } from "../lib/schedule";
 import { sameExecution, shouldOpenResult } from "../lib/scheduleActivity";
 import { ExecutionHistoryPanel } from "./history/ExecutionHistoryPanel";
 
-export function ExecutionsMain() {
+/**
+ * `active` is false while another view is on screen: the screen stays mounted
+ * so a generation or run in progress keeps updating it.
+ */
+export function ExecutionsMain({ active = true }: { active?: boolean }) {
   const {
     executions,
     activeExecutionId,
@@ -109,6 +113,7 @@ export function ExecutionsMain() {
     isEditing,
     runExecution,
     onResult: () => setIsResultSidebarOpen(true),
+    shortcutsEnabled: active,
   });
 
   // When the scheduler finishes a run, refresh this execution's result (it is
@@ -116,9 +121,11 @@ export function ExecutionsMain() {
   // just as if you had pressed Run yourself.
   const activeIdRef = useRef(activeExecutionId);
   const reloadRef = useRef(reloadLastResult);
+  const visibleRef = useRef(active);
   useEffect(() => {
     activeIdRef.current = activeExecutionId;
     reloadRef.current = reloadLastResult;
+    visibleRef.current = active;
   });
   const { subscribe } = scheduleActivity;
   useEffect(
@@ -126,7 +133,12 @@ export function ExecutionsMain() {
       subscribe(async (run) => {
         if (run.status !== "ok") return false;
         const hasResult = await reloadRef.current(String(run.executionId));
-        if (hasResult && shouldOpenResult(run, activeIdRef.current)) {
+        // Hidden, nobody is looking: leave it to the caller's toast.
+        if (
+          hasResult &&
+          visibleRef.current &&
+          shouldOpenResult(run, activeIdRef.current)
+        ) {
           setIsResultSidebarOpen(true);
           return true;
         }
@@ -195,6 +207,7 @@ export function ExecutionsMain() {
             graph={displayGraph}
             editable={isEditing}
             fitToken={editor.arrangeVersion}
+            hidden={!active}
             errorNodeIds={editor.errorNodeIds}
             errorEdgeIds={editor.errorEdgeIds}
             onConnectNodes={editor.connect}

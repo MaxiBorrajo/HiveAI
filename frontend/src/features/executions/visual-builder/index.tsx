@@ -35,6 +35,8 @@ interface VisualBuilderProps {
   editable?: boolean;
   /** Changes whenever the view must re-fit the graph (after Arrange or Undo). */
   fitToken?: number;
+  /** Mounted but not shown: no fitting (it would measure nothing) and no delete key */
+  hidden?: boolean;
   errorNodeIds?: ReadonlySet<string>;
   errorEdgeIds?: ReadonlySet<string>;
   onConnectNodes?: (connection: Connection) => void;
@@ -57,6 +59,7 @@ export function VisualBuilder({
   onEdgeSelect,
   editable,
   fitToken,
+  hidden = false,
   errorNodeIds,
   errorEdgeIds,
   onConnectNodes,
@@ -140,7 +143,7 @@ export function VisualBuilder({
         }}
         nodesDraggable={!!editable}
         nodesConnectable={!!editable}
-        deleteKeyCode={editable ? ["Backspace", "Delete"] : null}
+        deleteKeyCode={editable && !hidden ? ["Backspace", "Delete"] : null}
         isValidConnection={(c) =>
           !!graph && isConnectionAllowed(graph, {
             source: c.source,
@@ -190,7 +193,8 @@ export function VisualBuilder({
         <AutoFitOnUpdate
           nodesCount={nodes.length}
           isGenerating={isGenerating}
-          disabled={!!editable}
+          // Re-enabling on show re-runs the fit, catching up on what grew hidden.
+          disabled={!!editable || hidden}
           direction={direction}
           fitToken={fitToken}
         />

@@ -29,7 +29,11 @@ interface ChatsContextValue {
   touchChat: (chatId: string) => void;
   unreadChatIds: Set<string>;
   markChatUnread: (chatId: string) => void;
-  forkChat: (chatId: string, messageId: string) => Promise<string>;
+  forkChat: (
+    chatId: string,
+    messageId: string,
+    before?: boolean,
+  ) => Promise<string>;
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
@@ -78,8 +82,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     await state.update(chatId, { title });
   }
 
-  async function forkChat(chatId: string, messageId: string): Promise<string> {
-    const { data } = await forkChatRequest(chatId, messageId);
+  async function forkChat(
+    chatId: string,
+    messageId: string,
+    before = false,
+  ): Promise<string> {
+    const { data } = await forkChatRequest(chatId, messageId, before);
     if (!data) throw new Error("Could not fork the chat.");
     state.onCreated(data.id);
     return data.id;

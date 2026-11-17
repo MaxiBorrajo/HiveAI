@@ -17,6 +17,7 @@ import { ExecutionsMain } from "@/features/executions/components/ExecutionsMain"
 import { ServerOptimizationDialog } from "@/features/model-settings/components/ServerOptimizationDialog";
 import { UpdateBanner } from "@/features/app-updates/components/UpdateBanner";
 import { toastManager } from "@/lib/toastManager";
+import { cn } from "@/lib/utils";
 import { ModelsProvider } from "@/features/models/ModelsContext";
 import { DownloadsProvider } from "@/features/models/DownloadsContext";
 import { ChatsProvider, useChats } from "@/features/chats/ChatsContext";
@@ -41,6 +42,13 @@ function AppContent() {
   const { openPlugin, openEditor, closeDraft, notifyPluginImported } =
     useDraftEditor();
   const [currentView, setCurrentView] = useState<AppView>("chat");
+  // Both views stay mounted once opened, so leaving one does not drop what it
+  // is streaming; executions mounts on first visit to keep startup light.
+  const [executionsOpened, setExecutionsOpened] = useState(false);
+  const changeView = (view: AppView) => {
+    if (view === "executions") setExecutionsOpened(true);
+    setCurrentView(view);
+  };
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [importContent, setImportContent] = useState<File | null>(null);
@@ -78,17 +86,11 @@ function AppContent() {
     setImportContent(file);
   }
 
-  if (openPlugin) {
-    return (
-      <PluginEditorPage
-        key={`${openPlugin.kind}:${openPlugin.name}`}
-        plugin={openPlugin}
-        onSwitch={openEditor}
-        onClose={closeDraft}
-        onPluginsChanged={notifyPluginImported}
-      />
-    );
-  }
+  // The plugin editor covers the app instead of replacing it, so a chat or run
+  // in progress behind it keeps going and is still there on the way back.
+  const isEditorOpen = openPlugin !== null;
+  const chatActive = currentView === "chat" && !isEditorOpen;
+  const executionsActive = currentView === "executions" && !isEditorOpen;
 
   const chatProps = buildSidebarProps(
     {
@@ -144,83 +146,107 @@ function AppContent() {
   const sidebarProps = currentView === "chat" ? chatProps : executionProps;
 
   return (
-    <div className="flex h-screen relative">
-      <UpdateBanner />
-      <ServerOptimizationDialog />
-      <AppSidebar
-        {...sidebarProps}
-        newMenuOptions={
-          currentView === "executions"
-            ? [
-                {
-                  label: "Create new",
-                  icon: <FilePlus className="size-3.5" />,
-                  onClick: startNewExecution,
-                },
-                {
-                  label: "Import",
-                  icon: <Upload className="size-3.5" />,
-                  onClick: () => importInputRef.current?.click(),
-                },
-              ]
-            : undefined
-        }
-        actions={
-          <>
-            <div className="ml-2">
-              <ViewSwitcher
-                currentView={currentView}
-                onViewChange={setCurrentView}
-              />
-            </div>
-            <ThemeToggle />
-          </>
-        }
-      />
-
-      {currentView === "chat" ? <Chat /> : <ExecutionsMain />}
-
-      <input
-        ref={importInputRef}
-        type="file"
-        accept=".zip,application/zip"
-        className="hidden"
-        onChange={handleImportFileChosen}
-      />
-
-      <ImportFlowDialog
-        file={importContent}
-        onClose={() => setImportContent(null)}
-        onImported={(id) => {
-          refreshExecutions();
-          selectImportedExecution(id);
-        }}
-      />
-
-      <DeleteConfirmationDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        itemName={deleteTarget?.title}
-        entityName={deleteTarget?.entityName || ""}
-        onConfirm={async () => {
-          if (deleteTarget) {
-            await deleteTarget.onConfirm();
+    <>
+      {openPlugin && (
+        <PluginEditorPage
+          key={`${openPlugin.kind}:${openPlugin.name}`}
+          plugin={openPlugin}
+          onSwitch={openEditor}
+          onClose={closeDraft}
+          onPluginsChanged={notifyPluginImported}
+        />
+      )}
+      <div className={cn("flex h-screen relative", isEditorOpen && "hidden")}>
+        <UpdateBanner />
+        {/* Portaled, so hiding the app would not hide it over the editor */}
+        {!isEditorOpen && <ServerOptimizationDialog />}
+        <AppSidebar
+          {...sidebarProps}
+          newMenuOptions={
+            currentView === "executions"
+              ? [
+                  {
+                    label: "Create new",
+                    icon: <FilePlus className="size-3.5" />,
+                    onClick: startNewExecution,
+                  },
+                  {
+                    label: "Import",
+                    icon: <Upload className="size-3.5" />,
+                    onClick: () => importInputRef.current?.click(),
+                  },
+                ]
+              : undefined
           }
-        }}
-      />
-
-      <RenameDialog
-        open={!!renameTarget}
-        onOpenChange={(open) => !open && setRenameTarget(null)}
-        initialTitle={renameTarget?.title}
-        entityName={renameTarget?.entityName || ""}
-        onConfirm={async (newTitle) => {
-          if (renameTarget) {
-            await renameTarget.onConfirm(newTitle);
+          actions={
+            <>
+              <div className="ml-2">
+                <ViewSwitcher
+                  currentView={currentView}
+                  onViewChange={changeView}
+                />
+              </div>
+              <ThemeToggle />
+            </>
           }
-        }}
-      />
-    </div>
+        />
+
+        <div className={cn("flex flex-1 min-w-0", currentView !== "chat" && "hidden")}>
+          <Chat active={chatActive} />
+        </div>
+        {executionsOpened && (
+          <div
+            className={cn(
+              "flex flex-1 min-w-0",
+              currentView !== "executions" && "hidden",
+            )}
+          >
+            <ExecutionsMain active={executionsActive} />
+          </div>
+        )}
+
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="hidden"
+          onChange={handleImportFileChosen}
+        />
+
+        <ImportFlowDialog
+          file={importContent}
+          onClose={() => setImportContent(null)}
+          onImported={(id) => {
+            refreshExecutions();
+            selectImportedExecution(id);
+          }}
+        />
+
+        <DeleteConfirmationDialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          itemName={deleteTarget?.title}
+          entityName={deleteTarget?.entityName || ""}
+          onConfirm={async () => {
+            if (deleteTarget) {
+              await deleteTarget.onConfirm();
+            }
+          }}
+        />
+
+        <RenameDialog
+          open={!!renameTarget}
+          onOpenChange={(open) => !open && setRenameTarget(null)}
+          initialTitle={renameTarget?.title}
+          entityName={renameTarget?.entityName || ""}
+          onConfirm={async (newTitle) => {
+            if (renameTarget) {
+              await renameTarget.onConfirm(newTitle);
+            }
+          }}
+        />
+      </div>
+    </>
   );
 }
 

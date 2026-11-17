@@ -14,6 +14,8 @@ export interface LiveToolCall {
 
 export interface StreamHandlers {
   onChatCreated: (chatId: string) => void;
+  /** The stored id of the message just sent, to replace its temporary one. */
+  onUserMessage?: (messageId: string) => void;
   onThinking: () => void;
   onStep: (step: ChatStep) => void;
   onToolCalls: (calls: LiveToolCall[]) => void;
@@ -29,6 +31,8 @@ export interface StreamHandlers {
     usage: MessageUsage | null,
     conversationUsage: ConversationUsage | null,
     files: AttachmentDto[],
+    /** The stored id of the answer, to replace its temporary one. */
+    messageId?: string,
   ) => void;
   onError: (message: string, rejected: boolean) => void;
   onWarning?: (message: string) => void;
@@ -51,6 +55,8 @@ export async function sendMessage(
     (eventName, payload) => {
       if (eventName === "chat_created") {
         handlers.onChatCreated(payload.chatId);
+      } else if (eventName === "user_message") {
+        handlers.onUserMessage?.(payload.messageId);
       } else if (eventName === "thinking") {
         handlers.onThinking();
       } else if (eventName === "step") {
@@ -73,6 +79,7 @@ export async function sendMessage(
           payload.usage ?? null,
           payload.conversationUsage ?? null,
           payload.files ?? [],
+          payload.messageId,
         );
       } else if (eventName === "error") {
         handlers.onError(payload.message, payload.rejected === true);
