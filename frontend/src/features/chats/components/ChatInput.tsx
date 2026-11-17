@@ -27,6 +27,9 @@ import {
   type AttachmentDto,
 } from "../api/attachments.ts";
 import { getErrorMessage } from "@/lib/errors";
+import { useVoiceInput } from "@/features/voice/hooks/useVoiceInput";
+import { VoiceInputButton } from "@/features/voice/components/VoiceInputButton";
+import { AUDIO_EXTENSIONS, isAudioFile } from "@/features/voice/lib/audioFiles";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
@@ -81,9 +84,22 @@ export function ChatInput({
   const [isUploading, setIsUploading] = useState(false);
   useScanProgress(attachments, onAttachmentsChange);
 
+  // Speech becomes text in the input, to be read over before sending.
+  const voice = useVoiceInput((text) =>
+    setInput(input.trim() ? `${input.trimEnd()} ${text}` : text)
+  );
+
   async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList || fileList.length === 0 || !onAttachmentsChange) return;
-    const files = Array.from(fileList);
+    const audioFiles = Array.from(fileList).filter(isAudioFile);
+    const files = Array.from(fileList).filter((file) => !isAudioFile(file));
+    if (audioFiles.length > 0) {
+      if (audioFiles.length > 1) {
+        reportError(["Audio files are transcribed one at a time: only the first one was used."]);
+      }
+      voice.transcribeFile(audioFiles[0]);
+    }
+    if (files.length === 0) return;
     setIsUploading(true);
     let uploaded = attachments;
     try {
@@ -265,7 +281,7 @@ export function ChatInput({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept={ACCEPTED_ATTACHMENT_TYPES}
+                  accept={`${ACCEPTED_ATTACHMENT_TYPES},${AUDIO_EXTENSIONS.join(",")}`}
                   className="hidden"
                   onChange={(event) => {
                     handleFilesSelected(event.target.files);
@@ -286,6 +302,7 @@ export function ChatInput({
                     <PaperclipIcon className="size-3.5" />
                   )}
                 </Button>
+                <VoiceInputButton voice={voice} />
               </>
             )}
           </div>
