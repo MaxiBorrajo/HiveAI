@@ -7,6 +7,10 @@ import { assertPluginShape } from "./plugin-conformance.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
+import {
+  createGeneratedBinaryFile,
+  generatedFilesStorage,
+} from "../attachments/generated-files.ts";
 import { type DynamicStructuredTool, tool } from "@langchain/core/tools";
 import type { RunnableConfig } from "@langchain/core/runnables";
 import {
@@ -114,6 +118,13 @@ export class HiveMicrokernel {
       },
       reportStep: (label) => reportPluginStep(label),
       getConfig: (key) => getSecretStore().get(`${pluginName}:${key}`),
+      createFile: async (fileName, bytes, mimeType) => {
+        // Set around a chat turn or a run; a plugin test has neither.
+        const target = generatedFilesStorage.getStore();
+        if (!target) return null;
+        const file = await createGeneratedBinaryFile(target, fileName, bytes, mimeType);
+        return { fileName: file.originalName, sizeBytes: file.sizeBytes };
+      },
     };
   }
 

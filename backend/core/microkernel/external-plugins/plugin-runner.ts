@@ -75,6 +75,12 @@ function buildContext(pluginDir: string, pluginName: string): BeeContext {
         return undefined;
       }
     },
+    createFile: () => {
+      // The bytes would have to cross the callback and find the right chat.
+      return Promise.reject(
+        new Error("Attaching files is not available to external plugins yet."),
+      );
+    },
   };
 }
 

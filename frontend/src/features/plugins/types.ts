@@ -21,10 +21,18 @@ export interface PluginParameter {
   description?: string;
 }
 
+export interface PluginConfigOption {
+  value: string;
+  label: string;
+}
+
 export interface PluginConfigFieldSchema {
   key: string;
   label: string;
   secret?: boolean;
+  options?: PluginConfigOption[];
+  placeholder?: string;
+  description?: string;
 }
 
 export interface Plugin {
@@ -45,6 +53,10 @@ export interface PluginConfigFieldValue {
   secret: boolean;
   masked: string | null;
   value: string | null;
+  /** Picked from a list instead of typed. */
+  options?: PluginConfigOption[];
+  placeholder?: string;
+  description?: string;
 }
 
 export interface PluginSelectionTestItem extends SelectionTestCase {

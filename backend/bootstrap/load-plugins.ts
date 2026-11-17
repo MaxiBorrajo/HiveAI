@@ -1,13 +1,15 @@
 import { join } from "node:path";
 import type { HiveMicrokernel } from "../core/microkernel/hive-microkernel.ts";
 
-// Every active tool is sent with each model request. These two rarely matter
-// (the date is already in the system prompt; counters are a demo), so new
-// installs start with them off. An explicit user choice, saved in the DB,
-// always wins, so existing installs keep their current state.
+// Every active tool is sent with each model request. These rarely matter
+// (the date is already in the system prompt; counters are a demo) or do
+// nothing until set up (image generation needs a provider), so new installs
+// start with them off. An explicit user choice, saved in the DB, always wins,
+// so existing installs keep their current state.
 export const OFF_BY_DEFAULT_PLUGINS: ReadonlySet<string> = new Set([
   "counter",
   "current_datetime",
+  "generate_image",
 ]);
 
 export function shouldActivateByDefault(

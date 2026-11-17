@@ -10,12 +10,33 @@ export interface BeeContext {
   ): Promise<boolean>;
   reportStep(label: string): void;
   getConfig(key: string): Promise<string | undefined>;
+  /**
+   * Attaches a file to the reply (in a chat or a run), where the user can
+   * preview and download it. Only images for now. Resolves to null when there
+   * is nothing to attach it to, e.g. when the plugin is being tested.
+   */
+  createFile(
+    fileName: string,
+    bytes: Uint8Array,
+    mimeType: string,
+  ): Promise<{ fileName: string; sizeBytes: number } | null>;
+}
+
+export interface PluginConfigOption {
+  value: string;
+  label: string;
 }
 
 export interface PluginConfigField {
   key: string;
   label: string;
   secret?: boolean;
+  /** Picked from a list instead of typed. */
+  options?: PluginConfigOption[];
+  /** Shown while the field is empty, e.g. the value used by default. */
+  placeholder?: string;
+  /** One line under the field explaining what it is for. */
+  description?: string;
 }
 
 export type SelectionCaseKind = "positive" | "negative" | "ambiguous";

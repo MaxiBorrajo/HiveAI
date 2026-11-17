@@ -20,6 +20,12 @@ export async function setPluginConfig(
 
   const cleanValue = typeof value === "string" ? value.trim() : "";
   if (!cleanValue) throw new AppError("A value is required.", 400);
+  if (field.options && !field.options.some((o) => o.value === cleanValue)) {
+    throw new AppError(
+      `'${cleanValue}' is not one of the choices for '${field.label}'.`,
+      400,
+    );
+  }
 
   const id = configId(pluginName, key);
   await deps.secrets.put(id, cleanValue);

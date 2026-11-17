@@ -133,6 +133,37 @@ Deno.test("plugin config - rejects an empty value", async () => {
   await Deno.remove(dir, { recursive: true });
 });
 
+Deno.test("plugin config - a field with choices only accepts one of them, and the UI gets the choices", async () => {
+  const { deps, repo, dir } = await setup(fakePlugin({
+    configFields: [{
+      key: "provider",
+      label: "Provider",
+      secret: false,
+      options: [
+        { value: "gemini", label: "Google Gemini" },
+        { value: "ollama", label: "Ollama" },
+      ],
+      placeholder: "gemini",
+      description: "Where images come from.",
+    }],
+  }));
+
+  await assertRejects(
+    () => setPluginConfig(deps, "web_search", "provider", "dalle"),
+    AppError,
+    "not one of the choices",
+  );
+  assertEquals(repo.rows.size, 0);
+
+  await setPluginConfig(deps, "web_search", "provider", "ollama");
+  const [field] = await getPluginConfig(deps, "web_search");
+  assertEquals(field.value, "ollama");
+  assertEquals(field.options?.map((o) => o.value), ["gemini", "ollama"]);
+  assertEquals(field.placeholder, "gemini");
+  assertEquals(field.description, "Where images come from.");
+  await Deno.remove(dir, { recursive: true });
+});
+
 Deno.test("plugin config - operating on an unregistered plugin fails clearly", async () => {
   const { deps, dir } = await setup(undefined);
   await assertRejects(() => getPluginConfig(deps, "ghost_plugin"), AppError);

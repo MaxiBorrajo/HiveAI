@@ -1,6 +1,9 @@
 import type { SecretStore } from "../../core/secrets/secret-store.ts";
 import type { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
-import type { PluginConfigField } from "../../core/microkernel/bee-plugin.ts";
+import type {
+  PluginConfigField,
+  PluginConfigOption,
+} from "../../core/microkernel/bee-plugin.ts";
 import type { PluginConfigRepository } from "../../infrastructure/db/repositories/plugin-config-repository.ts";
 
 export interface PluginConfigDeps {
@@ -23,4 +26,7 @@ export interface PluginConfigFieldDto {
   secret: boolean;
   masked: string | null;
   value: string | null;
+  options?: PluginConfigOption[];
+  placeholder?: string;
+  description?: string;
 }

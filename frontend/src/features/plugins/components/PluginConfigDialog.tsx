@@ -9,6 +9,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   installedPluginConfigApi,
   type PluginConfigApi,
 } from "../api/pluginConfig";
@@ -44,12 +51,13 @@ function FieldRow({
 
   const hasValue = field.masked !== null || field.value !== null;
 
-  async function save() {
+  async function save(next = value) {
     setError(null);
     setSaving(true);
     try {
-      await api.set(pluginName, field.key, value);
-      setValue("");
+      await api.set(pluginName, field.key, next);
+      // A secret is never shown again; a plain value stays visible.
+      setValue(field.secret ? "" : next.trim());
       onSaved();
     } catch (e) {
       setError(errorMessage(e));
@@ -76,14 +84,50 @@ function FieldRow({
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
       <label className="flex flex-col gap-1 text-xs">
         {field.label}
-        <Input
-          type={field.secret ? "password" : "text"}
-          autoComplete="off"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={field.secret ? field.masked ?? "Not set" : "Not set"}
-        />
+        {field.options ? (
+          <Select
+            value={value || null}
+            onValueChange={(next) => {
+              if (!next) return;
+              setValue(String(next));
+              void save(String(next));
+            }}
+            disabled={saving}
+          >
+            <SelectTrigger aria-label={field.label}>
+              <SelectValue placeholder={field.placeholder ?? "Not set"}>
+                {(v: string | null) =>
+                  field.options?.find((o) => o.value === v)?.label ??
+                  field.placeholder ??
+                  "Not set"
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {field.options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            type={field.secret ? "password" : "text"}
+            autoComplete="off"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={
+              field.secret
+                ? field.masked ?? "Not set"
+                : field.placeholder ?? "Not set"
+            }
+          />
+        )}
       </label>
+      {field.description && (
+        <p className="text-xs text-muted-foreground">{field.description}</p>
+      )}
       {field.secret && (
         <p className="text-xs text-muted-foreground">
           Stored encrypted on this device. It is never shown again.
@@ -100,13 +144,15 @@ function FieldRow({
             Clear
           </Button>
         )}
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={saving || !value.trim()}
-        >
-          {saving ? "Saving..." : "Save"}
-        </Button>
+        {!field.options && (
+          <Button
+            size="sm"
+            onClick={() => save()}
+            disabled={saving || !value.trim()}
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        )}
       </div>
     </div>
   );

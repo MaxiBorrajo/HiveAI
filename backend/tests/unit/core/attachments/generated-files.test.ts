@@ -10,6 +10,7 @@ import { markdownToPdf } from "../../../../core/attachments/markdown-pdf.ts";
 import { extractTextFromPdf } from "../../../../core/attachments/pdf-text-extractor.ts";
 import { getDocumentProxy } from "unpdf";
 import {
+  createGeneratedBinaryFile,
   createGeneratedFile,
   GeneratedFileError,
   generatedFilesStorage,
@@ -191,4 +192,39 @@ Deno.test("create_file - creates the file, or reports why not without ending the
   await assertRejects(() => createFile.invoke({ fileName: "b.json", content: "{" }), Error, "not valid JSON");
   assertEquals(failures.length, 1);
   assertStringIncludes(failures[0], "Could not create 'b.json'");
+});
+
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+Deno.test("binary images are stored as given, named after their real format", async () => {
+  const { dataDir, context } = await setup();
+
+  const file = await createGeneratedBinaryFile(context, "sunset.jpg", PNG_BYTES, "image/png");
+
+  assertEquals(file.originalName, "sunset.png", "the extension follows the bytes, not the name");
+  assertEquals(file.mimeType, "image/png");
+  assertEquals(file.direction, "output");
+  assertEquals(file.chatId, context.chatId);
+  assertEquals(file.extractedTextPath, null);
+  assertEquals(await readAttachment(dataDir, file.storagePath), PNG_BYTES);
+  assertEquals(context.files, [file]);
+});
+
+Deno.test("binary files: names are sanitized and only images are accepted", async () => {
+  const { context } = await setup();
+
+  const file = await createGeneratedBinaryFile(context, "../../etc/picture", PNG_BYTES, "image/png");
+  assertEquals(file.originalName, "picture.png");
+
+  await assertRejects(
+    () => createGeneratedBinaryFile(context, "app.exe", PNG_BYTES, "application/octet-stream"),
+    GeneratedFileError,
+    "cannot be attached",
+  );
+  await assertRejects(
+    () => createGeneratedBinaryFile(context, "empty", new Uint8Array(), "image/png"),
+    GeneratedFileError,
+    "empty",
+  );
+  assertEquals(context.files.length, 1, "rejected files are not attached");
 });

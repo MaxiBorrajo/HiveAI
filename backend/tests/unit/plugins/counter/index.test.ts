@@ -9,6 +9,7 @@ function makeContext(dataDir: string): BeeContext {
     requestApproval: () => Promise.resolve(true),
     reportStep: () => {},
     getConfig: () => Promise.resolve(undefined),
+    createFile: () => Promise.resolve(null),
   };
 }
 

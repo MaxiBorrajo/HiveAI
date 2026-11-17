@@ -14,6 +14,7 @@ const context: BeeContext = {
   requestApproval: () => Promise.resolve(true),
   reportStep: () => {},
   getConfig: () => Promise.resolve(undefined),
+  createFile: () => Promise.resolve(null),
 };
 
 Deno.test("every bundled plugin ships the bee-plugin.ts the loader requires", async () => {

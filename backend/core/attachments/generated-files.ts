@@ -82,6 +82,46 @@ export async function createGeneratedFile(
   const bytes = document
     ? await document.build(content)
     : new TextEncoder().encode(content);
+  // The Markdown is the document's text: no need to extract it back.
+  const extractedTextPath = document
+    ? await saveExtractedText(context.dataDir, content)
+    : null;
+  return await storeGeneratedFile(context, name, mimeType, bytes, extractedTextPath);
+}
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+};
+
+/** For files a plugin already has as bytes, such as a generated image. */
+export async function createGeneratedBinaryFile(
+  context: GeneratedFilesContext,
+  fileName: string,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<Attachment> {
+  const extension = IMAGE_EXTENSIONS[mimeType];
+  if (!extension) {
+    throw new GeneratedFileError(
+      `'${mimeType}' files cannot be attached. Use ${Object.keys(IMAGE_EXTENSIONS).join(", ")}.`,
+    );
+  }
+  if (bytes.length === 0) throw new GeneratedFileError("The file is empty.");
+  // The extension must match the bytes, or the preview picks the wrong type.
+  const base = sanitizeFilename(fileName).replace(/\.[a-z0-9]+$/i, "") || "image";
+  return await storeGeneratedFile(context, `${base}${extension}`, mimeType, bytes, null);
+}
+
+async function storeGeneratedFile(
+  context: GeneratedFilesContext,
+  name: string,
+  mimeType: string,
+  bytes: Uint8Array,
+  extractedTextPath: string | null,
+): Promise<Attachment> {
   if (bytes.length > MAX_FILE_SIZE_BYTES) {
     throw new GeneratedFileError(
       `The file would weigh more than the ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit.`,
@@ -99,10 +139,7 @@ export async function createGeneratedFile(
     mimeType,
     sizeBytes: bytes.length,
     storagePath,
-    // The Markdown is the document's text: no need to extract it back.
-    extractedTextPath: document
-      ? await saveExtractedText(context.dataDir, content)
-      : null,
+    extractedTextPath,
     status: "ready",
     createdAt: Date.now(),
   });

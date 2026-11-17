@@ -19,32 +19,18 @@ export async function getPluginConfig(
     fields.map(async (field): Promise<PluginConfigFieldDto> => {
       const row = rowByKey.get(field.key);
       const secret = field.secret ?? true;
-      if (!row) {
-        return {
-          key: field.key,
-          label: field.label,
-          secret,
-          masked: null,
-          value: null,
-        };
-      }
-      if (secret) {
-        return {
-          key: field.key,
-          label: field.label,
-          secret,
-          masked: `••••${row.last4}`,
-          value: null,
-        };
-      }
-      const value = await deps.secrets.get(configId(pluginName, field.key));
-      return {
+      const base = {
         key: field.key,
         label: field.label,
         secret,
-        masked: null,
-        value: value ?? null,
+        ...(field.options ? { options: field.options } : {}),
+        ...(field.placeholder ? { placeholder: field.placeholder } : {}),
+        ...(field.description ? { description: field.description } : {}),
       };
+      if (!row) return { ...base, masked: null, value: null };
+      if (secret) return { ...base, masked: `••••${row.last4}`, value: null };
+      const value = await deps.secrets.get(configId(pluginName, field.key));
+      return { ...base, masked: null, value: value ?? null };
     }),
   );
 }
