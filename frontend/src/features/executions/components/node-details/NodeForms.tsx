@@ -37,12 +37,28 @@ function asStringRecord(value: unknown): Record<string, string> {
   );
 }
 
-export function LlmNodeForm({
+const SELECT_CLASS =
+  "h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const KEEP_EACH = "__keep_each__";
+
+/**
+ * Provider, model and API key of an LLM node. Only `model`, `provider` and
+ * `keyId` of `config` are read; the rest is passed through untouched. With
+ * `keepEach` (editing several nodes at once) an extra choice leaves each node
+ * with the model it has; `mixed` says that choice is the current one.
+ */
+export function ModelField({
   config,
   setConfig,
-  stateKeys,
-  plugins,
-}: NodeFormProps) {
+  mixed = false,
+  keepEach,
+}: {
+  config: Record<string, any>;
+  setConfig: (next: Record<string, any>) => void;
+  mixed?: boolean;
+  keepEach?: () => void;
+}) {
   const { optionGroups } = useModels();
   const { requestDownload } = useDownloads();
   const fullTree = buildProviderTree(optionGroups, { includeUnsupported: true });
@@ -83,6 +99,10 @@ export function LlmNodeForm({
     );
   };
   const pickProvider = (value: string) => {
+    if (value === KEEP_EACH) {
+      keepEach?.();
+      return;
+    }
     const next = tree.find((e) => e.provider === value);
     const first = next?.models.find((m) => canUse(m.toolSupport));
     applyChoice(
@@ -113,8 +133,109 @@ export function LlmNodeForm({
       keyId: value,
     });
   };
-  const selectClass =
-    "h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  return (
+    <Field
+      label="Model"
+      hint="Pick a provider, then a model, then the API key to use with it. Leave on default to use the model selected in the chat."
+    >
+      <div className="flex flex-col gap-1.5">
+        <select
+          value={mixed ? KEEP_EACH : provider}
+          onChange={(e) => pickProvider(e.target.value)}
+          className={SELECT_CLASS}
+        >
+          {keepEach && <option value={KEEP_EACH}>Keep each node's model</option>}
+          <option value="">Default model</option>
+          {provider && !entry && (
+            <option value={provider}>{provider} (unavailable)</option>
+          )}
+          {tree.map((e) => (
+            <option key={e.provider} value={e.provider}>
+              {e.label}
+            </option>
+          ))}
+        </select>
+        {provider && (
+          <select
+            value={config.model ?? ""}
+            onChange={(e) => pickModel(e.target.value)}
+            className={SELECT_CLASS}
+          >
+            {!modelEntry && (
+              <option value={config.model}>
+                {config.model} (unavailable)
+              </option>
+            )}
+            {entry?.models.map((m) => (
+              <option key={m.model} value={m.model}>
+                {m.model}
+                {m.toolSupport?.status === "unsupported"
+                  ? " (no tool support)"
+                  : m.toolSupport?.status === "unknown"
+                    ? " (tools unverified)"
+                    : ""}
+              </option>
+            ))}
+          </select>
+        )}
+        {isCloud(provider as ModelProvider) && (
+          <select
+            value={keyId}
+            onChange={(e) => pickKey(e.target.value)}
+            className={SELECT_CLASS}
+          >
+            {!modelEntry?.keys.some((k) => k.keyId === keyId) && (
+              <option value={keyId}>API key (unavailable)</option>
+            )}
+            {modelEntry?.keys.map((k) => (
+              <option key={k.keyId} value={k.keyId}>
+                {k.alias}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {modelKnown && support?.status === "unsupported" && (
+        <p className="mt-1 text-[11px] text-destructive">
+          This model cannot be used: {support.reason ?? "it does not support tool calling."}{" "}
+          The execution will not start until you pick another one.
+        </p>
+      )}
+      {modelKnown && support?.status === "unknown" && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Tool support of this model could not be verified.{" "}
+          {support.reason}
+        </p>
+      )}
+      {!modelKnown && (
+        <p className="mt-1 text-[11px] text-destructive">
+          {provider === "ollama"
+            ? `The model '${config.model}' is not installed (it may have been deleted).`
+            : "This model or its API key no longer exists."}{" "}
+          The execution will not start until you pick another one
+          {provider === "ollama" ? " or download it again" : ""}.
+          {provider === "ollama" && (
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={() => requestDownload(config.model as string)}
+            >
+              Download again
+            </button>
+          )}
+        </p>
+      )}
+    </Field>
+  );
+}
+
+export function LlmNodeForm({
+  config,
+  setConfig,
+  stateKeys,
+  plugins,
+}: NodeFormProps) {
   const set = (patch: Record<string, any>) =>
     setConfig({ ...config, ...patch });
   const equipped: string[] = Array.isArray(config.plugins)
@@ -131,97 +252,7 @@ export function LlmNodeForm({
   return (
     <div className="flex flex-col gap-3">
       <StateKeysDatalist id={KEYS_LIST_ID} keys={stateKeys} />
-      <Field
-        label="Model"
-        hint="Pick a provider, then a model, then the API key to use with it. Leave on default to use the model selected in the chat."
-      >
-        <div className="flex flex-col gap-1.5">
-          <select
-            value={provider}
-            onChange={(e) => pickProvider(e.target.value)}
-            className={selectClass}
-          >
-            <option value="">Default model</option>
-            {provider && !entry && (
-              <option value={provider}>{provider} (unavailable)</option>
-            )}
-            {tree.map((e) => (
-              <option key={e.provider} value={e.provider}>
-                {e.label}
-              </option>
-            ))}
-          </select>
-          {provider && (
-            <select
-              value={config.model ?? ""}
-              onChange={(e) => pickModel(e.target.value)}
-              className={selectClass}
-            >
-              {!modelEntry && (
-                <option value={config.model}>
-                  {config.model} (unavailable)
-                </option>
-              )}
-              {entry?.models.map((m) => (
-                <option key={m.model} value={m.model}>
-                  {m.model}
-                  {m.toolSupport?.status === "unsupported"
-                    ? " (no tool support)"
-                    : m.toolSupport?.status === "unknown"
-                      ? " (tools unverified)"
-                      : ""}
-                </option>
-              ))}
-            </select>
-          )}
-          {isCloud(provider as ModelProvider) && (
-            <select
-              value={keyId}
-              onChange={(e) => pickKey(e.target.value)}
-              className={selectClass}
-            >
-              {!modelEntry?.keys.some((k) => k.keyId === keyId) && (
-                <option value={keyId}>API key (unavailable)</option>
-              )}
-              {modelEntry?.keys.map((k) => (
-                <option key={k.keyId} value={k.keyId}>
-                  {k.alias}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        {modelKnown && support?.status === "unsupported" && (
-          <p className="mt-1 text-[11px] text-destructive">
-            This model cannot be used: {support.reason ?? "it does not support tool calling."}{" "}
-            The execution will not start until you pick another one.
-          </p>
-        )}
-        {modelKnown && support?.status === "unknown" && (
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Tool support of this model could not be verified.{" "}
-            {support.reason}
-          </p>
-        )}
-        {!modelKnown && (
-          <p className="mt-1 text-[11px] text-destructive">
-            {provider === "ollama"
-              ? `The model '${config.model}' is not installed (it may have been deleted).`
-              : "This model or its API key no longer exists."}{" "}
-            The execution will not start until you pick another one
-            {provider === "ollama" ? " or download it again" : ""}.
-            {provider === "ollama" && (
-              <button
-                type="button"
-                className="ml-2 underline"
-                onClick={() => requestDownload(config.model as string)}
-              >
-                Download again
-              </button>
-            )}
-          </p>
-        )}
-      </Field>
+      <ModelField config={config} setConfig={setConfig} />
       <Field
         label="System prompt"
         hint='You can insert a state variable with ${name}, e.g. "Summarize: ${draft}". Plain names only (no ${a.b}).'

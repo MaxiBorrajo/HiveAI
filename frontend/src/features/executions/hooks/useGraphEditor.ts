@@ -12,6 +12,7 @@ import {
   removeEdges,
   removeNodes,
   updateNode,
+  updateNodeConfigs,
 } from "../lib/graphOps";
 import type {
   GraphNode,
@@ -108,6 +109,9 @@ export function useGraphEditor({
   const editNode = (id: string, patch: Partial<Pick<GraphNode, "name" | "config">>) =>
     mutate((g) => updateNode(g, id, patch));
 
+  const editNodeConfigs = (ids: string[], edit: (config: Record<string, any>) => Record<string, any>) =>
+    mutate((g) => updateNodeConfigs(g, ids, edit));
+
   const deleteNodes = (ids: string[]) => mutate((g) => removeNodes(g, ids));
   const deleteEdges = (ids: string[]) => mutate((g) => removeEdges(g, ids));
 
@@ -176,6 +180,7 @@ export function useGraphEditor({
     reconnect,
     moveNode,
     editNode,
+    editNodeConfigs,
     deleteNodes,
     deleteEdges,
     arrange,

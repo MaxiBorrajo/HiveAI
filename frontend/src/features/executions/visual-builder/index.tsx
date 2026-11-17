@@ -30,6 +30,12 @@ interface VisualBuilderProps {
   planningThought?: string | null;
   selectedNodeId?: string | null;
   onNodeSelect?: (nodeId: string | null) => void;
+  /** Several selected nodes; only while editable. */
+  selectedNodeIds?: readonly string[];
+  /** Ctrl, Cmd or Shift + click: adds the node to the selection, or takes it out. */
+  onNodeToggleSelect?: (nodeId: string) => void;
+  /** The nodes caught in a Shift + drag box. */
+  onNodesBoxSelect?: (nodeIds: string[]) => void;
   selectedEdgeId?: string | null;
   onEdgeSelect?: (edgeId: string | null) => void;
   editable?: boolean;
@@ -55,6 +61,9 @@ export function VisualBuilder({
   planningThought,
   selectedNodeId,
   onNodeSelect,
+  selectedNodeIds,
+  onNodeToggleSelect,
+  onNodesBoxSelect,
   selectedEdgeId,
   onEdgeSelect,
   editable,
@@ -98,6 +107,7 @@ export function VisualBuilder({
       isGenerating,
       planningThought,
       selectedNodeId,
+      selectedNodeIds,
       selectedEdgeId,
       editable,
       errorNodeIds,
@@ -112,6 +122,7 @@ export function VisualBuilder({
     isGenerating,
     planningThought,
     selectedNodeId,
+    selectedNodeIds,
     setNodes,
     setEdges,
     selectedEdgeId,
@@ -141,6 +152,16 @@ export function VisualBuilder({
         onInit={(instance) => {
           rfRef.current = instance;
         }}
+        // Selecting several nodes is ours (see onNodeClick), React Flow only draws the box.
+        multiSelectionKeyCode={null}
+        selectionKeyCode={editable && !hidden ? "Shift" : null}
+        onSelectionEnd={() => {
+          const ids = rfRef.current
+            ?.getNodes()
+            .filter((n) => n.selected && n.id !== GHOST_NODE_ID)
+            .map((n) => n.id);
+          if (ids?.length) onNodesBoxSelect?.(ids);
+        }}
         nodesDraggable={!!editable}
         nodesConnectable={!!editable}
         deleteKeyCode={editable && !hidden ? ["Backspace", "Delete"] : null}
@@ -154,7 +175,9 @@ export function VisualBuilder({
         onConnect={(c) => onConnectNodes?.(c)}
         edgesReconnectable={!!editable}
         onReconnect={(oldEdge, c) => onReconnectEdge?.(oldEdge.id, c)}
-        onNodeDragStop={(_, node) => onMoveNode?.(node.id, node.position)}
+        // With several nodes selected, dragging one moves them all.
+        onNodeDragStop={(_, _node, dragged) => dragged.forEach((n) => onMoveNode?.(n.id, n.position))}
+        onSelectionDragStop={(_, dragged) => dragged.forEach((n) => onMoveNode?.(n.id, n.position))}
         onNodesDelete={(deleted) => onDeleteNodes?.(deleted.map((n) => n.id))}
         onEdgesDelete={(deleted) => onDeleteEdges?.(deleted.map((e) => e.id))}
         onDragOver={(event) => {
@@ -173,10 +196,13 @@ export function VisualBuilder({
           });
           onDropNode?.(type, { x: position.x - 130, y: position.y - 38 });
         }}
-        onNodeClick={(_, node) => {
-          if (node.id !== GHOST_NODE_ID) {
-            onNodeSelect?.(node.id === selectedNodeId ? null : node.id);
+        onNodeClick={(event, node) => {
+          if (node.id === GHOST_NODE_ID) return;
+          if (editable && onNodeToggleSelect && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+            onNodeToggleSelect(node.id);
+            return;
           }
+          onNodeSelect?.(node.id === selectedNodeId ? null : node.id);
         }}
         onEdgeClick={(_, edge) => {
           onEdgeSelect?.(edge.id === selectedEdgeId ? null : edge.id);

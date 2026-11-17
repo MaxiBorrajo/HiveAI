@@ -125,6 +125,8 @@ export interface GraphViewState {
   isGenerating?: boolean;
   planningThought?: string | null;
   selectedNodeId?: string | null;
+  /** Several nodes picked together, for editing them at once. */
+  selectedNodeIds?: readonly string[];
   selectedEdgeId?: string | null;
   editable?: boolean;
   errorNodeIds?: ReadonlySet<string>;
@@ -134,7 +136,7 @@ export interface GraphViewState {
 
 function toReactFlowNode(n: GraphNode, view: GraphViewState): Node {
   const { activeNodeId, activeToolName, isGenerating, selectedNodeId } = view;
-  const isSelected = selectedNodeId === n.id;
+  const isSelected = selectedNodeId === n.id || (view.selectedNodeIds?.includes(n.id) ?? false);
   const isActive = activeNodeId === n.id;
   const isUpdating = (isActive && isGenerating) || (isGenerating && isSelected);
   const isExecuting = isActive && !isGenerating;

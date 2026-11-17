@@ -204,6 +204,18 @@ export function updateNode(
   });
 }
 
+/** Rewrites the config of several nodes in one go. */
+export function updateNodeConfigs(
+  graph: LangGraphAbstraction,
+  ids: string[],
+  edit: (config: Record<string, any>) => Record<string, any>,
+): LangGraphAbstraction {
+  return ids.reduce((g, id) => {
+    const node = g.nodes.find((n) => n.id === id);
+    return node ? updateNode(g, id, { config: edit(node.config ?? {}) }) : g;
+  }, graph);
+}
+
 export interface ConnectionLike {
   source: string;
   target: string;
