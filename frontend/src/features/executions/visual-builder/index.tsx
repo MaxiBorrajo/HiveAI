@@ -114,11 +114,20 @@ export function VisualBuilder({
       errorEdgeIds,
     });
 
-    setNodes(layouted.nodes);
+    // Rebuilt nodes carry no measurements; without them React Flow hides each
+    // node until it is measured again, which flickers on every run event.
+    setNodes((prev) => {
+      const previous = new Map(prev.map((n) => [n.id, n]));
+      return layouted.nodes.map((n) => {
+        const old = previous.get(n.id);
+        return old?.measured ? { ...n, measured: old.measured } : n;
+      });
+    });
     setEdges(layouted.edges);
   }, [
     graph,
     activeNodeId,
+    activeToolName,
     isGenerating,
     planningThought,
     selectedNodeId,

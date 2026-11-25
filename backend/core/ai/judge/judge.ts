@@ -123,8 +123,21 @@ export async function gradeRun(
 ): Promise<JudgeOutcome> {
   const runAgent = deps.runAgent ?? runScoutJudge;
   try {
-    const text = await runAgent(judgeRef, buildJudgePrompt(input), signal);
-    return parseJudgeAnswer(text);
+    const prompt = buildJudgePrompt(input);
+    const text = await runAgent(judgeRef, prompt, signal);
+    const first = parseJudgeAnswer(text);
+    if (first.ok) return first;
+    // Small models often drift into summarising or end on a tool call. One
+    // retry that demands only the two lines usually fixes it.
+    const retryText = await runAgent(
+      judgeRef,
+      `${prompt}\n\n## Your previous answer did not follow the required format\n${
+        text.slice(-1500) || "(empty)"
+      }\n\nDo NOT use tools or summarise. Reply now with ONLY these two lines:\nSCORE: <integer ${MIN_SCORE}-${MAX_SCORE}>\nREASON: <one or two sentences>`,
+      signal,
+    );
+    const second = parseJudgeAnswer(retryText);
+    return second.ok ? second : first;
   } catch (error) {
     const normalized = normalizeProviderError(error, judgeRef.provider);
     return {

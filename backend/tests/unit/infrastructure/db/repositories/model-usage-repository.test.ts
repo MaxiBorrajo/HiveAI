@@ -112,7 +112,6 @@ Deno.test("ModelUsageRepository - execution calls link to the run and node", asy
     executionId: execution.id,
     iteration: 1,
     result: "{}",
-    version: 1,
     createdAt: 1,
   });
   await usage.attachHistory(group, history.id);
