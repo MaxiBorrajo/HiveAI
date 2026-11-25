@@ -130,7 +130,7 @@ Deno.test("listRuns - each run carries its own usage; runs before the feature ha
     executionId: execution.id,
     iteration: 1,
     result: JSON.stringify({ result: { type: "text", content: "old" }, finalState: {} }),
-    version: graph.id,
+    graphId: graph.id,
     createdAt: 1_000,
   });
 
@@ -212,6 +212,14 @@ Deno.test("listRuns - an unknown execution is a 404", async () => {
 
 Deno.test("editing a graph by hand keeps the model that orchestrated it", async () => {
   const s = await setup();
+  const key = await s.keys.create({
+    id: crypto.randomUUID(),
+    provider: "anthropic",
+    alias: "work",
+    last4: "abcd",
+    createdAt: 1,
+    updatedAt: 1,
+  });
   const execution = await s.executions.create({
     name: "keep-orchestrator",
     createdAt: Date.now(),
@@ -221,7 +229,7 @@ Deno.test("editing a graph by hand keeps the model that orchestrated it", async 
     executionId: execution.id,
     graph: counterGraph(),
     state: counterGraph().stateSchema,
-    orchestrator: { provider: "anthropic", model: "claude-x", keyId: "k1" },
+    orchestrator: { provider: "anthropic", model: "claude-x", keyId: key.id },
     createdAt: Date.now(),
   });
   await s.executions.update(execution.id, { lastGraphId: first.id });
@@ -244,7 +252,7 @@ Deno.test("editing a graph by hand keeps the model that orchestrated it", async 
   assertEquals(saved?.orchestrator, {
     provider: "anthropic",
     model: "claude-x",
-    keyId: "k1",
+    keyId: key.id,
   });
 });
 

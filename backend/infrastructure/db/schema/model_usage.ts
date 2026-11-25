@@ -1,4 +1,5 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { apiKeys } from "./api_keys.ts";
 import { chats } from "./chats.ts";
 import { messages } from "./messages.ts";
 import { executionHistory, executions } from "./executions.ts";
@@ -33,7 +34,9 @@ export const modelUsage = sqliteTable(
     location: text("location").$type<UsageLocation>().notNull(),
     role: text("role").$type<UsageRole>().notNull(),
 
-    keyId: text("key_id"),
+    keyId: text("key_id").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
     keyAlias: text("key_alias"),
 
     inputTokens: integer("input_tokens"),

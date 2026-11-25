@@ -128,7 +128,7 @@ export interface RunSummary {
   historyId: number;
   iteration: number;
   createdAt: number;
-  graphId: number;
+  graphId: number | null;
   result: unknown;
   input: Record<string, unknown> | null;
   usage: RunUsage | null;

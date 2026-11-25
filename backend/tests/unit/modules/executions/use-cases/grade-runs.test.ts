@@ -18,7 +18,6 @@ async function setup() {
     (await repo.createHistory({
       executionId,
       iteration,
-      version: 1,
       createdAt: now + iteration,
       result: { result: text, finalState: {}, run: null },
     })).id;

@@ -1,5 +1,6 @@
 import { count, eq, desc } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
+import { knownKeyId } from "./known-key.ts";
 import {
   executions,
   executionGraphs,
@@ -11,6 +12,25 @@ import {
   type ExecutionHistory,
   type NewExecutionHistory,
 } from "../schema/index.ts";
+
+function toGraph(row: typeof executionGraphs.$inferSelect): ExecutionGraph {
+  const {
+    orchestratorProvider,
+    orchestratorModel,
+    orchestratorKeyId,
+    ...rest
+  } = row;
+  return {
+    ...rest,
+    orchestrator: orchestratorProvider && orchestratorModel
+      ? {
+        provider: orchestratorProvider,
+        model: orchestratorModel,
+        ...(orchestratorKeyId ? { keyId: orchestratorKeyId } : {}),
+      }
+      : null,
+  };
+}
 
 export class ExecutionRepository {
   constructor(private db: AppDatabase) {}
@@ -58,15 +78,21 @@ export class ExecutionRepository {
 
   async findGraphById(id: number): Promise<ExecutionGraph | undefined> {
     const [graph] = await this.db.select().from(executionGraphs).where(eq(executionGraphs.id, id));
-    return graph;
+    return graph ? toGraph(graph) : undefined;
   }
 
   async createGraph(graph: NewExecutionGraph): Promise<ExecutionGraph> {
+    const { orchestrator, ...columns } = graph;
     const [result] = await this.db
       .insert(executionGraphs)
-      .values(graph)
+      .values({
+        ...columns,
+        orchestratorProvider: orchestrator?.provider ?? null,
+        orchestratorModel: orchestrator?.model ?? null,
+        orchestratorKeyId: await knownKeyId(this.db, orchestrator?.keyId),
+      })
       .returning();
-    return result;
+    return toGraph(result);
   }
 
   async createHistory(history: NewExecutionHistory): Promise<ExecutionHistory> {

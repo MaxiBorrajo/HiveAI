@@ -17,7 +17,8 @@ export interface RunSummary {
   historyId: number;
   iteration: number;
   createdAt: number;
-  graphId: number;
+  /** Null when the graph version this run used has since been deleted. */
+  graphId: number | null;
   result: unknown;
   input: Record<string, unknown> | null;
   usage: RunUsage | null;
@@ -51,7 +52,7 @@ export async function loadRunSummaries(
       historyId: history.id,
       iteration: history.iteration,
       createdAt: history.createdAt,
-      graphId: history.version,
+      graphId: history.graphId,
       trigger: scheduled.has(history.id) ? "scheduled" : "manual",
       result: record.result,
       input: record.run?.input ?? null,

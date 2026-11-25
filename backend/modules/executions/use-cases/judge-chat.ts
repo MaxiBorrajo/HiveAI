@@ -46,11 +46,6 @@ function describeTokens(run: RunSummary): string {
   return `${total} tokens (local ${tokens(usage.local)}, cloud ${tokens(usage.cloud)}), ${time}`;
 }
 
-/** Identifies a set of compared runs regardless of the order they were picked in. */
-export function runKeyOf(historyIds: number[]): string {
-  return [...new Set(historyIds)].sort((a, b) => a - b).join(",");
-}
-
 export interface JudgeChatLine {
   role: "user" | "judge";
   text: string;
@@ -79,7 +74,7 @@ export async function loadJudgeConversation(
 ): Promise<{ chatId: number | null; lines: JudgeChatLine[] }> {
   const chat = await new ChatRepository(db).findByRunComparison(
     executionId,
-    runKeyOf(historyIds),
+    historyIds,
   );
   if (!chat) return { chatId: null, lines: [] };
   const messages = await new MessageRepository(db).findByChatId(chat.id);
@@ -173,11 +168,10 @@ export async function judgeChat(
       return fail("Some runs do not belong to this execution.", 400);
     }
 
-    const runKey = runKeyOf(historyIds);
     // Without an explicit chat, continue the one already saved for these runs.
     const chatId = typeof body.chatId === "number"
       ? body.chatId
-      : (await new ChatRepository(db).findByRunComparison(executionId, runKey))?.id ?? null;
+      : (await new ChatRepository(db).findByRunComparison(executionId, historyIds))?.id ?? null;
 
     return await sendMessage(
       db,
@@ -192,7 +186,7 @@ export async function judgeChat(
         modelRef: judgeRef,
         preamble: buildJudgeChatPreamble(execution.name, runs, parseJudgeFocus(body.focus)),
         title: `Judge · ${execution.name}`,
-        runComparison: { executionId, runKey },
+        runComparison: { executionId, historyIds },
       },
     );
   } catch (error) {

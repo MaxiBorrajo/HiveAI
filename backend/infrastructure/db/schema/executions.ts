@@ -4,6 +4,7 @@ import {
   text,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import { apiKeys } from "./api_keys.ts";
 
 export const executions = sqliteTable("executions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -25,9 +26,12 @@ export const executionGraphs = sqliteTable("execution_graphs", {
     .references((): AnySQLiteColumn => executions.id, { onDelete: "cascade" }),
   graph: text("graph", { mode: "json" }).notNull(),
   state: text("state", { mode: "json" }).notNull(),
-  orchestrator: text("orchestrator", { mode: "json" }).$type<
-    { provider: string; model: string; keyId?: string } | null
-  >(),
+  /** Model the graph was generated with; all three are null when unknown. */
+  orchestratorProvider: text("orchestratorProvider"),
+  orchestratorModel: text("orchestratorModel"),
+  orchestratorKeyId: text("orchestratorKeyId").references(() => apiKeys.id, {
+    onDelete: "set null",
+  }),
   createdAt: integer("createdAt").notNull(),
 });
 
@@ -38,15 +42,36 @@ export const executionHistory = sqliteTable("execution_history", {
     .references((): AnySQLiteColumn => executions.id, { onDelete: "cascade" }),
   iteration: integer("iteration").notNull(),
   result: text("result", { mode: "json" }).notNull(),
-  version: integer("version").notNull().default(1),
+  /** The graph version this run was made with. */
+  graphId: integer("graphId").references(
+    (): AnySQLiteColumn => executionGraphs.id,
+    { onDelete: "set null" },
+  ),
   createdAt: integer("createdAt").notNull(),
 });
 
 export type Execution = typeof executions.$inferSelect;
 export type NewExecution = typeof executions.$inferInsert;
 
-export type ExecutionGraph = typeof executionGraphs.$inferSelect;
-export type NewExecutionGraph = typeof executionGraphs.$inferInsert;
+export type Orchestrator = {
+  provider: string;
+  model: string;
+  keyId?: string;
+};
+
+type ExecutionGraphRow = typeof executionGraphs.$inferSelect;
+type OrchestratorColumns =
+  | "orchestratorProvider"
+  | "orchestratorModel"
+  | "orchestratorKeyId";
+
+/** A stored graph with its orchestrator columns folded back into one object. */
+export type ExecutionGraph = Omit<ExecutionGraphRow, OrchestratorColumns> & {
+  orchestrator: Orchestrator | null;
+};
+export type NewExecutionGraph =
+  & Omit<typeof executionGraphs.$inferInsert, OrchestratorColumns>
+  & { orchestrator?: Orchestrator | null };
 
 export type ExecutionHistory = typeof executionHistory.$inferSelect;
 export type NewExecutionHistory = typeof executionHistory.$inferInsert;

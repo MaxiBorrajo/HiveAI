@@ -1,10 +1,11 @@
 import {
   integer,
+  primaryKey,
   sqliteTable,
   text,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
-import { executions } from "./executions.ts";
+import { executionHistory, executions } from "./executions.ts";
 
 export type ScheduleFrequency = "daily" | "weekly" | "cron";
 
@@ -25,8 +26,6 @@ export const schedules = sqliteTable("schedules", {
   timeOfDay: text("timeOfDay").notNull(),
   /** 5-field cron expression; only meaningful when frequency is "cron". */
   cron: text("cron").notNull().default(""),
-  /** 0 (Sunday) - 6 (Saturday). Only meaningful for weekly schedules. */
-  daysOfWeek: text("daysOfWeek", { mode: "json" }).$type<number[]>().notNull(),
   /** Fixed `input` handed to every run, so nobody has to type it at 10:00. */
   input: text("input").notNull().default(""),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -35,6 +34,18 @@ export const schedules = sqliteTable("schedules", {
   createdAt: integer("createdAt").notNull(),
   updatedAt: integer("updatedAt").notNull(),
 });
+
+/** 0 (Sunday) - 6 (Saturday). One row per day; only used by weekly schedules. */
+export const scheduleDays = sqliteTable(
+  "schedule_days",
+  {
+    scheduleId: integer("scheduleId")
+      .notNull()
+      .references((): AnySQLiteColumn => schedules.id, { onDelete: "cascade" }),
+    dayOfWeek: integer("dayOfWeek").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.scheduleId, t.dayOfWeek] })],
+);
 
 export const scheduleRuns = sqliteTable("schedule_runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -48,7 +59,10 @@ export const scheduleRuns = sqliteTable("schedule_runs", {
   /** The slot this entry is about (for `missed`, the latest missed slot). */
   scheduledFor: integer("scheduledFor").notNull(),
   status: text("status").$type<ScheduleRunStatus>().notNull(),
-  historyId: integer("historyId"),
+  historyId: integer("historyId").references(
+    (): AnySQLiteColumn => executionHistory.id,
+    { onDelete: "set null" },
+  ),
   missedCount: integer("missedCount").notNull().default(0),
   error: text("error"),
   acknowledged: integer("acknowledged", { mode: "boolean" })
@@ -58,7 +72,11 @@ export const scheduleRuns = sqliteTable("schedule_runs", {
   finishedAt: integer("finishedAt"),
 });
 
-export type Schedule = typeof schedules.$inferSelect;
-export type NewSchedule = typeof schedules.$inferInsert;
+export type ScheduleRow = typeof schedules.$inferSelect;
+/** A schedule with its weekdays (loaded from schedule_days) folded in. */
+export type Schedule = ScheduleRow & { daysOfWeek: number[] };
+export type NewSchedule =
+  & typeof schedules.$inferInsert
+  & { daysOfWeek?: number[] };
 export type ScheduleRun = typeof scheduleRuns.$inferSelect;
 export type NewScheduleRun = typeof scheduleRuns.$inferInsert;

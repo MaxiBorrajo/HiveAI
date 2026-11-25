@@ -1,5 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
+import { knownKeyId } from "./known-key.ts";
 import {
   executionRubrics,
   runGrades,
@@ -17,7 +18,8 @@ export class RunGradeRepository {
   constructor(private db: AppDatabase) {}
 
   /** Re-grading with the same rubric and judge replaces the previous grade. */
-  async upsert(grade: NewRunGrade): Promise<RunGrade> {
+  async upsert(input: NewRunGrade): Promise<RunGrade> {
+    const grade = { ...input, judgeKeyId: await knownKeyId(this.db, input.judgeKeyId) };
     const [row] = await this.db
       .insert(runGrades)
       .values(grade)

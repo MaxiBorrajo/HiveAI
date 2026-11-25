@@ -1,10 +1,12 @@
-import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
 import {
   type NewSchedule,
   type NewScheduleRun,
   type Schedule,
+  type ScheduleRow,
   type ScheduleRun,
+  scheduleDays,
   scheduleRuns,
   schedules,
 } from "../schema/index.ts";
@@ -12,34 +14,67 @@ import {
 export class ScheduleRepository {
   constructor(private db: AppDatabase) {}
 
+  /** Adds each schedule's weekdays, which live in schedule_days (1NF). */
+  private async withDays(rows: ScheduleRow[]): Promise<Schedule[]> {
+    if (rows.length === 0) return [];
+    const days = await this.db.select().from(scheduleDays)
+      .where(inArray(scheduleDays.scheduleId, rows.map((r) => r.id)));
+    const byId = new Map<number, number[]>();
+    for (const d of days) {
+      byId.set(d.scheduleId, [...(byId.get(d.scheduleId) ?? []), d.dayOfWeek]);
+    }
+    return rows.map((row) => ({
+      ...row,
+      daysOfWeek: (byId.get(row.id) ?? []).sort((x, y) => x - y),
+    }));
+  }
+
+  private async replaceDays(scheduleId: number, days: number[]): Promise<void> {
+    await this.db.delete(scheduleDays).where(eq(scheduleDays.scheduleId, scheduleId));
+    const unique = [...new Set(days)];
+    if (unique.length > 0) {
+      await this.db.insert(scheduleDays).values(
+        unique.map((dayOfWeek) => ({ scheduleId, dayOfWeek })),
+      );
+    }
+  }
+
   async findById(id: number): Promise<Schedule | undefined> {
-    const [row] = await this.db.select().from(schedules).where(
+    const rows = await this.db.select().from(schedules).where(
       eq(schedules.id, id),
     );
-    return row;
+    return (await this.withDays(rows))[0];
   }
 
   async listByExecution(executionId: number): Promise<Schedule[]> {
-    return await this.db.select().from(schedules)
-      .where(eq(schedules.executionId, executionId))
-      .orderBy(schedules.id);
+    return await this.withDays(
+      await this.db.select().from(schedules)
+        .where(eq(schedules.executionId, executionId))
+        .orderBy(schedules.id),
+    );
   }
 
   async findDue(now: number): Promise<Schedule[]> {
-    return await this.db.select().from(schedules)
-      .where(and(eq(schedules.enabled, true), lte(schedules.nextRunAt, now)))
-      .orderBy(schedules.nextRunAt);
+    return await this.withDays(
+      await this.db.select().from(schedules)
+        .where(and(eq(schedules.enabled, true), lte(schedules.nextRunAt, now)))
+        .orderBy(schedules.nextRunAt),
+    );
   }
 
   async create(data: NewSchedule): Promise<Schedule> {
-    const [row] = await this.db.insert(schedules).values(data).returning();
-    return row;
+    const { daysOfWeek = [], ...columns } = data;
+    const [row] = await this.db.insert(schedules).values(columns).returning();
+    await this.replaceDays(row.id, daysOfWeek);
+    return (await this.findById(row.id))!;
   }
 
   async update(id: number, data: Partial<NewSchedule>): Promise<void> {
+    const { daysOfWeek, ...columns } = data;
     await this.db.update(schedules)
-      .set({ ...data, updatedAt: Date.now() })
+      .set({ ...columns, updatedAt: Date.now() })
       .where(eq(schedules.id, id));
+    if (daysOfWeek !== undefined) await this.replaceDays(id, daysOfWeek);
   }
 
   async delete(id: number): Promise<void> {

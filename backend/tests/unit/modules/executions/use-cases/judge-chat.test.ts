@@ -51,8 +51,32 @@ Deno.test("the focus steers the preamble and unknown values are ignored", () => 
   assertEquals(plain.includes("The user is looking at"), false);
 });
 
-Deno.test("the run key does not depend on the order or repeats", async () => {
-  const { runKeyOf } = await import("../../../../../modules/executions/use-cases/judge-chat.ts");
-  assertEquals(runKeyOf([15, 12]), "12,15");
-  assertEquals(runKeyOf([12, 15, 12]), "12,15");
+Deno.test("a judge chat is found by its set of runs, whatever the order or repeats", async () => {
+  const { initORM } = await import("../../../../../infrastructure/db/orm.ts");
+  const { ChatRepository } = await import("../../../../../infrastructure/db/repositories/chat-repository.ts");
+  const { ExecutionRepository } = await import("../../../../../infrastructure/db/repositories/execution-repository.ts");
+  const db = await initORM(await Deno.makeTempDir());
+  const executions = new ExecutionRepository(db);
+  const execution = await executions.create({ name: "flow", createdAt: 1, updatedAt: 1 });
+  const runs = [];
+  for (let iteration = 1; iteration <= 3; iteration++) {
+    runs.push((await executions.createHistory({
+      executionId: execution.id,
+      iteration,
+      result: {},
+      createdAt: 1,
+    })).id);
+  }
+  const chats = new ChatRepository(db);
+  const chatId = await chats.create({
+    title: "Judge",
+    createdAt: 1,
+    updatedAt: 1,
+    messageCount: 0,
+    executionId: execution.id,
+  }, [runs[0], runs[1]]);
+
+  assertEquals((await chats.findByRunComparison(execution.id, [runs[1], runs[0], runs[0]]))?.id, chatId);
+  assertEquals(await chats.findByRunComparison(execution.id, [runs[0]]), undefined);
+  assertEquals(await chats.findByRunComparison(execution.id, runs), undefined);
 });

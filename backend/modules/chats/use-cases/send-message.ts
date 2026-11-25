@@ -72,7 +72,7 @@ export interface SendMessageOptions {
   /** Title for a chat created by this message. */
   title?: string;
   /** Ties a created chat to a run comparison so it is kept out of the chat list. */
-  runComparison?: { executionId: number; runKey: string };
+  runComparison?: { executionId: number; historyIds: number[] };
 }
 
 async function persistUserMessage(
@@ -509,8 +509,7 @@ export async function sendMessage(
         updatedAt: Date.now(),
         messageCount: 0,
         executionId: options.runComparison?.executionId ?? null,
-        runKey: options.runComparison?.runKey ?? null,
-      });
+      }, options.runComparison?.historyIds ?? []);
       send("chat_created", { chatId: resolvedChatId.toString() });
     }
 

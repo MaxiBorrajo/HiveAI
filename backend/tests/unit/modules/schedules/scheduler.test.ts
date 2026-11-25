@@ -32,7 +32,19 @@ async function setup(inputRequired = false) {
     createdAt: now,
   });
   await executions.update(execution.id, { lastGraphId: graph.id });
-  return { db, repo: new ScheduleRepository(db), executionId: execution.id };
+  // A schedule log entry points at a real run of the execution.
+  const history = await executions.createHistory({
+    executionId: execution.id,
+    iteration: 1,
+    result: {},
+    createdAt: now,
+  });
+  return {
+    db,
+    repo: new ScheduleRepository(db),
+    executionId: execution.id,
+    historyId: history.id,
+  };
 }
 
 // initORM is a process singleton, so every test shares one DB: only look at
@@ -51,10 +63,10 @@ function scoped(repo: ScheduleRepository, executionId: number) {
 }
 
 function harness(
-  s: { repo: ScheduleRepository; executionId: number },
+  s: { repo: ScheduleRepository; executionId: number; historyId: number },
   clock: { t: number },
   outcome: () => Promise<RunOutcome> = () =>
-    Promise.resolve({ ok: true, historyId: 42 }),
+    Promise.resolve({ ok: true, historyId: s.historyId }),
   blocked: string | null = null,
 ) {
   const runs: number[] = [];
@@ -113,7 +125,7 @@ Deno.test("a due slot within the grace period runs and is logged", async () => {
   assertEquals(h.runs, [s.executionId]);
   const [run] = await s.repo.listRuns(s.executionId);
   assertEquals(run.status, "ok");
-  assertEquals(run.historyId, 42);
+  assertEquals(run.historyId, s.historyId);
   assertEquals(run.scheduledFor, at(8, 10));
   const updated = await s.repo.findById(schedule.id);
   assertEquals(updated?.nextRunAt, at(9, 10));
@@ -191,7 +203,7 @@ Deno.test("overlap: a slot is skipped while the previous run is still going", as
   const s = await setup();
   const schedule = await scheduleDaily(s, at(7, 9));
   let release!: () => void;
-  const gate = new Promise<RunOutcome>((r) => release = () => r({ ok: true, historyId: 1 }));
+  const gate = new Promise<RunOutcome>((r) => release = () => r({ ok: true, historyId: s.historyId }));
   const clock = { t: at(8, 10, 1) };
   const h = harness(s, clock, () => gate);
   await h.scheduler.tick();
@@ -419,7 +431,7 @@ Deno.test("two legacy schedules of one execution never run it twice at once", as
   await s.repo.create(base);
 
   let release!: () => void;
-  const gate = new Promise<RunOutcome>((r) => release = () => r({ ok: true, historyId: 1 }));
+  const gate = new Promise<RunOutcome>((r) => release = () => r({ ok: true, historyId: s.historyId }));
   const h = harness(s, { t: at(8, 10, 1) }, () => gate);
   await h.scheduler.tick();
   release();
@@ -436,7 +448,7 @@ Deno.test("a successful run reports completion; a failed one does not", async ()
   const ok = harness(s, { t: at(8, 10, 1) });
   await ok.scheduler.tick();
   await ok.scheduler.whenIdle();
-  assertEquals(ok.completed, [{ executionId: s.executionId, historyId: 42 }]);
+  assertEquals(ok.completed, [{ executionId: s.executionId, historyId: s.historyId }]);
 
   const s2 = await setup();
   await scheduleDaily(s2, at(7, 9));

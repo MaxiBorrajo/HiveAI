@@ -144,7 +144,7 @@ async function saveRun(
     executionId,
     iteration,
     result: JSON.stringify({ result: finalState.result, finalState, run }),
-    version: graphId,
+    graphId,
     createdAt: Date.now(),
   });
   await repo.update(executionId, { lastResultId: history.id });

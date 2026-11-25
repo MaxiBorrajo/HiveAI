@@ -5,6 +5,7 @@ import {
   uniqueIndex,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import { apiKeys } from "./api_keys.ts";
 import { executionHistory, executions } from "./executions.ts";
 
 export const executionRubrics = sqliteTable(
@@ -48,7 +49,9 @@ export const runGrades = sqliteTable(
       }),
     judgeProvider: text("judgeProvider").notNull(),
     judgeModel: text("judgeModel").notNull(),
-    judgeKeyId: text("judgeKeyId"),
+    judgeKeyId: text("judgeKeyId").references(() => apiKeys.id, {
+      onDelete: "set null",
+    }),
     judgeVersion: integer("judgeVersion").notNull(),
     status: text("status").$type<GradeStatus>().notNull(),
     score: integer("score"),
