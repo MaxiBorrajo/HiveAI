@@ -300,8 +300,8 @@ export function ChatInput({
           className="min-h-14 max-h-52 w-full resize-none overflow-y-auto border-0 bg-transparent py-2 px-3 text-base shadow-none focus-visible:ring-0 placeholder:text-muted-foreground dark:bg-transparent md:text-base"
           rows={2}
         />
-        <div className="mt-2 flex items-center justify-between">
-          <div className="flex gap-2">
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {!hidePluginsAndModes && (
               <>
                 <PluginsManager />
@@ -342,12 +342,13 @@ export function ChatInput({
             )}
           </div>
           {isThinking ? (
-            <Button variant="secondary" onClick={handleStop} title="Stop">
+            <Button className="shrink-0" variant="secondary" onClick={handleStop} title="Stop">
               <SquareIcon className="size-3 fill-current" />
               Stop
             </Button>
           ) : (
             <Button
+              className="shrink-0"
               onClick={handleSend}
               disabled={!input.trim() || !canSend}
               title={

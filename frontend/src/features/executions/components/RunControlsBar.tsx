@@ -54,8 +54,8 @@ export function RunControlsBar({
   const busy = isRunning || runningOnSchedule;
 
   return (
-    <div className="absolute top-6 right-6 z-20 pointer-events-auto flex flex-col items-end gap-2">
-      <div className="inline-flex items-stretch rounded-xl bg-card/90 border border-border shadow-2xl backdrop-blur-md overflow-hidden divide-x divide-border/80">
+    <div className="@container absolute top-6 right-6 left-6 z-20 pointer-events-none flex flex-col items-end gap-2">
+      <div className="pointer-events-auto inline-flex max-w-full items-stretch rounded-xl bg-card/90 border border-border shadow-2xl backdrop-blur-md overflow-x-auto divide-x divide-border/80">
         <button
           type="button"
           onClick={onRun}
@@ -118,7 +118,7 @@ export function RunControlsBar({
             title="View Execution Result & State"
           >
             <CircleCheckBig className="size-3.5 text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110" />
-            <span>Result</span>
+            <span className="hidden @2xl:inline">Result</span>
           </button>
         )}
 
@@ -130,7 +130,7 @@ export function RunControlsBar({
             title="Past runs and what each one consumed"
           >
             <History className="size-3.5" />
-            <span>History</span>
+            <span className="hidden @2xl:inline">History</span>
           </button>
         )}
 
@@ -146,7 +146,7 @@ export function RunControlsBar({
             }
           >
             <CalendarClock className="size-3.5" />
-            <span>Schedule</span>
+            <span className="hidden @2xl:inline">Schedule</span>
             {missedCount > 0 && (
               <span
                 aria-label="Missed scheduled runs"
@@ -165,7 +165,7 @@ export function RunControlsBar({
             title="Edit this execution's graph by hand"
           >
             <Pencil className="size-3.5" />
-            <span>Edit</span>
+            <span className="hidden @2xl:inline">Edit</span>
           </button>
         )}
 
@@ -178,7 +178,7 @@ export function RunControlsBar({
             title="Export this execution to a file"
           >
             <Download className="size-3.5" />
-            <span>Export</span>
+            <span className="hidden @2xl:inline">Export</span>
           </button>
         )}
 
@@ -194,7 +194,7 @@ export function RunControlsBar({
           title="Toggle Execution Logs"
         >
           <Terminal className="size-3.5" />
-          <span>Logs</span>
+          <span className="hidden @2xl:inline">Logs</span>
           {logs.length > 0 && (
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground">
               {logs.length}
@@ -212,12 +212,12 @@ export function RunControlsBar({
             {isCopied ? (
               <>
                 <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
+                <span className="hidden @2xl:inline text-emerald-600 dark:text-emerald-400 font-medium">Copied!</span>
               </>
             ) : (
               <>
                 <Copy className="size-3.5" />
-                <span>Copy JSON</span>
+                <span className="hidden @2xl:inline">Copy JSON</span>
               </>
             )}
           </button>
@@ -225,7 +225,9 @@ export function RunControlsBar({
       </div>
 
       {isLogsOpen && logs.length > 0 && (
-        <ExecutionLogsDrawer logs={logs} onClose={() => setIsLogsOpen(false)} />
+        <div className="pointer-events-auto max-w-full">
+          <ExecutionLogsDrawer logs={logs} onClose={() => setIsLogsOpen(false)} />
+        </div>
       )}
     </div>
   );
