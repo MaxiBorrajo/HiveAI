@@ -39,7 +39,7 @@ export function PluginsMenu({
         side="bottom"
         sideOffset={8}
         collisionAvoidance={undefined}
-        className="w-56"
+        className="w-72"
       >
         <DropdownMenuGroup>
           <div className="flex flex-1 items-center justify-between  gap-1.5 px-1.5 py-1">
@@ -66,11 +66,13 @@ export function PluginsMenu({
           ) : (
             plugins.map((plugin) => (
               <DropdownMenuItem key={plugin.id} closeOnClick={false}>
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <span className="text-sm font-mono truncate">
+                {/* min-w-0 lets a long name shrink and truncate instead of covering the switch. */}
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm font-mono" title={plugin.name}>
                     {plugin.name}
                   </span>
                   <div
+                    className="shrink-0"
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                   >

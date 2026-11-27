@@ -111,10 +111,16 @@ export default class MyPlugin implements BeePlugin<typeof schema> {
 Output format: your FIRST line must be \`SUMMARY: <one short sentence, in the user's own language, saying in plain terms what you did or changed — e.g. "Added a plugin that posts a message to Slack via webhook." or "Fixed the zod import and added the missing error test cases.">\`. Then, after that line, the COMPLETE, final content of index.ts as a single \`\`\`typescript fenced code block, starting with its imports. Nothing else besides the SUMMARY line and the fence — no other explanation before or after. When editing an existing file, make only the changes the user asked for and keep the rest intact (including existing tests that still make sense) unless your edit requires updating them.`;
 }
 
+/**
+ * Cloud models (Claude with thinking, for one) answer with content blocks
+ * instead of a string; only the text blocks are the answer.
+ */
 function messageText(message: AIMessage): string {
   return typeof message.content === "string"
     ? message.content
-    : JSON.stringify(message.content);
+    : message.content
+      .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
+      .join("");
 }
 
 type DraftTool = StructuredToolInterface;

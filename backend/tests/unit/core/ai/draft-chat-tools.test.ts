@@ -90,3 +90,16 @@ Deno.test("without tools it just answers", async () => {
   assertEquals(text, "hi");
   assertEquals(bound.tools, -1);
 });
+
+Deno.test("an answer in content blocks returns only its text, not the blocks as JSON", async () => {
+  const reply = new AIMessage({
+    content: [
+      { type: "thinking", thinking: "plan the plugin" },
+      { type: "text", text: 'SUMMARY: done\n```typescript\nimport { z } from "zod";\n```' },
+    ],
+  });
+  const { text } = await run(
+    answerWithTools(fakeModel([reply], { tools: 0 }), [], [new HumanMessage("x")]),
+  );
+  assertEquals(text, 'SUMMARY: done\n```typescript\nimport { z } from "zod";\n```');
+});
