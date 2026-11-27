@@ -18,6 +18,7 @@ import { handlePluginTestChat } from "../plugin-test-chat/test-chat.ts";
 import { getDraftRepository } from "./lib/draft-context.ts";
 import { ResponseBuilder } from "../../core/api/response.ts";
 import { requireModelsConfigured } from "../../core/api/guards.ts";
+import { getCurrentModelRef } from "../../core/ai/providers/current-model.ts";
 
 export const draftsRouter = new Hono<{
   Variables: { hive: HiveMicrokernel };
@@ -54,7 +55,7 @@ draftsRouter.post("/:name/chat", async (c) => {
   if (guardError) return guardError;
 
   const body = await c.req.json().catch(() => ({}));
-  const model = hive.getConfig().get("model");
+  const model = getCurrentModelRef(hive.getConfig());
   return handleChatEditDraft(
     hive,
     c.req.param("name"),
@@ -104,7 +105,7 @@ draftsRouter.post("/:name/test-chat", async (c) => {
     hive,
     {
       dir: record.dir,
-      model: hive.getConfig().get("model"),
+      model: getCurrentModelRef(hive.getConfig()),
       message: body.message,
       history: body.history,
     },

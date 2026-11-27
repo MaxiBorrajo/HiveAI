@@ -4,7 +4,7 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import { createSseResponse } from "../../core/api/sse.ts";
 import { answerWithTools } from "../../core/ai/draft-chat/draft-chat.ts";
 import { createChatModel } from "../../core/ai/providers/create-chat-model.ts";
-import { normalizeModelRef } from "../../core/ai/providers/types.ts";
+import type { ModelRef } from "../../core/ai/providers/types.ts";
 import { executionContextStorage } from "../../core/microkernel/human-interaction.ts";
 import type { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import type { ExternalPluginHandle } from "../../core/microkernel/external-plugins/external-plugin-host.ts";
@@ -62,7 +62,7 @@ export function handlePluginTestChat(
   hive: HiveMicrokernel,
   options: {
     dir: string;
-    model: string;
+    model: ModelRef;
     message: string | undefined;
     history: unknown;
   },
@@ -85,7 +85,7 @@ export function handlePluginTestChat(
 
     try {
       console.log(`${LOG} Plugin: "${handle.plugin.name}"`);
-      const model = await createChatModel(normalizeModelRef(options.model), {
+      const model = await createChatModel(options.model, {
         temperature: 0.1,
       });
       const messages: BaseMessage[] = [

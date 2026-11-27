@@ -5,6 +5,7 @@ import { executionContextStorage } from "../../../core/microkernel/human-interac
 import { HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
 import { runDraftChat } from "../../../core/ai/draft-chat/draft-chat.ts";
 import type { DraftChatEvent } from "../../../core/ai/draft-chat/draft-chat.ts";
+import type { ModelRef } from "../../../core/ai/providers/types.ts";
 import { getDraftRepository } from "../lib/draft-context.ts";
 
 const LOG = "[Draft Chat]";
@@ -44,7 +45,7 @@ async function readCurrentIndexTs(dir: string): Promise<string | undefined> {
 export async function handleChatEditDraft(
   hive: HiveMicrokernel,
   name: string,
-  model: string,
+  model: ModelRef,
   content: string | undefined,
   headers: Record<string, string>,
 ): Promise<Response> {
@@ -61,7 +62,7 @@ export async function handleChatEditDraft(
     }
 
     console.log(
-      `${LOG} Model: "${model}" | Draft: "${name}" | Prompt: "${truncate(content, MAX_PROMPT_LOG_LENGTH)}"`,
+      `${LOG} Model: "${model.provider}/${model.model}" | Draft: "${name}" | Prompt: "${truncate(content, MAX_PROMPT_LOG_LENGTH)}"`,
     );
 
     const existingPluginNames = hive
@@ -73,11 +74,12 @@ export async function handleChatEditDraft(
 
     const generator = runDraftChat(
       content,
-      model,
+      model.model,
       currentSourceCode,
       existingPluginNames,
       hive,
       record.dir,
+      model,
     );
 
     // Plugins used for research may ask the user for approval; those requests

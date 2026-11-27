@@ -14,6 +14,7 @@ import { ResponseBuilder } from "../../core/api/response.ts";
 import { handleSaveTestResults } from "./use-cases/save-test-results.ts";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { requireModelsConfigured } from "../../core/api/guards.ts";
+import { getCurrentModelRef } from "../../core/ai/providers/current-model.ts";
 import {
   handleGetPluginConfig,
   handleSetPluginConfig,
@@ -86,7 +87,7 @@ pluginsRouter.post("/:name/test-chat", async (c) => {
     hive,
     {
       dir,
-      model: hive.getConfig().get("model"),
+      model: getCurrentModelRef(hive.getConfig()),
       message: body.message,
       history: body.history,
     },
@@ -147,10 +148,9 @@ pluginsRouter.post("/:name/test/:type/:index", async (c) => {
   const name = c.req.param("name");
   const type = c.req.param("type") as "selection" | "execution";
   const index = parseInt(c.req.param("index"), 10);
-  const config = hive.getConfig();
   return handleTest(
     hive,
-    config.get("model"),
+    getCurrentModelRef(hive.getConfig()),
     name,
     index,
     type,

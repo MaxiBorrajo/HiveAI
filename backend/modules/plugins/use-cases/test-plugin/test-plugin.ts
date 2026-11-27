@@ -12,6 +12,7 @@ import type {
   TestKind,
 } from "./types.ts";
 import { Scout } from "../../../../core/ai/strategy/scout/graph.ts";
+import type { ModelRef } from "../../../../core/ai/providers/types.ts";
 import { homeDir } from "../../../../core/env.ts";
 import { join } from "node:path";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
@@ -26,7 +27,7 @@ function runExclusive<T>(task: () => Promise<T>): Promise<T> {
 
 export function handleTest(
   hive: HiveMicrokernel,
-  model: string,
+  model: ModelRef,
   pluginName: string,
   index: number,
   type: TestKind = "selection",
@@ -57,7 +58,7 @@ export function handleTest(
 
 async function runPluginTest(
   hive: HiveMicrokernel,
-  model: string,
+  model: ModelRef,
   pluginName: string,
   index: number,
   type: TestKind,
@@ -130,7 +131,7 @@ const SCOUT_RECURSION_LIMIT = MAX_TOOL_CALLS * 2;
 
 export async function executeSelectionTest(
   testCase: SelectionTestCase,
-  model: string,
+  model: ModelRef,
   pluginName: string,
   signal: AbortSignal,
 ) {
@@ -170,7 +171,10 @@ export async function executeSelectionTest(
         {
           messages: [new HumanMessage(testCase.query)],
           chatId: "plugin-selection-test",
-          model,
+          // Without the provider and key, a cloud model would be asked of Ollama.
+          model: model.model,
+          modelProvider: model.provider,
+          modelKeyId: model.keyId ?? "",
           modelOptions: {},
         },
         { signal, recursionLimit: SCOUT_RECURSION_LIMIT },
