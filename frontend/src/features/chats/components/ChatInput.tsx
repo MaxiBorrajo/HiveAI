@@ -19,15 +19,22 @@ import {
 } from "@/features/models/api/pullEmbeddingModel";
 import { reportError } from "@/lib/toastManager";
 import { AttachmentsList } from "./AttachmentsList.tsx";
+import { useScanProgress } from "../hooks/useScanProgress.ts";
 import {
   ACCEPTED_ATTACHMENT_TYPES,
+  attachmentProblem,
   uploadChatAttachment,
   type AttachmentDto,
 } from "../api/attachments.ts";
 import { getErrorMessage } from "@/lib/errors";
+import { useVoiceInput } from "@/features/voice/hooks/useVoiceInput";
+import { VoiceInputButton } from "@/features/voice/components/VoiceInputButton";
+import { AUDIO_EXTENSIONS, isAudioFile } from "@/features/voice/lib/audioFiles";
+import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
   placeholder?: string;
+  className?: string;
   input: string;
   setInput: (val: string) => void;
   isThinking: boolean;
@@ -38,6 +45,7 @@ interface ChatInputProps {
   chatId?: string | null;
   attachments?: AttachmentDto[];
   onAttachmentsChange?: (attachments: AttachmentDto[]) => void;
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
 }
 
 export function ChatInput({
@@ -48,9 +56,11 @@ export function ChatInput({
   handleStop,
   hidePluginsAndModes,
   placeholder,
+  className,
   chatId = null,
   attachments = [],
   onAttachmentsChange,
+  textareaRef,
 }: ChatInputProps) {
   const {
     hasModel,
@@ -58,6 +68,7 @@ export function ChatInput({
     hasAvailableModels,
     embeddingModelStatus,
     openManage,
+    openExplore,
     refreshModels,
   } = useModels();
   const embeddingModelMissing =
@@ -71,17 +82,42 @@ export function ChatInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  useScanProgress(attachments, onAttachmentsChange);
+
+  // Speech becomes text in the input, to be read over before sending.
+  const voice = useVoiceInput((text) =>
+    setInput(input.trim() ? `${input.trimEnd()} ${text}` : text)
+  );
+
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const carriesFiles = (event: React.DragEvent) =>
+    !!onAttachmentsChange && event.dataTransfer.types.includes("Files");
 
   async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList || fileList.length === 0 || !onAttachmentsChange) return;
-    const files = Array.from(fileList);
+    const audioFiles = Array.from(fileList).filter(isAudioFile);
+    const files = Array.from(fileList).filter((file) => !isAudioFile(file));
+    if (audioFiles.length > 0) {
+      if (audioFiles.length > 1) {
+        reportError(["Audio files are transcribed one at a time: only the first one was used."]);
+      }
+      voice.transcribeFile(audioFiles[0]);
+    }
+    if (files.length === 0) return;
     setIsUploading(true);
+    let uploaded = attachments;
     try {
       for (const file of files) {
+        const problem = attachmentProblem(file);
+        if (problem) {
+          reportError([problem]);
+          continue;
+        }
         try {
           const response = await uploadChatAttachment(chatId, file);
           if (response.data) {
-            onAttachmentsChange([...attachments, response.data]);
+            uploaded = [...uploaded, response.data];
+            onAttachmentsChange(uploaded);
           }
         } catch (error) {
           reportError([
@@ -126,7 +162,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-2">
+    <div className={cn("flex w-full max-w-3xl flex-col gap-2", className)}>
       {!hasModel && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
           <TriangleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -137,7 +173,7 @@ export function ChatInput({
             </span>
           ) : (
             <span>
-              No models downloaded. Pull a model with Ollama, then select it
+              No models downloaded. Explore and download one, then select it
               here.
             </span>
           )}
@@ -145,9 +181,9 @@ export function ChatInput({
             variant="secondary"
             size="sm"
             className="ml-auto shrink-0"
-            onClick={openManage}
+            onClick={hasAvailableModels ? openManage : openExplore}
           >
-            Select models
+            {hasAvailableModels ? "Select models" : "Explore models"}
           </Button>
         </div>
       )}
@@ -218,11 +254,43 @@ export function ChatInput({
         />
       )}
 
-      <div className="relative flex w-full flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring">
+      <div
+        className={cn(
+          "relative flex w-full flex-col rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-ring",
+          isDraggingFiles && "ring-2 ring-primary/60",
+        )}
+        // Files dropped on the box are attached, as with the paperclip.
+        onDragOver={(event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setIsDraggingFiles(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDraggingFiles(false);
+        }}
+        onDrop={(event) => {
+          if (!carriesFiles(event)) return;
+          event.preventDefault();
+          setIsDraggingFiles(false);
+          void handleFilesSelected(event.dataTransfer.files);
+        }}
+      >
+        {isDraggingFiles && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/85 text-sm font-medium text-foreground">
+            Drop files to attach them
+          </div>
+        )}
         <Textarea
+          ref={textareaRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
+          // A pasted screenshot or copied file is attached; pasted text stays text.
+          onPaste={(event) => {
+            if (!onAttachmentsChange || event.clipboardData.files.length === 0) return;
+            event.preventDefault();
+            void handleFilesSelected(event.clipboardData.files);
+          }}
           placeholder={
             placeholder ||
             (hidePluginsAndModes
@@ -232,8 +300,8 @@ export function ChatInput({
           className="min-h-14 max-h-52 w-full resize-none overflow-y-auto border-0 bg-transparent py-2 px-3 text-base shadow-none focus-visible:ring-0 placeholder:text-muted-foreground dark:bg-transparent md:text-base"
           rows={2}
         />
-        <div className="mt-2 flex items-center justify-between">
-          <div className="flex gap-2">
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {!hidePluginsAndModes && (
               <>
                 <PluginsManager />
@@ -248,7 +316,7 @@ export function ChatInput({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept={ACCEPTED_ATTACHMENT_TYPES}
+                  accept={`${ACCEPTED_ATTACHMENT_TYPES},${AUDIO_EXTENSIONS.join(",")}`}
                   className="hidden"
                   onChange={(event) => {
                     handleFilesSelected(event.target.files);
@@ -269,16 +337,18 @@ export function ChatInput({
                     <PaperclipIcon className="size-3.5" />
                   )}
                 </Button>
+                <VoiceInputButton voice={voice} />
               </>
             )}
           </div>
           {isThinking ? (
-            <Button variant="secondary" onClick={handleStop} title="Stop">
+            <Button className="shrink-0" variant="secondary" onClick={handleStop} title="Stop">
               <SquareIcon className="size-3 fill-current" />
               Stop
             </Button>
           ) : (
             <Button
+              className="shrink-0"
               onClick={handleSend}
               disabled={!input.trim() || !canSend}
               title={

@@ -1,5 +1,7 @@
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { splitContent } from "../../providers/capabilities.ts";
+import { InlineThinkingSplitter } from "../../providers/inline-thinking.ts";
+import { findRepetitionLoop, RepetitionWatcher } from "../../providers/repetition-loop.ts";
 
 // Adaptive thinking can stream nothing visible (no text, sparse summaries) for
 // minutes on large prompts, so this must be generous.
@@ -68,6 +70,12 @@ export async function streamToMessage(
 
   let accumulated: AIMessageChunk | undefined;
   let partial = "";
+  // Inline <think>…</think> goes to the reasoning, never into the node's output.
+  const splitter = new InlineThinkingSplitter();
+  let thinking = "";
+  const textWatcher = new RepetitionWatcher();
+  const thinkingWatcher = new RepetitionWatcher();
+  let looped = false;
 
   try {
     armIdleTimer();
@@ -77,18 +85,33 @@ export async function streamToMessage(
       armIdleTimer();
       const chunk = raw as AIMessageChunk;
       accumulated = accumulated ? accumulated.concat(chunk) : chunk;
-      const text = chunkText(chunk);
+      const split = splitter.push(chunkText(chunk));
+      thinking += split.thinking;
+      const text = split.text;
       if (text) {
         partial += text;
         onToken?.(text);
       }
+      if (textWatcher.check(partial) !== null || thinkingWatcher.check(thinking) !== null) {
+        looped = true;
+        controller.abort();
+        break;
+      }
     }
   } catch (err) {
+    // The abort that stopped a loop is not a failure: what came before it is the answer.
+    if (!looped) throw interruption(err);
+  } finally {
+    clearTimeout(idleTimer);
+    signal?.removeEventListener("abort", onExternalAbort);
+  }
+
+  function interruption(err: unknown): unknown {
     if (signal?.aborted) {
-      throw new StreamInterruptedError("Execution cancelled.", partial, err);
+      return new StreamInterruptedError("Execution cancelled.", partial, err);
     }
     if (timedOut) {
-      throw new StreamInterruptedError(
+      return new StreamInterruptedError(
         `The model produced no output for ${Math.round((accumulated ? idleTimeoutMs : Math.max(firstChunkTimeoutMs, idleTimeoutMs)) / 1000)}s${accumulated ? "" : " (no response started)"}.`,
         partial,
         err,
@@ -96,24 +119,42 @@ export async function streamToMessage(
     }
     if (partial) {
       const reason = err instanceof Error ? err.message : String(err);
-      throw new StreamInterruptedError(
+      return new StreamInterruptedError(
         `Stream interrupted: ${reason}`,
         partial,
         err,
       );
     }
-    throw err;
-  } finally {
-    clearTimeout(idleTimer);
-    signal?.removeEventListener("abort", onExternalAbort);
+    return err;
   }
 
   if (!accumulated) return new AIMessage("");
+  if (!looped) {
+    const rest = splitter.flush();
+    thinking += rest.thinking;
+    partial += rest.text;
+  }
+  const loopCut = looped ? findRepetitionLoop(partial) : null;
+  if (looped) {
+    thinking = thinking.slice(0, findRepetitionLoop(thinking) ?? thinking.length);
+    console.warn("[Stream] The model fell into a repetition loop; its output was cut where the loop began.");
+  }
+  // Plain-text replies carry what was shown; block content (cloud) is left as the provider sent it.
+  const content = typeof accumulated.content === "string" || looped
+    ? (loopCut !== null ? partial.slice(0, loopCut) : partial)
+    : accumulated.content;
   return new AIMessage({
-    content: accumulated.content,
+    content,
     tool_calls: accumulated.tool_calls,
-    additional_kwargs: accumulated.additional_kwargs,
-    response_metadata: accumulated.response_metadata,
+    additional_kwargs: thinking
+      ? {
+        ...accumulated.additional_kwargs,
+        reasoning_content: `${accumulated.additional_kwargs?.reasoning_content ?? ""}${thinking}`,
+      }
+      : accumulated.additional_kwargs,
+    response_metadata: looped
+      ? { ...accumulated.response_metadata, repetitionLoop: true }
+      : accumulated.response_metadata,
     usage_metadata: accumulated.usage_metadata,
     id: accumulated.id,
   });

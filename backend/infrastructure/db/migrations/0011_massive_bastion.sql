@@ -1,0 +1,1 @@
+ALTER TABLE `schedules` ADD `cron` text DEFAULT '' NOT NULL;

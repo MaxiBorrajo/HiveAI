@@ -1,3 +1,4 @@
+import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import type { ModelRef } from "./types.ts";
 
 const unsupported = new Set<string>();
@@ -20,3 +21,26 @@ export function isThinkingRejection(error: unknown): boolean {
     /thinking|think\b|reasoning/i.test(message)
   );
 }
+
+// Anthropic thinking blocks are signed against the exact tools list of the
+// request that produced them; the forced final call drops the tools, so the
+// signatures would be rejected. Strip them from the replayed conversation.
+export function stripThinkingBlocks(conversation: BaseMessage[]): BaseMessage[] {
+  return conversation.map((msg) => {
+    if (!AIMessage.isInstance(msg) || !Array.isArray(msg.content)) return msg;
+    const content = msg.content.filter(
+      (block) =>
+        typeof block !== "object" ||
+        (block.type !== "thinking" && block.type !== "redacted_thinking"),
+    );
+    if (content.length === msg.content.length) return msg;
+    return new AIMessage({
+      content,
+      tool_calls: msg.tool_calls,
+      additional_kwargs: msg.additional_kwargs,
+      response_metadata: msg.response_metadata,
+      id: msg.id,
+    });
+  });
+}
+

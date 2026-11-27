@@ -1,7 +1,15 @@
-import { defineConfig } from "vite";
+import { defineConfig, type UserConfig } from "vite";
+import type { InlineConfig as VitestInlineConfig } from "vitest/node";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+
+// `test` isn't part of Vite's own UserConfig type — it's injected by
+// vitest/config's defineConfig, but that one bundles its own (older) copy
+// of Vite's types which conflicts with this project's Vite version here.
+// Declaring it as its own type and intersecting below gets Vitest's config
+// type-checked without pulling in that conflicting defineConfig.
+type ViteConfigWithTest = UserConfig & { test?: VitestInlineConfig };
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -28,4 +36,24 @@ export default defineConfig({
       },
     },
   },
-});
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./src/setupTests.ts"],
+    css: false,
+    // The first test in each file pays for the cold import of the whole UI
+    // tree: 3-4s warm, 8-15s on a fresh CI runner or a busy machine (e.g.
+    // while Ollama is running a model), far past the 5s default.
+    testTimeout: 30000,
+    coverage: {
+      exclude: [
+        "./src/main.tsx",
+        "**/*.cjs",
+        "**/*.d.ts",
+        "vite.config.ts",
+        "**/*.config.*",
+      ],
+      reporter: ["lcov", "json", "html", "json-summary", "text"],
+    },
+  },
+} satisfies ViteConfigWithTest as UserConfig);

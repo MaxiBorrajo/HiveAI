@@ -1,4 +1,5 @@
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
+import { selectCases } from "./caseSelection.ts";
 import CounterPlugin from "../../plugins/counter/index.ts";
 import FileOpsPlugin from "../../plugins/file-ops/index.ts";
 import { buildStateSchema, compileGraph } from "../../core/ai/visual-builder/execution/compiler.ts";
@@ -8,6 +9,7 @@ import type { ModelRef } from "../../core/ai/providers/types.ts";
 import { buildExecutionCases, stripThinkTags } from "./executionCases.ts";
 import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
+import { reportCaseStart } from "./progress.ts";
 import type { EvalVerdict } from "./metrics.ts";
 
 const EXECUTION_TIMEOUT_MS = 1000_000;
@@ -15,6 +17,7 @@ const EXECUTION_TIMEOUT_MS = 1000_000;
 export async function runExecutionSuite(
   runId: string,
   executorRef: ModelRef = { provider: "ollama", model: "qwen3:8b" },
+  quick = false,
 ): Promise<EvalVerdict[]> {
   if (executorRef.provider === "ollama") {
     const available = await ensureOllamaModelAvailable(executorRef.model);
@@ -53,11 +56,15 @@ export async function runExecutionSuite(
   };
 
   const label = modelRefLabel(executorRef);
-  const cases = buildExecutionCases(executorRef.model, executorRef.provider, executorRef.keyId, tempDir);
+  const cases = selectCases(
+    buildExecutionCases(executorRef.model, executorRef.provider, executorRef.keyId, tempDir),
+    () => "execution",
+    quick,
+  );
 
   const verdicts: EvalVerdict[] = [];
-  for (const testCase of cases) {
-    console.log(`Running: ${testCase.name}`);
+  for (const [index, testCase] of cases.entries()) {
+    reportCaseStart("execution", index, cases.length, testCase.name);
     try {
       const graph = testCase.buildGraph();
       const app = compileGraph(graph, buildStateSchema(graph.stateSchema), pluginRegistry, toolProvider);

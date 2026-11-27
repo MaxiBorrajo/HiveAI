@@ -71,6 +71,13 @@ export function normalizeProviderError(
     );
   }
 
+  if (provider === "ollama" && (status === 404 || /model .*not found/i.test(raw)) && /not found/i.test(raw)) {
+    return new ModelUnavailableError(
+      "This model is not installed (it may have been deleted). Choose another model or download it again from Models.",
+      provider,
+    );
+  }
+
   if (TOOLS_REJECTION.test(raw)) {
     return new ProviderError(
       "tools_unsupported",

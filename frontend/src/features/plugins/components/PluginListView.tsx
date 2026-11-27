@@ -33,7 +33,7 @@ interface PluginListViewProps {
   onToggleAll: (nextActive: boolean) => void;
   onSelectPlugins: (plugins: Plugin[]) => void;
   hasModel?: boolean;
-  onImportPlugin: (files: FileList) => void;
+  onImportPlugin: (file: File) => void;
   onRemovePlugin: (plugin: Plugin) => void;
   onEditPlugin: (plugin: Plugin) => void;
   onConfigurePlugin: (plugin: Plugin) => void;
@@ -66,10 +66,8 @@ export function PluginListView({
   }
 
   function handleFilesChosen(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      onImportPlugin(files);
-    }
+    const file = event.target.files?.[0];
+    if (file) onImportPlugin(file);
     event.target.value = "";
   }
 
@@ -77,7 +75,7 @@ export function PluginListView({
     <>
       <DialogHeader className="p-6 pb-0 flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
-          <DialogTitle>Manage Plugins</DialogTitle>
+          <DialogTitle data-testid="plugins-list-title">Manage Plugins</DialogTitle>
           <DropdownMenu>
             <DropdownMenuTrigger className="" title="Options">
               <Ellipsis className="size-5" />
@@ -144,20 +142,18 @@ export function PluginListView({
         <input
           ref={fileInputRef}
           type="file"
-          multiple
+          aria-label="Plugin .zip file"
+          data-testid="plugin-import-input"
+          accept=".zip,application/zip"
           className="hidden"
           onChange={handleFilesChosen}
-          {...({ webkitdirectory: "", directory: "" } as Record<
-            string,
-            string
-          >)}
         />
       </DialogHeader>
 
       <ScrollArea className="flex-1 p-6 pt-2">
         <div className="flex flex-col gap-3">
           {plugins.length === 0 && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground" data-testid="plugins-empty">
               No plugins registered.
             </p>
           )}
@@ -165,7 +161,10 @@ export function PluginListView({
           {plugins.map((plugin) => (
             <div
               key={plugin.id}
+              role="group"
+              aria-label={plugin.name}
               className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4"
+              data-testid={`plugin-row-${plugin.name}`}
             >
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
@@ -173,16 +172,18 @@ export function PluginListView({
                     <Switch
                       checked={plugin.active}
                       onCheckedChange={(checked) => onToggle(plugin, checked)}
+                      aria-label="Active"
                       className="mt-0.5"
+                      data-testid="plugin-active-toggle"
                     />{" "}
-                    {plugin.name}
+                    <span data-testid="plugin-name">{plugin.name}</span>
                     {plugin.isExternal && (
                       <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
                         imported
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground" data-testid="plugin-description">
                     {plugin.description}
                   </p>
                 </div>
@@ -197,6 +198,7 @@ export function PluginListView({
                       size="sm"
                       onClick={() => onSelectPlugins([plugin])}
                       disabled={!hasModel}
+                      data-testid={`plugin-tests-button-${plugin.name}`}
                       title={
                         hasModel
                           ? undefined
@@ -225,7 +227,7 @@ export function PluginListView({
                       size="sm"
                       onClick={() => onEditPlugin(plugin)}
                       className="h-8 gap-1 px-3"
-                      title="Edit"
+                      title="Open in editor"
                     >
                       <Pencil size={12} />
                     </Button>
@@ -247,6 +249,8 @@ export function PluginListView({
                       size="sm"
                       onClick={() => onRemovePlugin(plugin)}
                       className="h-8 gap-1 px-3 text-destructive hover:text-destructive"
+                      title="Uninstall"
+                      data-testid="plugin-uninstall-button"
                     >
                       <Trash2 size={12} />
                     </Button>

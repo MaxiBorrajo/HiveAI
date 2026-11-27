@@ -2,7 +2,8 @@ export type EvalCategory =
   | "routing"
   | "abstention"
   | "param-extraction"
-  | "multi-turn";
+  | "multi-turn"
+  | "file-creation";
 
 export interface PriorTurn {
   role: "user" | "assistant";
@@ -19,9 +20,21 @@ export interface EvalCase {
   /** Prior messages in the conversation, for multi-turn cases. */
   priorTurns?: PriorTurn[];
   /** Spanish (Rioplatense) translation of `query`, used when --lang=es. Same
-   *  expected plugin/params as the English version — only the phrasing differs. */
+   *  expected plugin as the English version — only the phrasing differs. */
   queryEs?: string;
   priorTurnsEs?: PriorTurn[];
+  /** Params expected when --lang=es, for cases whose Spanish phrasing names
+   *  things differently (a counter called 'flexiones' instead of 'pushups'). */
+  expectedParamsEs?: Record<string, unknown>;
+}
+
+/** An expected param with several equally right values. */
+export class AnyOf {
+  constructor(readonly values: unknown[]) {}
+}
+
+export function anyOf(...values: unknown[]): AnyOf {
+  return new AnyOf(values);
 }
 
 export const evalCases: EvalCase[] = [
@@ -89,6 +102,7 @@ export const evalCases: EvalCase[] = [
     activePlugins: ["counter", "current_datetime"],
     expectedTool: "counter",
     expectedParams: { name: "pushups", action: "increment", amount: 20 },
+    expectedParamsEs: { name: "flexiones", action: "increment", amount: 20 },
   },
   {
     name: "param-extraction: counter reset action is extracted correctly",
@@ -98,6 +112,7 @@ export const evalCases: EvalCase[] = [
     activePlugins: ["counter", "current_datetime"],
     expectedTool: "counter",
     expectedParams: { name: "glasses of water", action: "reset" },
+    expectedParamsEs: { name: "vasos de agua", action: "reset" },
   },
   {
     name: "param-extraction: datetime format 'date' is extracted for a date-only question",
@@ -156,6 +171,7 @@ export const evalCases: EvalCase[] = [
     ],
     expectedTool: "counter",
     expectedParams: { name: "pushups", action: "increment", amount: 5 },
+    expectedParamsEs: { name: "flexiones", action: "increment", amount: 5 },
   },
   {
     name: "multi-turn: after an unrelated exchange, a direct datetime question still routes correctly",
@@ -189,5 +205,611 @@ export const evalCases: EvalCase[] = [
     ],
     expectedTool: "counter",
     expectedParams: { name: "water", action: "increment" },
+    expectedParamsEs: { name: "agua", action: "increment" },
+  },
+  // --- param-extraction: values with a single right answer. Free text (a
+  // search query) is not compared. Counter names are quoted and the same in
+  // both languages, so the Spanish run expects the same params.
+  {
+    name: "param-extraction: counter increment with an explicit amount",
+    category: "param-extraction",
+    query: "add 3 to the 'yoga' counter",
+    queryEs: "sumale 3 al contador 'yoga'",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "counter",
+    expectedParams: { name: "yoga", action: "increment", amount: 3 },
+  },
+  {
+    name: "param-extraction: reading a counter is a 'get', not an increment",
+    category: "param-extraction",
+    query: "how many are in my 'sudoku' counter right now?",
+    queryEs: "cuánto tiene ahora mi contador 'sudoku'?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "counter",
+    expectedParams: { name: "sudoku", action: "get" },
+  },
+  {
+    name: "param-extraction: 'clear back to zero' is a reset",
+    category: "param-extraction",
+    query: "clear the 'kombucha' counter back to zero",
+    queryEs: "dejá en cero el contador 'kombucha'",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "counter",
+    expectedParams: { name: "kombucha", action: "reset" },
+  },
+  {
+    name: "param-extraction: amount taken from a casual sentence",
+    category: "param-extraction",
+    query: "I just did 15 more squats, bump the 'squats' counter",
+    queryEs: "recién hice 15 sentadillas más, actualizá el contador 'squats'",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "counter",
+    expectedParams: { name: "squats", action: "increment", amount: 15 },
+  },
+  {
+    name: "param-extraction: an amount written in words becomes a number",
+    category: "param-extraction",
+    query: "add twelve to the 'pomodoro' counter",
+    queryEs: "sumale doce al contador 'pomodoro'",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "counter",
+    expectedParams: { name: "pomodoro", action: "increment", amount: 12 },
+  },
+  {
+    name: "param-extraction: a city becomes its IANA timezone, time only",
+    category: "param-extraction",
+    query: "what time is it in Tokyo right now?",
+    queryEs: "qué hora es ahora en Tokio?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "current_datetime",
+    expectedParams: { format: "time", timezone: "Asia/Tokyo" },
+  },
+  {
+    name: "param-extraction: date only, in another city's timezone",
+    category: "param-extraction",
+    query: "what's today's date in Madrid?",
+    queryEs: "qué fecha es hoy en Madrid?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "current_datetime",
+    expectedParams: { format: "date", timezone: "Europe/Madrid" },
+  },
+  {
+    name: "param-extraction: full date and time in a timezone",
+    category: "param-extraction",
+    query: "give me the full date and time in New York",
+    queryEs: "dame la fecha y la hora completas en Nueva York",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "current_datetime",
+    expectedParams: { format: "full", timezone: "America/New_York" },
+  },
+  {
+    name: "param-extraction: Buenos Aires has a multi-part timezone name",
+    category: "param-extraction",
+    query: "what time is it in Buenos Aires?",
+    queryEs: "qué hora es en Buenos Aires?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "current_datetime",
+    // Both names are valid IANA ids for the same zone.
+    expectedParams: {
+      format: "time",
+      timezone: anyOf("America/Argentina/Buenos_Aires", "America/Buenos_Aires"),
+    },
+  },
+  {
+    name: "param-extraction: seeing a folder's contents is a 'list'",
+    category: "param-extraction",
+    query: "show me what's in the folder C:\\projects\\demo",
+    queryEs: "mostrame qué hay en la carpeta C:\\projects\\demo",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "file_read",
+    expectedParams: { operation: "list" },
+  },
+  {
+    name: "param-extraction: opening a file is a 'read'",
+    category: "param-extraction",
+    query: "open and read the file C:\\projects\\demo\\todo.txt",
+    queryEs: "abrí y leé el archivo C:\\projects\\demo\\todo.txt",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "file_read",
+    expectedParams: { operation: "read" },
+  },
+  {
+    name: "param-extraction: 'from the past week' becomes the search time range",
+    category: "param-extraction",
+    query: "search the web for news about Deno from the past week",
+    queryEs: "buscá en la web noticias sobre Deno de la última semana",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "web_search",
+    expectedParams: { time_range: "week" },
+  },
+  // --- multi-turn: the answer depends on what was said before.
+  {
+    name: "multi-turn: 'and in Tokyo?' reuses the earlier time question",
+    category: "multi-turn",
+    query: "and in Tokyo?",
+    queryEs: "y en Tokio?",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "what time is it in London?" },
+      { role: "assistant", content: "It's 14:05 in London." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "qué hora es en Londres?" },
+      { role: "assistant", content: "Son las 14:05 en Londres." },
+    ],
+    expectedTool: "current_datetime",
+    expectedParams: { timezone: "Asia/Tokyo" },
+  },
+  {
+    name: "multi-turn: 'and the date?' after the time asks for the date only",
+    category: "multi-turn",
+    query: "and the date?",
+    queryEs: "y la fecha?",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "what time is it?" },
+      { role: "assistant", content: "It's 09:30." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "qué hora es?" },
+      { role: "assistant", content: "Son las 09:30." },
+    ],
+    expectedTool: "current_datetime",
+    expectedParams: { format: "date" },
+  },
+  {
+    name: "multi-turn: 'its value' refers to the counter just created",
+    category: "multi-turn",
+    query: "what's its value now?",
+    queryEs: "cuánto tiene ahora?",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "create a counter called 'yoga'" },
+      { role: "assistant", content: "Done — the 'yoga' counter is ready." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "creá un contador llamado 'yoga'" },
+      { role: "assistant", content: "Listo — el contador 'yoga' está creado." },
+    ],
+    expectedTool: "counter",
+    expectedParams: { name: "yoga", action: "get" },
+  },
+  {
+    name: "multi-turn: 'reset it' targets the counter being discussed",
+    category: "multi-turn",
+    query: "ok, reset it",
+    queryEs: "bueno, reinicialo",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "how many are in the 'sudoku' counter?" },
+      { role: "assistant", content: "The 'sudoku' counter is at 7." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "cuánto tiene el contador 'sudoku'?" },
+      { role: "assistant", content: "El contador 'sudoku' está en 7." },
+    ],
+    expectedTool: "counter",
+    expectedParams: { name: "sudoku", action: "reset" },
+  },
+  {
+    name: "multi-turn: 'do the same for' repeats the action on another counter",
+    category: "multi-turn",
+    query: "do the same for the 'sudoku' counter",
+    queryEs: "hacé lo mismo con el contador 'sudoku'",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "add 2 to the 'yoga' counter" },
+      { role: "assistant", content: "Added 2 to 'yoga'. It's now at 2." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "sumale 2 al contador 'yoga'" },
+      { role: "assistant", content: "Le sumé 2 a 'yoga'. Ahora está en 2." },
+    ],
+    expectedTool: "counter",
+    expectedParams: { name: "sudoku", action: "increment", amount: 2 },
+  },
+  {
+    name: "multi-turn: a new topic routes to a new tool",
+    category: "multi-turn",
+    query: "different question: what's the latest news about AI regulation in Europe?",
+    queryEs: "otra pregunta: cuáles son las últimas noticias sobre la regulación de IA en Europa?",
+    activePlugins: ["counter", "web_search"],
+    priorTurns: [
+      { role: "user", content: "add one to the 'yoga' counter" },
+      { role: "assistant", content: "Added one to 'yoga'. It's now at 3." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "sumale uno al contador 'yoga'" },
+      { role: "assistant", content: "Le sumé uno a 'yoga'. Ahora está en 3." },
+    ],
+    expectedTool: "web_search",
+  },
+  {
+    name: "multi-turn: thanks after a tool answer needs no new tool call",
+    category: "multi-turn",
+    query: "great, thanks, that's all",
+    queryEs: "genial, gracias, eso es todo",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "what time is it?" },
+      { role: "assistant", content: "It's 18:20." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "qué hora es?" },
+      { role: "assistant", content: "Son las 18:20." },
+    ],
+    expectedTool: null,
+  },
+  {
+    name: "multi-turn: 'the second one' picks a file from the listing shown before",
+    category: "multi-turn",
+    query: "open the second one",
+    queryEs: "abrí el segundo",
+    activePlugins: ["file_read", "web_search"],
+    priorTurns: [
+      { role: "user", content: "list the files in C:\\projects\\demo" },
+      { role: "assistant", content: "C:\\projects\\demo has: notes.txt, todo.txt, plan.md." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "listá los archivos de C:\\projects\\demo" },
+      { role: "assistant", content: "C:\\projects\\demo tiene: notes.txt, todo.txt, plan.md." },
+    ],
+    expectedTool: "file_read",
+    expectedParams: { operation: "read" },
+  },
+  {
+    name: "multi-turn: a correction adds only the difference",
+    category: "multi-turn",
+    query: "sorry, I meant 50 — add the 45 that are missing",
+    queryEs: "perdón, quise decir 50 — sumale los 45 que faltan",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "add 5 to the 'squats' counter" },
+      { role: "assistant", content: "Added 5 to 'squats'. It's now at 5." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "sumale 5 al contador 'squats'" },
+      { role: "assistant", content: "Le sumé 5 a 'squats'. Ahora está en 5." },
+    ],
+    expectedTool: "counter",
+    expectedParams: { name: "squats", action: "increment", amount: 45 },
+  },
+  {
+    name: "multi-turn: 'here' means the city the user mentioned earlier",
+    category: "multi-turn",
+    query: "what time is it here?",
+    queryEs: "qué hora es acá?",
+    activePlugins: ["counter", "current_datetime"],
+    priorTurns: [
+      { role: "user", content: "I'm working from Madrid this week" },
+      { role: "assistant", content: "Nice! How can I help?" },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "esta semana estoy trabajando desde Madrid" },
+      { role: "assistant", content: "Qué bueno! En qué te ayudo?" },
+    ],
+    expectedTool: "current_datetime",
+    expectedParams: { timezone: "Europe/Madrid" },
+  },
+  {
+    name: "multi-turn: 'search that again' keeps the topic and adds a time range",
+    category: "multi-turn",
+    query: "search that again, but only from the last month",
+    queryEs: "buscá eso de nuevo, pero solo del último mes",
+    activePlugins: ["file_read", "web_search"],
+    priorTurns: [
+      { role: "user", content: "search the web for news about the Rust language" },
+      {
+        role: "assistant",
+        content: "Here are the main results about the Rust language: a new edition, compiler speedups and a security advisory.",
+      },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "buscá en la web noticias sobre el lenguaje Rust" },
+      {
+        role: "assistant",
+        content:
+          "Estos son los principales resultados sobre el lenguaje Rust: una nueva edición, mejoras de velocidad del compilador y un aviso de seguridad.",
+      },
+    ],
+    expectedTool: "web_search",
+    expectedParams: { time_range: "month" },
+  },
+  {
+    name: "multi-turn: a question about this conversation is answered from it, not by a tool",
+    category: "multi-turn",
+    query: "what was the first thing I asked you?",
+    queryEs: "qué fue lo primero que te pregunté?",
+    activePlugins: ["counter", "current_datetime", "web_search"],
+    priorTurns: [
+      { role: "user", content: "what's the capital of Australia?" },
+      { role: "assistant", content: "Canberra." },
+      { role: "user", content: "and its population?" },
+      { role: "assistant", content: "About 470,000 people." },
+    ],
+    priorTurnsEs: [
+      { role: "user", content: "cuál es la capital de Australia?" },
+      { role: "assistant", content: "Canberra." },
+      { role: "user", content: "y su población?" },
+      { role: "assistant", content: "Alrededor de 470.000 personas." },
+    ],
+    expectedTool: null,
+  },
+  // --- routing: more pairs of competing tools.
+  {
+    name: "routing: a named local file goes to file_read",
+    category: "routing",
+    query: "read my notes.txt in C:\\docs",
+    queryEs: "leé mi notes.txt en C:\\docs",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "file_read",
+  },
+  {
+    name: "routing: a recent sports result needs a web search",
+    category: "routing",
+    query: "who won the last Formula 1 race?",
+    queryEs: "quién ganó la última carrera de Fórmula 1?",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "web_search",
+  },
+  {
+    name: "routing: today's weather needs a web search",
+    category: "routing",
+    query: "what's the weather like in Rosario today?",
+    queryEs: "cómo está el clima hoy en Rosario?",
+    activePlugins: ["counter", "web_search"],
+    expectedTool: "web_search",
+  },
+  {
+    name: "routing: a tracked tally goes to the counter, not the web",
+    category: "routing",
+    query: "how many coffees have I had? check my 'coffee' counter",
+    queryEs: "cuántos cafés tomé? fijate en mi contador 'coffee'",
+    activePlugins: ["counter", "web_search"],
+    expectedTool: "counter",
+  },
+  {
+    name: "routing: 'is it past noon' needs the clock",
+    category: "routing",
+    query: "is it already past noon?",
+    queryEs: "ya pasó el mediodía?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: "current_datetime",
+  },
+  {
+    name: "routing: listing a local folder goes to file_read",
+    category: "routing",
+    query: "check what files are in C:\\projects",
+    queryEs: "fijate qué archivos hay en C:\\projects",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: "file_read",
+  },
+  {
+    name: "routing: a live price needs a web search",
+    category: "routing",
+    query: "find the current price of bitcoin",
+    queryEs: "buscá el precio actual del bitcoin",
+    activePlugins: ["counter", "web_search"],
+    expectedTool: "web_search",
+  },
+  {
+    name: "routing: logging a habit goes to the counter, not to a file",
+    category: "routing",
+    query: "log one more glass in my 'water' counter",
+    queryEs: "anotá un vaso más en mi contador 'water'",
+    activePlugins: ["counter", "file_read"],
+    expectedTool: "counter",
+  },
+  {
+    name: "routing: the current month comes from the clock among three tools",
+    category: "routing",
+    query: "what month are we in?",
+    queryEs: "en qué mes estamos?",
+    activePlugins: ["counter", "current_datetime", "web_search"],
+    expectedTool: "current_datetime",
+  },
+  // --- abstention: tools are active and tempting, but the answer needs none.
+  {
+    name: "abstention: arithmetic needs no tool",
+    category: "abstention",
+    query: "what is 15% of 200?",
+    queryEs: "cuánto es el 15% de 200?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a translation needs no web search",
+    category: "abstention",
+    query: "translate 'good morning, see you later' to French",
+    queryEs: "traducí 'buenos días, nos vemos después' al francés",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: creative writing needs no web search",
+    category: "abstention",
+    query: "write a haiku about autumn",
+    queryEs: "escribí un haiku sobre el otoño",
+    activePlugins: ["counter", "web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a stable definition needs no web search",
+    category: "abstention",
+    query: "what does HTTP stand for?",
+    queryEs: "qué significa la sigla HTTP?",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a calendar fact needs no clock",
+    category: "abstention",
+    query: "how many days are there in a leap year?",
+    queryEs: "cuántos días tiene un año bisiesto?",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a programming question about counters needs no counter tool",
+    category: "abstention",
+    query: "explain what a counter variable is in programming",
+    queryEs: "explicame qué es una variable contador en programación",
+    activePlugins: ["counter", "current_datetime"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: general advice needs no web search",
+    category: "abstention",
+    query: "give me three tips to sleep better",
+    queryEs: "dame tres consejos para dormir mejor",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a unit conversion needs no tool",
+    category: "abstention",
+    query: "convert 5 kilometers to miles",
+    queryEs: "pasá 5 kilómetros a millas",
+    activePlugins: ["counter", "web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a concept about files needs no file tool",
+    category: "abstention",
+    query: "what's the difference between a file and a folder?",
+    queryEs: "cuál es la diferencia entre un archivo y una carpeta?",
+    activePlugins: ["file_read", "web_search"],
+    expectedTool: null,
+  },
+  {
+    name: "abstention: a greeting needs no tool",
+    category: "abstention",
+    query: "hi! who are you?",
+    queryEs: "hola! quién sos?",
+    activePlugins: ["counter", "current_datetime", "file_read", "web_search"],
+    expectedTool: null,
+  },
+  // --- file-creation: the chat's create_file attaches a file to the reply,
+  // file_ops writes at a path on the user's disk, excel_write builds a real
+  // .xlsx, and a question about files needs no file at all.
+  {
+    name: "file-creation: a CSV the user wants as a result goes to create_file",
+    category: "file-creation",
+    query: "give me a CSV with the months of the year and how many days each has",
+    queryEs: "pasame un CSV con los meses del año y cuántos días tiene cada uno",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "create_file",
+  },
+  {
+    name: "file-creation: a Word document goes to create_file",
+    category: "file-creation",
+    query: "make me a Word document with a short welcome letter for new employees",
+    queryEs: "armame un documento de Word con una carta breve de bienvenida para empleados nuevos",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "create_file",
+  },
+  {
+    name: "file-creation: a JSON file from a list goes to create_file",
+    category: "file-creation",
+    query: "turn this list into a JSON file: apples 3, pears 5, kiwis 2",
+    queryEs: "convertí esta lista en un archivo JSON: manzanas 3, peras 5, kiwis 2",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "create_file",
+  },
+  {
+    name: "file-creation: a Markdown checklist goes to create_file",
+    category: "file-creation",
+    query: "write me a Markdown file with a checklist for moving house",
+    queryEs: "escribime un archivo Markdown con una checklist para mudarse",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "create_file",
+  },
+  {
+    name: "file-creation: a script delivered as a file goes to create_file",
+    category: "file-creation",
+    query: "give me a Python script file that renames every .txt file in a folder to lowercase",
+    queryEs: "dame un archivo de script en Python que pase a minúsculas los nombres de todos los .txt de una carpeta",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "create_file",
+  },
+  {
+    name: "file-creation: a text file to attach goes to create_file",
+    category: "file-creation",
+    query: "attach a .txt file with the outline of my song: verse, chorus, verse, chorus, bridge",
+    queryEs: "adjuntame un archivo .txt con la estructura de mi canción: estrofa, estribillo, estrofa, estribillo, puente",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "create_file",
+  },
+  {
+    name: "file-creation: a file at an explicit path on disk goes to file_ops",
+    category: "file-creation",
+    query: "save the text 'call the dentist' to C:\\Users\\demo\\Desktop\\reminder.txt",
+    queryEs: "guardá el texto 'llamar al dentista' en C:\\Users\\demo\\Desktop\\recordatorio.txt",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "file_ops",
+  },
+  {
+    name: "file-creation: creating a folder on disk goes to file_ops",
+    category: "file-creation",
+    query: "create a folder called reports inside C:\\Users\\demo\\Documents",
+    queryEs: "creá una carpeta llamada reportes dentro de C:\\Users\\demo\\Documents",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "file_ops",
+  },
+  {
+    name: "file-creation: copying a file on disk goes to file_ops",
+    category: "file-creation",
+    query: "copy C:\\docs\\plan.md to C:\\backup\\plan.md",
+    queryEs: "copiá C:\\docs\\plan.md a C:\\backup\\plan.md",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "file_ops",
+  },
+  {
+    name: "file-creation: overwriting a file on disk goes to file_ops",
+    category: "file-creation",
+    query: "overwrite C:\\logs\\status.txt so it only says 'done'",
+    queryEs: "sobrescribí C:\\logs\\status.txt para que solo diga 'listo'",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "file_ops",
+  },
+  {
+    name: "file-creation: an Excel file goes to excel_write",
+    category: "file-creation",
+    query: "export these sales to an Excel file: January 100, February 150, March 90",
+    queryEs: "exportá estas ventas a un archivo de Excel: enero 100, febrero 150, marzo 90",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "excel_write",
+  },
+  {
+    name: "file-creation: a spreadsheet with several sheets goes to excel_write",
+    category: "file-creation",
+    query: "I need an .xlsx spreadsheet with two sheets, one for income and one for expenses",
+    queryEs: "necesito una planilla .xlsx con dos hojas, una para ingresos y otra para gastos",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: "excel_write",
+  },
+  {
+    name: "file-creation: a how-to question about files needs no file",
+    category: "file-creation",
+    query: "how do I create a CSV file in Excel?",
+    queryEs: "cómo creo un archivo CSV en Excel?",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: null,
+  },
+  {
+    name: "file-creation: comparing formats needs no file",
+    category: "file-creation",
+    query: "what's the difference between CSV and JSON?",
+    queryEs: "cuál es la diferencia entre CSV y JSON?",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: null,
+  },
+  {
+    name: "file-creation: a short poem is answered in the chat, not as a file",
+    category: "file-creation",
+    query: "write a short poem about the sea",
+    queryEs: "escribí un poema corto sobre el mar",
+    activePlugins: ["file_ops", "excel_write"],
+    expectedTool: null,
   },
 ];

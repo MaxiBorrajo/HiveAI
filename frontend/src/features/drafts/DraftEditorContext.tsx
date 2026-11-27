@@ -1,7 +1,20 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
+export type PluginKind = "draft" | "official";
+
+export interface OpenPlugin {
+  name: string;
+  /** A draft is still being built; an official plugin is installed. */
+  kind: PluginKind;
+  /** Open straight in edit mode (e.g. right after moving a plugin to drafts). */
+  startInEdit?: boolean;
+}
+
 interface DraftEditorContextValue {
-  openDraftName: string | null;
+  openPlugin: OpenPlugin | null;
+  /** Opens the plugin editor (view mode unless `startInEdit`). */
+  openEditor: (plugin: OpenPlugin) => void;
+  /** Shortcut for opening a draft. */
   openDraft: (name: string) => void;
   closeDraft: () => void;
   pluginsVersion: number;
@@ -11,15 +24,16 @@ interface DraftEditorContextValue {
 const DraftEditorContext = createContext<DraftEditorContextValue | null>(null);
 
 export function DraftEditorProvider({ children }: { children: ReactNode }) {
-  const [openDraftName, setOpenDraftName] = useState<string | null>(null);
+  const [openPlugin, setOpenPlugin] = useState<OpenPlugin | null>(null);
   const [pluginsVersion, setPluginsVersion] = useState(0);
 
   return (
     <DraftEditorContext.Provider
       value={{
-        openDraftName,
-        openDraft: setOpenDraftName,
-        closeDraft: () => setOpenDraftName(null),
+        openPlugin,
+        openEditor: setOpenPlugin,
+        openDraft: (name) => setOpenPlugin({ name, kind: "draft" }),
+        closeDraft: () => setOpenPlugin(null),
         pluginsVersion,
         notifyPluginImported: () => setPluginsVersion((v) => v + 1),
       }}

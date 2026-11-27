@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { GraphEdge, GraphNode } from "../../types";
-import { useActivePlugins } from "./usePlugins";
+import { useInstalledPlugins } from "./usePlugins";
 import { Field, TextInput } from "./fields";
+import { ConfigView } from "./ConfigView";
 import {
   ConditionNodeForm,
   EndNodeForm,
@@ -20,6 +21,9 @@ interface NodeDetailsPanelProps {
   onApply: (nodeId: string, patch: Pick<GraphNode, "name" | "config">) => void;
   onDeleteNode: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
+  /** Selects every LLM node of the graph, to edit them together. */
+  onSelectAllLlm?: () => void;
+  llmCount?: number;
 }
 
 const LABEL = "text-[10px] text-muted-foreground uppercase font-semibold";
@@ -46,6 +50,8 @@ export function NodeDetailsPanel({
   onApply,
   onDeleteNode,
   onDeleteEdge,
+  onSelectAllLlm,
+  llmCount = 0,
 }: NodeDetailsPanelProps) {
   if (!node && !edge) return null;
 
@@ -59,6 +65,8 @@ export function NodeDetailsPanel({
           canEdit={canEdit}
           onApply={onApply}
           onDelete={() => onDeleteNode(node.id)}
+          onSelectAllLlm={onSelectAllLlm}
+          llmCount={llmCount}
         />
       ) : (
         edge && <EdgeBody edge={edge} canEdit={canEdit} onDelete={() => onDeleteEdge(edge.id)} />
@@ -73,17 +81,21 @@ function NodeBody({
   canEdit,
   onApply,
   onDelete,
+  onSelectAllLlm,
+  llmCount,
 }: {
   node: GraphNode;
   stateKeys: string[];
   canEdit: boolean;
   onApply: NodeDetailsPanelProps["onApply"];
   onDelete: () => void;
+  onSelectAllLlm?: () => void;
+  llmCount: number;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(node.name);
   const [config, setConfig] = useState<Record<string, any>>(node.config ?? {});
-  const plugins = useActivePlugins(isEditing);
+  const plugins = useInstalledPlugins(isEditing);
   const Form = FORMS[node.type];
 
   const startEditing = () => {
@@ -118,6 +130,20 @@ function NodeBody({
           )}
         </div>
       </div>
+
+      {canEdit && !isEditing && (
+        <p className="-mt-1 mb-1 text-[11px] leading-snug text-muted-foreground">
+          Ctrl+click or Shift+drag to select several nodes and edit them together.
+          {node.type === "llm" && onSelectAllLlm && (
+            <>
+              {" "}
+              <button type="button" className="text-primary hover:underline" onClick={onSelectAllLlm}>
+                Select all {llmCount} LLM nodes
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       {isEditing ? (
         <div className="flex flex-col gap-3">
@@ -154,10 +180,7 @@ function NodeBody({
             <label className={LABEL}>Name</label>
             <p className="text-sm">{node.name}</p>
           </div>
-          <div>
-            <label className={LABEL}>Config</label>
-            <pre className={CODE}>{JSON.stringify(node.config, null, 2)}</pre>
-          </div>
+          <ConfigView config={node.config} />
         </div>
       )}
     </>

@@ -144,7 +144,7 @@ core/                   plataforma transversal, sin lógica de features
   api/ ollama/ files/ memory/ microkernel/ ai/ env.ts
 modules/<feature>/      un slice por feature: router.ts, types.ts, use-cases/, lib/
 infrastructure/db/      orm, schema/, repositories/, migrations/
-plugins/                plugins incluidos (cada uno con su bee-plugin.ts)
+plugins/                plugins incluidos (cada uno con su bee-plugin.ts; los plugins importados/exportados nunca lo llevan)
 config/  experiments/
 ```
 - Archivos y carpetas en `kebab-case` (`send-message.ts`, `use-cases/`); las clases dentro siguen en PascalCase.

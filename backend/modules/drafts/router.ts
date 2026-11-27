@@ -8,6 +8,17 @@ import { handleValidateDraft } from "./use-cases/validate-draft.ts";
 import { handleImportDraft } from "./use-cases/import-draft.ts";
 import { handleRemoveDraft } from "./use-cases/remove-draft.ts";
 import { handleExportDraft } from "./use-cases/export-draft.ts";
+import { handleChatEditDraft } from "./use-cases/chat-edit-draft.ts";
+import {
+  handleDeleteDraftConfig,
+  handleGetDraftConfig,
+  handleSetDraftConfig,
+} from "./use-cases/draft-config.ts";
+import { handlePluginTestChat } from "../plugin-test-chat/test-chat.ts";
+import { getDraftRepository } from "./lib/draft-context.ts";
+import { ResponseBuilder } from "../../core/api/response.ts";
+import { requireModelsConfigured } from "../../core/api/guards.ts";
+import { getCurrentModelRef } from "../../core/ai/providers/current-model.ts";
 
 export const draftsRouter = new Hono<{
   Variables: { hive: HiveMicrokernel };
@@ -37,6 +48,70 @@ draftsRouter.put("/:name/files", (c) =>
 draftsRouter.post("/:name/validate", (c) =>
   handleValidateDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),
 );
+
+draftsRouter.post("/:name/chat", async (c) => {
+  const hive = c.get("hive");
+  const guardError = requireModelsConfigured(hive, JSON_HEADERS);
+  if (guardError) return guardError;
+
+  const body = await c.req.json().catch(() => ({}));
+  const model = getCurrentModelRef(hive.getConfig());
+  return handleChatEditDraft(
+    hive,
+    c.req.param("name"),
+    model,
+    body.content,
+    JSON_HEADERS,
+  );
+});
+
+draftsRouter.get("/:name/config", (c) =>
+  handleGetDraftConfig(c.get("hive"), c.req.param("name"), JSON_HEADERS),
+);
+
+draftsRouter.put("/:name/config/:key", (c) =>
+  handleSetDraftConfig(
+    c.get("hive"),
+    c.req.param("name"),
+    c.req.param("key"),
+    c.req.raw,
+    JSON_HEADERS,
+  ),
+);
+
+draftsRouter.delete("/:name/config/:key", (c) =>
+  handleDeleteDraftConfig(
+    c.get("hive"),
+    c.req.param("name"),
+    c.req.param("key"),
+    JSON_HEADERS,
+  ),
+);
+
+draftsRouter.post("/:name/test-chat", async (c) => {
+  const hive = c.get("hive");
+  const guardError = requireModelsConfigured(hive, JSON_HEADERS);
+  if (guardError) return guardError;
+
+  const record = await getDraftRepository(hive).get(c.req.param("name"));
+  if (!record) {
+    return ResponseBuilder.error(["Draft not found."], undefined, {
+      status: 404,
+      headers: JSON_HEADERS,
+    });
+  }
+  const body = await c.req.json().catch(() => ({}));
+  return handlePluginTestChat(
+    hive,
+    {
+      dir: record.dir,
+      model: getCurrentModelRef(hive.getConfig()),
+      message: body.message,
+      history: body.history,
+    },
+    JSON_HEADERS,
+  );
+});
 
 draftsRouter.post("/:name/import", (c) =>
   handleImportDraft(c.get("hive"), c.req.param("name"), JSON_HEADERS),

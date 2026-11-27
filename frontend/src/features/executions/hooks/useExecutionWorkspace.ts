@@ -17,6 +17,7 @@ export interface ExecutionWorkspaceOptions {
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null, targetKey?: string) => void;
   onExecutionCreated: (id: string) => void;
+  onExecutionRenamed?: () => void;
 }
 
 export function useExecutionWorkspace({
@@ -26,6 +27,7 @@ export function useExecutionWorkspace({
   selectedNodeId,
   setSelectedNodeId,
   onExecutionCreated,
+  onExecutionRenamed,
 }: ExecutionWorkspaceOptions) {
   const justCreatedIdRef = useRef<string | null>(null);
 
@@ -86,7 +88,7 @@ export function useExecutionWorkspace({
   const handleStop = () => generateAbortRef.current?.abort();
   const handleStopRun = () => runAbortRef.current?.abort();
 
-  const handleGenerate = async (userPrompt: string) => {
+  const handleGenerate = async (userPrompt: string, options: { wholeGraph?: boolean } = {}) => {
     const controller = new AbortController();
     generateAbortRef.current = controller;
     let currentKey = key;
@@ -108,7 +110,7 @@ export function useExecutionWorkspace({
         {
           content: userPrompt,
           executionId: activeExecutionId ? Number(activeExecutionId) : undefined,
-          targetNodeId: editing ? (selectedNodeId ?? undefined) : undefined,
+          targetNodeId: editing && !options.wholeGraph ? (selectedNodeId ?? undefined) : undefined,
           ...(editing ? { currentGraph: draftGraph.value!, dryRun: true } : {}),
         },
         {
@@ -121,6 +123,7 @@ export function useExecutionWorkspace({
             currentKey = newId;
             onExecutionCreated(newId);
           },
+          onExecutionRenamed: () => onExecutionRenamed?.(),
           onPlanning: (thoughts) => {
             planningThought.set(thoughts, currentKey);
             logs.set((prev) => [...prev, ` ${thoughts}`], currentKey);
@@ -332,6 +335,23 @@ export function useExecutionWorkspace({
     }
   };
 
+  /**
+   * The run list is cached per execution while this screen is mounted, so a
+   * run that happened elsewhere (the scheduler) is invisible until reloaded.
+   * Returns whether there is a result to show.
+   */
+  const reloadLastResult = async (id: string): Promise<boolean> => {
+    try {
+      const { data } = await getExecution(id);
+      if (!data?.lastResult) return false;
+      executionResult.set(data.lastResult, id);
+      return true;
+    } catch (e) {
+      console.error("Failed to reload the latest result", e);
+      return false;
+    }
+  };
+
   const adoptCreatedExecution = (id: string, created: LangGraphAbstraction) => {
     justCreatedIdRef.current = id;
     graph.set(created, id);
@@ -362,5 +382,6 @@ export function useExecutionWorkspace({
     handleStop,
     handleStopRun,
     handleRun,
+    reloadLastResult,
   };
 }

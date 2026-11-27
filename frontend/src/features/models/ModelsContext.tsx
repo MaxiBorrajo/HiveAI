@@ -37,6 +37,9 @@ interface ModelsContextValue {
   isManageOpen: boolean;
   openManage: () => void;
   closeManage: () => void;
+  isExploreOpen: boolean;
+  openExplore: () => void;
+  closeExplore: () => void;
   refreshModels: () => void;
   changeModel: (choice: string | ModelChoice) => Promise<void>;
   deleteLocalModel: (name: string) => Promise<void>;
@@ -55,6 +58,7 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     keyId: "",
   });
   const [isManageOpen, setIsManageOpen] = useState(false);
+  const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [embeddingModelStatus, setEmbeddingModelStatus] =
     useState<EmbeddingModelStatus | null>(null);
@@ -155,6 +159,9 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
     isManageOpen,
     openManage: () => setIsManageOpen(true),
     closeManage: () => setIsManageOpen(false),
+    isExploreOpen,
+    openExplore: () => setIsExploreOpen(true),
+    closeExplore: () => setIsExploreOpen(false),
     refreshModels,
     changeModel,
     deleteLocalModel,

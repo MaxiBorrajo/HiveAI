@@ -2,6 +2,11 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { BeePlugin, ExecutionTestCase } from "../bee-plugin.ts";
 import {
+  checkPluginConformance,
+  PluginConformanceError,
+  syncBeePluginFile,
+} from "../plugin-conformance.ts";
+import {
   launchExternalPlugin,
   stopSharedHostIfIdle,
   type ExternalPluginHandle,
@@ -100,15 +105,25 @@ export class ExternalPluginManager {
     }
   }
 
+  async probeLaunch(sourceDir: string): Promise<ExternalPluginHandle> {
+    const probeName = externalPluginNameFromSourceDir(sourceDir);
+    return await launchExternalPlugin(
+      probeName,
+      sourceDir,
+      this.getCallbackBaseUrl(),
+    );
+  }
+
   async importFrom(sourceDir: string): Promise<BeePlugin> {
     const callbackBaseUrl = this.getCallbackBaseUrl();
 
-    const probeName = externalPluginNameFromSourceDir(sourceDir);
-    const probe = await launchExternalPlugin(
-      probeName,
-      sourceDir,
-      callbackBaseUrl,
-    );
+    // The BeePlugin interface is never taken from the import: the plugin is
+    // always checked and installed against this installation's version.
+    await syncBeePluginFile(sourceDir);
+    const conformance = await checkPluginConformance(sourceDir);
+    if (!conformance.ok) throw new PluginConformanceError(conformance.issues);
+
+    const probe = await this.probeLaunch(sourceDir);
     const metadata: ExternalPluginMetadata = {
       description: probe.plugin.description,
       selectionTests: probe.plugin.selectionTests,

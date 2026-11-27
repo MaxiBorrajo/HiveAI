@@ -1,5 +1,6 @@
 import { AppError } from "../../../core/api/errors.ts";
 import type { PluginConfigDeps } from "../types.ts";
+import { loadConfigFields } from "../lib.ts";
 import { configId } from "./get-plugin-config.ts";
 
 export async function setPluginConfig(
@@ -8,10 +9,8 @@ export async function setPluginConfig(
   key: string,
   value: unknown,
 ): Promise<void> {
-  const plugin = deps.hive.getPlugin(pluginName);
-  if (!plugin) throw new AppError("Plugin not found.", 404);
-
-  const field = plugin.configFields?.find((f) => f.key === key);
+  const fields = await loadConfigFields(deps, pluginName);
+  const field = fields.find((f) => f.key === key);
   if (!field) {
     throw new AppError(
       `Plugin '${pluginName}' does not declare a config field named '${key}'.`,

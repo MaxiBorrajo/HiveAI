@@ -11,10 +11,12 @@ export interface HiveSettings {
   ollamaKvCacheType: string;
   ollamaFlashAttention: string;
   ollamaServerPromptDismissed: boolean;
+  /** Closing the window hides it to the tray instead of quitting. */
+  runInBackground: boolean;
   callbackBaseUrl: string;
 }
 
-const PERSISTED_KEYS = ["model", "modelProvider", "modelKeyId", "ollamaKvCacheType", "ollamaFlashAttention", "ollamaServerPromptDismissed"] as const;
+const PERSISTED_KEYS = ["model", "modelProvider", "modelKeyId", "ollamaKvCacheType", "ollamaFlashAttention", "ollamaServerPromptDismissed", "runInBackground"] as const;
 type PersistedSettings = Pick<HiveSettings, (typeof PERSISTED_KEYS)[number]>;
 
 const SETTINGS_FILE_NAME = "settings.json";

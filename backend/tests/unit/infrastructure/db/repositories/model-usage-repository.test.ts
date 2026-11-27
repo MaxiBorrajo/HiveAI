@@ -112,7 +112,6 @@ Deno.test("ModelUsageRepository - execution calls link to the run and node", asy
     executionId: execution.id,
     iteration: 1,
     result: "{}",
-    version: 1,
     createdAt: 1,
   });
   await usage.attachHistory(group, history.id);
@@ -186,9 +185,11 @@ Deno.test("ModelUsageRepository - deleting a key keeps the history with its froz
   await keys.update(key.id, { alias: "renamed" });
   await keys.delete(key.id);
 
-  const rows = await usage.list({ ...NO_FILTER, keyId: key.id });
+  // The row stays, with its alias; only the reference to the key is cleared.
+  const rows = await usage.list({ ...NO_FILTER, model: "key-model-1" });
   assertEquals(rows.length, 1);
   assertEquals(rows[0].keyAlias, "personal");
+  assertEquals(rows[0].keyId, null);
 });
 
 Deno.test("ModelUsageRepository - deleting a chat keeps the consumption", async () => {
@@ -239,4 +240,24 @@ Deno.test("ModelUsageRepository.list - filters by model, location, status, dates
   assertEquals((await f({ from: 1_001, to: 1_003 })).length, 3);
   const page = await f({ limit: 2, offset: 1 });
   assertEquals(page.map((r) => r.createdAt), [1_003, 1_002]);
+});
+
+Deno.test("ModelUsageRepository - a call made with a key that no longer exists is still recorded", async () => {
+  const { usage } = await setup();
+  await usage.record(
+    entry(
+      {
+        provider: "anthropic",
+        model: "stale-key-model",
+        location: "cloud",
+        keyId: "deleted-long-ago",
+        keyAlias: "old",
+      },
+      { kind: "other" },
+    ),
+  );
+  const rows = await usage.list({ ...NO_FILTER, model: "stale-key-model" });
+  assertEquals(rows.length, 1);
+  assertEquals(rows[0].keyId, null);
+  assertEquals(rows[0].keyAlias, "old");
 });

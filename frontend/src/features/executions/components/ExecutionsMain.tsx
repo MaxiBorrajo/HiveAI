@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { VisualBuilder } from "../visual-builder";
 import { useExecutions } from "../ExecutionsContext";
 import { useKeyedState } from "@/hooks/useKeyedState";
@@ -15,21 +15,40 @@ import { RunControlsBar } from "./RunControlsBar";
 import { EmptyStateHeader } from "./EmptyStateHeader";
 import { ExecutionChatPanel } from "./ExecutionChatPanel";
 import { NodePaletteSidebar } from "./edit/NodePaletteSidebar";
+import { exportAndDownload } from "../lib/exportFlow";
 import { EditModeBar } from "./edit/EditModeBar";
 import { StateCard } from "./edit/StateCard";
 import { ValidateGraphModal } from "./edit/ValidateGraphModal";
 import { NodeDetailsPanel } from "./node-details/NodeDetailsPanel";
+import { BulkEditPanel } from "./node-details/BulkEditPanel";
+import { applyBulkEdit, bulkEditable } from "../lib/bulkEdit";
+import { SchedulesModal } from "./schedule/SchedulesModal";
+import { useSchedules } from "../hooks/useSchedules";
+import { totalMissed } from "../lib/schedule";
+import { sameExecution, shouldOpenResult } from "../lib/scheduleActivity";
 import { ExecutionHistoryPanel } from "./history/ExecutionHistoryPanel";
 
-export function ExecutionsMain() {
+/**
+ * `active` is false while another view is on screen: the screen stays mounted
+ * so a generation or run in progress keeps updating it.
+ */
+export function ExecutionsMain({ active = true }: { active?: boolean }) {
   const {
     executions,
     activeExecutionId,
     onExecutionCreated,
+    refreshExecutions,
     newExecutionToken,
+    scheduleActivity,
   } = useExecutions();
   const [input, setInput] = useState("");
   const key = activeExecutionId || newExecutionToken;
+  // The scheduler is running this execution: it looks like a run started here.
+  const scheduledRunActive =
+    activeExecutionId != null &&
+    [...scheduleActivity.runningExecutionIds].some((id) =>
+      sameExecution(id, activeExecutionId)
+    );
 
   const selectedNodeIdState = useKeyedState<string | null>(key, null);
   const selectedEdgeIdState = useKeyedState<string | null>(key, null);
@@ -37,10 +56,18 @@ export function ExecutionsMain() {
   const selectedEdgeId = selectedEdgeIdState.value;
   const setSelectedNodeId = selectedNodeIdState.set;
   const setSelectedEdgeId = (id: string | null) => selectedEdgeIdState.set(id);
+  // Several nodes picked to edit together (edit mode only); while set, no single node is selected.
+  const multiSelectionState = useKeyedState<string[]>(key, []);
 
   const [isResultSidebarOpen, setIsResultSidebarOpen] = useState(false);
   const [isStateOpen, setIsStateOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const schedules = useSchedules(
+    activeExecutionId,
+    true,
+    scheduleActivity.finishedTick,
+  );
 
   const {
     isThinking,
@@ -62,6 +89,7 @@ export function ExecutionsMain() {
     handleStop,
     handleStopRun,
     handleRun: runExecution,
+    reloadLastResult,
   } = useExecutionWorkspace({
     key,
     activeExecutionId,
@@ -69,6 +97,7 @@ export function ExecutionsMain() {
     selectedNodeId,
     setSelectedNodeId,
     onExecutionCreated,
+    onExecutionRenamed: refreshExecutions,
   });
 
   const editor = useGraphEditor({
@@ -84,16 +113,73 @@ export function ExecutionsMain() {
   const runControls = useRunControls({
     graph,
     isThinking,
-    isRunning,
+    isRunning: isRunning || scheduledRunActive,
     isEditing,
     runExecution,
     onResult: () => setIsResultSidebarOpen(true),
+    shortcutsEnabled: active,
   });
+
+  // When the scheduler finishes a run, refresh this execution's result (it is
+  // cached while this screen is open) and, if you are looking at it, open it
+  // just as if you had pressed Run yourself.
+  const activeIdRef = useRef(activeExecutionId);
+  const reloadRef = useRef(reloadLastResult);
+  const visibleRef = useRef(active);
+  useEffect(() => {
+    activeIdRef.current = activeExecutionId;
+    reloadRef.current = reloadLastResult;
+    visibleRef.current = active;
+  });
+  const { subscribe } = scheduleActivity;
+  useEffect(
+    () =>
+      subscribe(async (run) => {
+        if (run.status !== "ok") return false;
+        const hasResult = await reloadRef.current(String(run.executionId));
+        // Hidden, nobody is looking: leave it to the caller's toast.
+        if (
+          hasResult &&
+          visibleRef.current &&
+          shouldOpenResult(run, activeIdRef.current)
+        ) {
+          setIsResultSidebarOpen(true);
+          return true;
+        }
+        return false;
+      }),
+    [subscribe],
+  );
 
   const displayGraph = isEditing ? draftGraph : graph;
   const isEmpty = !displayGraph && !isThinking;
   const selectedNode = displayGraph?.nodes.find((n) => n.id === selectedNodeId);
   const selectedEdge = displayGraph?.edges.find((e) => e.id === selectedEdgeId);
+  const multiSelection = multiSelectionState.value;
+  const bulkNodes = useMemo(
+    () => (isEditing ? (displayGraph?.nodes ?? []).filter((n) => multiSelection.includes(n.id)) : []),
+    [isEditing, displayGraph, multiSelection],
+  );
+  const isBulk = bulkNodes.length >= 2;
+  const bulkNodeIds = useMemo(() => (isBulk ? bulkNodes.map((n) => n.id) : []), [isBulk, bulkNodes]);
+  const llmNodeIds = bulkEditable(displayGraph?.nodes ?? []).map((n) => n.id);
+
+  /** One node is a plain selection; two or more open the bulk editor. */
+  const selectNodes = (ids: string[]) => {
+    multiSelectionState.set(ids.length >= 2 ? ids : []);
+    setSelectedNodeId(ids.length === 1 ? ids[0] : null);
+    setSelectedEdgeId(null);
+  };
+
+  const handleNodeSelect = (id: string | null) => {
+    multiSelectionState.set([]);
+    setSelectedNodeId(id);
+  };
+
+  const handleToggleNodeSelect = (id: string) => {
+    const current = isBulk ? bulkNodeIds : selectedNodeId ? [selectedNodeId] : [];
+    selectNodes(current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+  };
 
   const handleCreateManually = async () => {
     try {
@@ -117,11 +203,23 @@ export function ExecutionsMain() {
   const handleDeleteNodes = (ids: string[]) => {
     editor.deleteNodes(ids);
     if (selectedNodeId && ids.includes(selectedNodeId)) setSelectedNodeId(null);
+    multiSelectionState.set((prev) => prev.filter((id) => !ids.includes(id)));
   };
 
   const handleDeleteEdges = (ids: string[]) => {
     editor.deleteEdges(ids);
     if (selectedEdgeId && ids.includes(selectedEdgeId)) setSelectedEdgeId(null);
+  };
+
+  const handleFixWithAi = async () => {
+    const errors = editor.violations
+      .map((v) => `- ${v.nodeName !== "graph" ? `"${v.nodeName}": ` : ""}${v.reason}`)
+      .join("\n");
+    const prompt =
+      `The workflow failed validation with these errors. Fix them with the smallest possible change, keeping everything else as it is:\n${errors}`;
+    editor.closeSaveModal();
+    setSelectedNodeId(null);
+    await handleGenerate(prompt, { wholeGraph: true });
   };
 
   const handleGenerateClick = async () => {
@@ -138,6 +236,8 @@ export function ExecutionsMain() {
           <VisualBuilder
             graph={displayGraph}
             editable={isEditing}
+            fitToken={editor.arrangeVersion}
+            hidden={!active}
             errorNodeIds={editor.errorNodeIds}
             errorEdgeIds={editor.errorEdgeIds}
             onConnectNodes={editor.connect}
@@ -151,7 +251,10 @@ export function ExecutionsMain() {
             isGenerating={isThinking}
             planningThought={planningThought}
             selectedNodeId={selectedNodeId}
-            onNodeSelect={setSelectedNodeId}
+            onNodeSelect={handleNodeSelect}
+            selectedNodeIds={bulkNodeIds}
+            onNodeToggleSelect={handleToggleNodeSelect}
+            onNodesBoxSelect={selectNodes}
             selectedEdgeId={selectedEdgeId}
             onEdgeSelect={setSelectedEdgeId}
           />
@@ -170,6 +273,9 @@ export function ExecutionsMain() {
                 disabled={isThinking}
                 isStateOpen={isStateOpen}
                 onToggleState={() => setIsStateOpen((open) => !open)}
+                canUndoArrange={editor.canUndoArrange}
+                onArrange={editor.arrange}
+                onUndoArrange={editor.undoArrange}
                 onSave={editor.save}
                 onDiscard={handleDiscard}
               />
@@ -189,19 +295,44 @@ export function ExecutionsMain() {
               onOpenRunModal={runControls.openRunModal}
               onShowResult={() => setIsResultSidebarOpen(true)}
               onShowHistory={() => setIsHistoryOpen(true)}
-              onEdit={editor.startEditing}
+              onSchedule={() => setIsScheduleOpen(true)}
+              missedCount={schedules.data ? totalMissed(schedules.data.runs) : 0}
+              runningOnSchedule={scheduledRunActive}
+              onEdit={() => {
+                multiSelectionState.set([]);
+                editor.startEditing();
+              }}
+              onExport={
+                activeExecutionId
+                  ? () => void exportAndDownload(activeExecutionId)
+                  : undefined
+              }
             />
           )}
 
-          <NodeDetailsPanel
-            node={selectedNode}
-            edge={selectedNode ? undefined : selectedEdge}
-            stateKeys={Object.keys(displayGraph?.stateSchema ?? {})}
-            canEdit={isEditing && !isThinking}
-            onApply={editor.editNode}
-            onDeleteNode={(id) => handleDeleteNodes([id])}
-            onDeleteEdge={(id) => handleDeleteEdges([id])}
-          />
+          {isBulk ? (
+            <BulkEditPanel
+              // A different selection starts from a clean slate.
+              key={bulkNodeIds.join(",")}
+              nodes={bulkNodes}
+              canEdit={!isThinking}
+              onApply={(ids, edit) => editor.editNodeConfigs(ids, (config) => applyBulkEdit(config, edit))}
+              onDelete={handleDeleteNodes}
+              onClearSelection={() => selectNodes([])}
+            />
+          ) : (
+            <NodeDetailsPanel
+              node={selectedNode}
+              edge={selectedNode ? undefined : selectedEdge}
+              stateKeys={Object.keys(displayGraph?.stateSchema ?? {})}
+              canEdit={isEditing && !isThinking}
+              onApply={editor.editNode}
+              onDeleteNode={(id) => handleDeleteNodes([id])}
+              onDeleteEdge={(id) => handleDeleteEdges([id])}
+              onSelectAllLlm={llmNodeIds.length >= 2 ? () => selectNodes(llmNodeIds) : undefined}
+              llmCount={llmNodeIds.length}
+            />
+          )}
 
           {isEditing && isStateOpen && displayGraph && (
             <StateCard graph={displayGraph} onClose={() => setIsStateOpen(false)} />
@@ -238,6 +369,7 @@ export function ExecutionsMain() {
         violations={editor.violations}
         errors={editor.saveErrors}
         onClose={editor.closeSaveModal}
+        onFixWithAi={handleFixWithAi}
         onSelectNode={setSelectedNodeId}
       />
 
@@ -254,18 +386,27 @@ export function ExecutionsMain() {
         onRun={() => runControls.run()}
       />
 
+      <SchedulesModal
+        open={isScheduleOpen}
+        onOpenChange={setIsScheduleOpen}
+        executionId={activeExecutionId}
+        onRunNow={runControls.runClick}
+        onChanged={() => void schedules.reload()}
+        refreshKey={scheduleActivity.finishedTick}
+      />
+
       <ExecutionHistoryPanel
         executionId={activeExecutionId}
         open={isHistoryOpen}
         onOpenChange={setIsHistoryOpen}
-        refreshKey={executionResult?.createdAt}
+        refreshKey={`${executionResult?.createdAt ?? 0}:${scheduleActivity.finishedTick}`}
       />
 
       <ExecutionResultSidebar
         isOpen={isResultSidebarOpen}
         onClose={() => setIsResultSidebarOpen(false)}
         data={executionResult}
-        executionName={executions.find((e) => String(e.id) === activeExecutionId)?.name}
+        executionName={executions.find((e) => sameExecution(e.id, activeExecutionId))?.name}
         onRunAgain={runControls.runClick}
       />
     </div>

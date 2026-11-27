@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { ResponseBuilder } from "../../core/api/response.ts";
 import { readModelSettings } from "./lib/settings-store.ts";
+import { readAlwaysThinkingModels } from "./lib/always-thinking-store.ts";
 import {
   getServerEnvStatus,
   putModelSettings,
@@ -15,6 +16,10 @@ const headers = { "content-type": "application/json" };
 
 modelSettingsRouter.get("/", async () => {
   return ResponseBuilder.success(await readModelSettings(), { headers });
+});
+
+modelSettingsRouter.get("/always-thinking", async () => {
+  return ResponseBuilder.success(await readAlwaysThinkingModels(), { headers });
 });
 
 modelSettingsRouter.put("/", (c) => {

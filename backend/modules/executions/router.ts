@@ -2,7 +2,10 @@ import { parseId } from "../../core/api/errors.ts";
 import { Hono } from "hono";
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
 import { getORM } from "../../infrastructure/db/orm.ts";
-import { requireModelsConfigured } from "../../core/api/guards.ts";
+import {
+  requireEmbeddingModelAvailable,
+  requireModelsConfigured,
+} from "../../core/api/guards.ts";
 
 import { generateExecution } from "./use-cases/generate-execution/generate-execution.ts";
 import { listExecutions } from "./use-cases/list-executions.ts";
@@ -12,6 +15,12 @@ import { updateExecution } from "./use-cases/update-execution.ts";
 import { createExecution } from "./use-cases/create-execution.ts";
 import { updateExecutionGraph } from "./use-cases/update-execution-graph.ts";
 import { listRuns } from "./use-cases/list-runs.ts";
+import { getRubric, saveRubric } from "./use-cases/rubric.ts";
+import { gradeRuns } from "./use-cases/grade-runs.ts";
+import { getJudgeConversation, judgeChat } from "./use-cases/judge-chat.ts";
+import { MAX_FILE_BYTES } from "./portability/flow-format.ts";
+import { exportFlow } from "./portability/export-flow.ts";
+import { importFlow, previewImport } from "./portability/import-flow.ts";
 import { runExecution } from "./use-cases/run-execution/run-execution.ts";
 
 export const executionsRouter = new Hono<{
@@ -44,6 +53,59 @@ executionsRouter.post("/generate", async (c) => {
   );
 });
 
+async function readFlowUpload(
+  form: FormData | undefined,
+): Promise<Uint8Array | undefined> {
+  const upload = form?.get("file");
+  if (!(upload instanceof File) || upload.size > MAX_FILE_BYTES) {
+    return undefined;
+  }
+  return new Uint8Array(await upload.arrayBuffer());
+}
+
+executionsRouter.post("/import/preview", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const form = await c.req.formData().catch(() => undefined);
+  return previewImport(
+    getORM(),
+    c.get("hive"),
+    await readFlowUpload(form),
+    headers,
+  );
+});
+
+executionsRouter.post("/import", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const form = await c.req.formData().catch(() => undefined);
+  const conflict = form?.get("conflict");
+  let installBundledPlugins: string[] = [];
+  try {
+    const parsed = JSON.parse(String(form?.get("installBundledPlugins") ?? "[]"));
+    if (Array.isArray(parsed)) {
+      installBundledPlugins = parsed.filter((n: unknown) => typeof n === "string");
+    }
+  } catch {
+    // Malformed list: install nothing.
+  }
+  return importFlow(
+    getORM(),
+    c.get("hive"),
+    await readFlowUpload(form),
+    {
+      conflict: conflict === "new" || conflict === "overwrite" ? conflict : undefined,
+      installBundledPlugins,
+    },
+    headers,
+  );
+});
+
+executionsRouter.get("/:id/export", async (c) => {
+  const headers = { "content-type": "application/json" };
+  return exportFlow(getORM(), c.get("hive"), parseId(c.req.param("id")), headers, {
+    confirmSecrets: c.req.query("confirmSecrets") === "1",
+  });
+});
+
 executionsRouter.post("/", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
@@ -67,6 +129,54 @@ executionsRouter.get("/:id/runs", async (c) => {
   const headers = { "content-type": "application/json" };
   const db = getORM();
   return listRuns(db, parseId(c.req.param("id")), headers);
+});
+
+executionsRouter.get("/:id/rubric", async (c) => {
+  const headers = { "content-type": "application/json" };
+  return getRubric(getORM(), parseId(c.req.param("id")), headers);
+});
+
+executionsRouter.put("/:id/rubric", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const body = await c.req.json().catch(() => ({}));
+  return saveRubric(getORM(), parseId(c.req.param("id")), body, headers);
+});
+
+executionsRouter.post("/:id/runs/grade", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const body = await c.req.json().catch(() => ({}));
+  return gradeRuns(
+    getORM(),
+    parseId(c.req.param("id")),
+    body,
+    headers,
+    {},
+    c.req.raw.signal,
+  );
+});
+
+executionsRouter.get("/:id/judge-chat", (c) => {
+  return getJudgeConversation(
+    getORM(),
+    parseId(c.req.param("id")),
+    c.req.query("historyIds") ?? "",
+    { "content-type": "application/json" },
+  );
+});
+
+executionsRouter.post("/:id/judge-chat", async (c) => {
+  const headers = { "content-type": "application/json" };
+  const embeddingGuardError = await requireEmbeddingModelAvailable(headers);
+  if (embeddingGuardError) return embeddingGuardError;
+  const body = await c.req.json().catch(() => ({}));
+  return judgeChat(
+    getORM(),
+    c.get("hive"),
+    parseId(c.req.param("id")),
+    body,
+    c.req.raw,
+    headers,
+  );
 });
 
 executionsRouter.delete("/:id", async (c) => {

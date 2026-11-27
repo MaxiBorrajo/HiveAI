@@ -14,7 +14,11 @@ import { ApiKeyRepository } from "./infrastructure/db/repositories/api-key-repos
 import { ModelUsageRepository } from "./infrastructure/db/repositories/model-usage-repository.ts";
 import { createApp } from "./bootstrap/create-app.ts";
 import { openDesktopWindow } from "./bootstrap/desktop.ts";
+import { claimInstance } from "./bootstrap/single-instance.ts";
+import { HIDDEN_FLAG } from "./modules/app-settings/autostart.ts";
+import { startAppScheduler } from "./bootstrap/scheduler.ts";
 import { loadPlugins } from "./bootstrap/load-plugins.ts";
+import { EVAL_PROFILE_COMMAND } from "./modules/models/use-cases/eval-profile-jobs.ts";
 
 globalThis.addEventListener("unhandledrejection", (event) => {
   event.preventDefault();
@@ -24,9 +28,24 @@ globalThis.addEventListener("unhandledrejection", (event) => {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const hive = HiveMicrokernel.getInstance();
 
+// `main.ts eval-profile ...`: the app re-launches itself this way to profile
+// a model (see modules/models/use-cases/eval-profile-jobs.ts). Evals rewire
+// the microkernel and open their own temp DB, so they must never run inside
+// the server process. Cloud keys come from the app's own secret store.
+if (Deno.args[0] === EVAL_PROFILE_COMMAND) {
+  hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
+  const { runProfile } = await import("./tests/llm-eval/profileModel.ts");
+  Deno.exit(await runProfile(Deno.args.slice(1), (keyId) => getSecretStore().get(keyId)));
+}
+
 hive.getConfig().setDataDir(join(homeDir, ".hiveai", "storage"));
 hive.getConfig().setConfigDir(join(homeDir, ".hiveai", "config"));
 await hive.getConfig().load();
+const instance = await claimInstance(hive.getConfig().get("dataDir"));
+if (!instance.acquired) {
+  console.log("HiveAI is already running; brought its window forward.");
+  Deno.exit(0);
+}
 const db = await initORM(hive.getConfig().get("dataDir"));
 hive.setPluginStateRepository(new PluginStateRepository(db));
 setSecretResolver((keyId) => getSecretStore().get(keyId));
@@ -45,7 +64,11 @@ try {
 }
 
 console.log(`\nBackend is running on http://localhost:${port} `);
-openDesktopWindow(port);
+instance.publishPort(port);
+openDesktopWindow(port, {
+  startHidden: Deno.args.includes(HIDDEN_FLAG),
+  runInBackground: () => hive.getConfig().get("runInBackground"),
+});
 
 hive.configure({
   model: hive.getConfig().get("model"),
@@ -53,3 +76,10 @@ hive.configure({
 });
 
 await loadPlugins(hive, join(__dirname, "plugins"));
+
+// After the plugins: a due run that needs one would otherwise fail on start-up.
+const scheduler = await startAppScheduler(db, hive);
+Deno.addSignalListener("SIGINT", () => {
+  scheduler.stop();
+  Deno.exit(0);
+});

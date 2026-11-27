@@ -1,3 +1,8 @@
+import {
+  findMissingPlugins,
+  findStoppedExternalPlugins,
+} from "../../portability/plugin-refs.ts";
+import { beginModelActivity } from "../../../../core/ai/activity-tracker.ts";
 import { createSseResponse, type SseSend } from "../../../../core/api/sse.ts";
 import { ResponseBuilder } from "../../../../core/api/response.ts";
 import type { AppDatabase } from "../../../../infrastructure/db/orm.ts";
@@ -29,7 +34,18 @@ import { ModelUsageRepository } from "../../../../infrastructure/db/repositories
 import { AttachmentRepository } from "../../../../infrastructure/db/repositories/attachment-repository.ts";
 import { saveAttachment } from "../../../../core/attachments/attachment-storage.ts";
 import { buildAttachmentContent } from "../../../../core/attachments/build-attachment-content.ts";
-import { normalizeModelRef } from "../../../../core/ai/providers/types.ts";
+import { ensureScansRead } from "../../../../core/attachments/scan-recognition.ts";
+import { createDeliverableFiles } from "./deliverable-files.ts";
+import type { ExecutionResult } from "../../../../core/ai/visual-builder/types.ts";
+import {
+  attachmentBudget,
+  OLLAMA_DEFAULT_NUM_CTX,
+} from "../../../../core/attachments/context-budget.ts";
+import { resolveLocalNumCtx } from "../../../../core/ai/providers/local-context.ts";
+import {
+  isCloudProvider,
+  normalizeModelRef,
+} from "../../../../core/ai/providers/types.ts";
 
 type CompiledGraph = ReturnType<typeof compileGraph>;
 type FinalState = Record<string, any>;
@@ -128,7 +144,7 @@ async function saveRun(
     executionId,
     iteration,
     result: JSON.stringify({ result: finalState.result, finalState, run }),
-    version: graphId,
+    graphId,
     createdAt: Date.now(),
   });
   await repo.update(executionId, { lastResultId: history.id });
@@ -213,12 +229,21 @@ async function resolveInputAttachments(
     keyId: config.get("modelKeyId"),
   });
 
-  const { parts } = await buildAttachmentContent(
+  await ensureScansRead(config.get("dataDir"), new AttachmentRepository(db), attachmentIds);
+  const { parts, warnings } = await buildAttachmentContent(
     config.get("dataDir"),
     new AttachmentRepository(db),
     attachmentIds,
     modelRef,
+    attachmentBudget(
+      isCloudProvider(modelRef.provider)
+        ? undefined
+        : await resolveLocalNumCtx(modelRef.model) ?? OLLAMA_DEFAULT_NUM_CTX,
+    ).attachmentChars,
   );
+  if (warnings.length > 0) {
+    send("warning", { warnings: warnings.map((reason) => ({ reason })) });
+  }
 
   return parts.length > 0 ? { attachments: parts } : {};
 }
@@ -234,6 +259,7 @@ export async function runExecution(
   autoApprove = true,
   signal?: AbortSignal,
   attachmentIds: number[] = [],
+  unattended = false,
 ): Promise<Response> {
   try {
     const repo = new ExecutionRepository(db);
@@ -246,6 +272,30 @@ export async function runExecution(
     }
 
     const { abstraction, graphId, orchestrator: recordedOrchestrator } = loaded;
+    const missingPlugins = findMissingPlugins(abstraction, hive);
+    if (missingPlugins.length > 0) {
+      return ResponseBuilder.error(
+        [
+          `This execution needs plugins that are not installed: ${
+            missingPlugins.join(", ")
+          }. Install them to run it.`,
+        ],
+        { missingPlugins },
+        { headers, status: 422 },
+      );
+    }
+    const stoppedPlugins = findStoppedExternalPlugins(abstraction, hive);
+    if (stoppedPlugins.length > 0) {
+      return ResponseBuilder.error(
+        [
+          `This execution uses imported plugins that are not active: ${
+            stoppedPlugins.join(", ")
+          }. Activate them in Plugins to run it.`,
+        ],
+        { inactivePlugins: stoppedPlugins },
+        { headers, status: 422 },
+      );
+    }
     applyDefaultModel(abstraction, hive);
     const { problems, warnings } = await checkGraphModels(
       abstraction,
@@ -269,8 +319,17 @@ export async function runExecution(
     );
     const nodes = await snapshotNodes(abstraction, findKeyAlias);
 
-    return createSseResponse(headers, (send) =>
-      executionContextStorage.run({ autoApprove }, () =>
+    const localModels = new Set(
+      abstraction.nodes
+        .filter((n) => n.type === "llm" && (n.config?.provider ?? "ollama") === "ollama")
+        .map((n) => n.config?.model as string | undefined)
+        .filter((m): m is string => !!m),
+    );
+
+    return createSseResponse(headers, async (send) => {
+      const endActivity = [...localModels].map(beginModelActivity);
+      try {
+        await executionContextStorage.run({ autoApprove, unattended }, () =>
         withUsageContext(
           { kind: "execution", role: "delegate", executionId: id },
           async (usageGroupId) => {
@@ -322,6 +381,14 @@ export async function runExecution(
               historyId,
               finalState,
             );
+            await createDeliverableFiles(
+              hive.getConfig().get("dataDir"),
+              new AttachmentRepository(db),
+              id,
+              historyId,
+              finalState.result as ExecutionResult,
+              (reason) => send("warning", { warnings: [{ reason }] }),
+            );
             send("done", {
               historyId,
               iteration,
@@ -329,8 +396,11 @@ export async function runExecution(
               finalState,
             });
           },
-        ),
-      ));
+        ));
+      } finally {
+        endActivity.forEach((end) => end());
+      }
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return ResponseBuilder.error(

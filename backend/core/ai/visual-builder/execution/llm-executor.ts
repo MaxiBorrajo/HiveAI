@@ -1,3 +1,6 @@
+import { duplicateToolCallMessage, toolCallKey } from "../../strategy/shared/duplicate-tool-call.ts";
+import { resolveTokenSavings } from "../../token-savings/config.ts";
+import { stripThinkingBlocks } from "../../providers/thinking.ts";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { createChatModel } from "../../providers/create-chat-model.ts";
 import { normalizeModelRef, isCloudProvider } from "../../providers/types.ts";
@@ -14,7 +17,10 @@ import { ToolProvider, LlmConfig } from "../types.ts";
 import { mapTypeToZod } from "./state.ts";
 import { withLocalNumCtx } from "../../providers/local-context.ts";
 import { splitContent } from "../../providers/capabilities.ts";
+import { splitInlineThinking } from "../../providers/inline-thinking.ts";
 import { streamToMessage } from "./stream-model.ts";
+import type { AttachmentContentPart } from "../../../attachments/build-attachment-content.ts";
+import { toHumanContent } from "../../../attachments/to-human-content.ts";
 
 export function coerceLlmBooleanReply(text: string): boolean {
   const clean = text.trim().toLowerCase();
@@ -57,35 +63,15 @@ const STATE_KEYS_EXCLUDED_FROM_CONTEXT = new Set([
   "attachments",
 ]);
 
-interface AttachmentContentPart {
-  type: "text" | "image";
-  text?: string;
-  mimeType?: string;
-  data?: string;
-}
-
-function toLangchainImageUrl(part: AttachmentContentPart): string {
-  return `data:${part.mimeType};base64,${part.data}`;
-}
-
 function buildHumanMessage(
   text: string,
   attachmentParts: AttachmentContentPart[],
 ): HumanMessage {
   if (attachmentParts.length === 0) return new HumanMessage(text);
 
-  const content: Array<Record<string, unknown>> = [{ type: "text", text }];
-  for (const part of attachmentParts) {
-    if (part.type === "image") {
-      content.push({
-        type: "image_url",
-        image_url: { url: toLangchainImageUrl(part) },
-      });
-    } else if (part.type === "text" && part.text) {
-      content.push({ type: "text", text: part.text });
-    }
-  }
-  return new HumanMessage({ content: content as unknown as BaseMessage["content"] });
+  return new HumanMessage({
+    content: toHumanContent(text, attachmentParts) as unknown as BaseMessage["content"],
+  });
 }
 
 function resolveModelName(model: unknown): string {
@@ -203,6 +189,14 @@ export function interpolateState(
   });
 }
 
+function boundReplay(messages: unknown[], max: number): unknown[] {
+  const isSystem = (m: unknown) =>
+    !!m && typeof m === "object" && (m as { role?: unknown }).role === "system";
+  const system = messages.filter(isSystem);
+  const rest = messages.filter((m) => !isSystem(m));
+  return [...system, ...rest.slice(-Math.max(1, max - system.length))];
+}
+
 export function buildPromptMessages(
   state: Record<string, unknown>,
   config: LlmConfig,
@@ -224,7 +218,14 @@ export function buildPromptMessages(
   }
 
   if (state.messages && Array.isArray(state.messages)) {
-    for (const msg of state.messages) {
+    const replayCfg = resolveTokenSavings();
+    // Unbounded replay grows with every node; keep system messages and the
+    // most recent ones.
+    const replayed = replayCfg.boundedReplay &&
+        state.messages.length > replayCfg.replayMaxMessages
+      ? boundReplay(state.messages, replayCfg.replayMaxMessages)
+      : state.messages;
+    for (const msg of replayed) {
       if (
         msg &&
         typeof msg === "object" &&
@@ -384,6 +385,11 @@ async function runToolCall(
   }
 }
 
+function isToolError(message: ToolMessage): boolean {
+  return typeof message.content === "string" &&
+    /^Error( executing tool)?[: ]/.test(message.content);
+}
+
 async function runReactLoop(
   nodeId: string,
   baseLlm: BaseChatModel,
@@ -399,6 +405,8 @@ async function runReactLoop(
   // deno-lint-ignore no-explicit-any
   const boundLlm = (baseLlm as any).bindTools(tools);
   const conversation: BaseMessage[] = [...messages];
+  const dedup = resolveTokenSavings().dedupToolCalls;
+  const succeeded = new Set<string>();
 
   for (let iteration = 1; iteration <= MAX_REACT_ITERATIONS; iteration++) {
     console.log(
@@ -424,7 +432,19 @@ async function runReactLoop(
     );
 
     for (const toolCall of toolCalls) {
-      conversation.push(await runToolCall(nodeId, toolCall, toolProvider));
+      const key = toolCallKey(toolCall.name, toolCall.args);
+      if (dedup && succeeded.has(key)) {
+        console.warn(
+          `[LLM Agent Node ${nodeId}] Refusing to repeat identical call to '${toolCall.name}'.`,
+        );
+        conversation.push(
+          duplicateToolCallMessage({ name: toolCall.name, id: toolCall.id }),
+        );
+        continue;
+      }
+      const result = await runToolCall(nodeId, toolCall, toolProvider);
+      conversation.push(result);
+      if (!isToolError(result)) succeeded.add(key);
     }
   }
 
@@ -432,28 +452,6 @@ async function runReactLoop(
     `[LLM Agent Node ${nodeId}] Tool iteration budget (${MAX_REACT_ITERATIONS}) exhausted; forcing a final answer without tools.`,
   );
   return { conversation, final: null };
-}
-
-// Anthropic thinking blocks are signed against the exact tools list of the
-// request that produced them; the forced final call drops the tools, so the
-// signatures would be rejected. Strip them from the replayed conversation.
-function stripThinkingBlocks(conversation: BaseMessage[]): BaseMessage[] {
-  return conversation.map((msg) => {
-    if (!AIMessage.isInstance(msg) || !Array.isArray(msg.content)) return msg;
-    const content = msg.content.filter(
-      (block) =>
-        typeof block !== "object" ||
-        (block.type !== "thinking" && block.type !== "redacted_thinking"),
-    );
-    if (content.length === msg.content.length) return msg;
-    return new AIMessage({
-      content,
-      tool_calls: msg.tool_calls,
-      additional_kwargs: msg.additional_kwargs,
-      response_metadata: msg.response_metadata,
-      id: msg.id,
-    });
-  });
 }
 
 const FORCE_FINAL_ANSWER_PROMPT =
@@ -600,7 +598,10 @@ export function mapResponseToState(
     resultValue = coerceStructuredScalar(response, config.structuredOutput.type);
   } else {
     const content = (response as AIMessage).content;
-    resultValue = Array.isArray(content) ? splitContent(content).text : content;
+    // A model that thinks inline must not leave its <think> block in the output.
+    resultValue = splitInlineThinking(
+      Array.isArray(content) ? splitContent(content).text : content,
+    ).text;
   }
 
   const outKey = config.outputKey;

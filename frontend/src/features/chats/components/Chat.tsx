@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GaugeIcon } from "lucide-react";
 import { Button } from "../../../components/ui/button.tsx";
 import { ConversationUsagePanel } from "./ConversationUsagePanel.tsx";
@@ -8,7 +8,7 @@ import { ChatMessage } from "./ChatMessage.tsx";
 import { Logo } from "../../../components/Logo.tsx";
 import { InteractionDialog } from "../../interactions/components/InteractionDialog.tsx";
 import { formatDuration } from "@/lib/formatUsage";
-import type { ChatStep } from "../types.ts";
+import type { ChatStep, Message } from "../types.ts";
 import type { LiveToolCall } from "../api/sendMessage.ts";
 import type { AttachmentDto } from "../api/attachments.ts";
 import { useChatSession } from "../hooks/useChatSession.ts";
@@ -23,13 +23,14 @@ function ChatDisclaimer({ className }: { className?: string }) {
 }
 
 function statusLabel(
-  phase: "processing" | "loading_model",
+  phase: "processing" | "loading_model" | "compacting",
   text: string,
   liveSteps: ChatStep[],
   toolsRunning: boolean,
 ) {
   if (phase === "loading_model") return "Loading the model into memory...";
   if (toolsRunning) return "Waiting for the tools...";
+  if (phase === "compacting" && !text) return "Compacting the conversation context...";
   if (text) return "Reasoning...";
   const last = liveSteps[liveSteps.length - 1];
   if (last) return "Working on the next step...";
@@ -37,6 +38,7 @@ function statusLabel(
 }
 
 const MAX_ARG_LENGTH = 80;
+const STICK_THRESHOLD_PX = 80;
 
 function formatArgs(args: Record<string, unknown>): string {
   return Object.entries(args)
@@ -58,7 +60,7 @@ function ThinkingIndicator({
   liveTools,
 }: {
   text: string;
-  phase: "processing" | "loading_model";
+  phase: "processing" | "loading_model" | "compacting";
   liveSteps: ChatStep[];
   liveTools: LiveToolCall[];
 }) {
@@ -103,7 +105,11 @@ function ThinkingIndicator({
   );
 }
 
-export function Chat() {
+/**
+ * `active` is false while another view is on screen: the chat stays mounted
+ * so an answer in progress keeps streaming into it.
+ */
+export function Chat({ active = true }: { active?: boolean }) {
   const {
     messages,
     isThinking,
@@ -115,16 +121,63 @@ export function Chat() {
     conversationUsage,
     send,
     stop,
-  } = useChatSession();
+  } = useChatSession(active);
   const { activeChatId } = useChats();
   const [input, setInput] = useState("");
   const [usageOpen, setUsageOpen] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentDto[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const stickToBottomRef = useRef(true);
+
+  // Stable so the memoized messages do not re-render on every keystroke.
+  const handleReuse = useCallback((message: Message) => {
+    setInput(message.content);
+    setAttachments(
+      (message.attachments ?? []).filter((a) => a.status === "ready"),
+    );
+    textareaRef.current?.focus();
+  }, []);
+  const isEmpty = messages.length === 0;
+
+  // Follow the stream only while the user is at the bottom; scrolling up
+  // releases it, and coming back near the bottom re-engages it.
+  useEffect(() => {
+    const viewport = bottomRef.current?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!viewport) return;
+    let lastTop = viewport.scrollTop;
+    function handleScroll() {
+      const el = viewport!;
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distance < STICK_THRESHOLD_PX) stickToBottomRef.current = true;
+      else if (el.scrollTop < lastTop) stickToBottomRef.current = false;
+      lastTop = el.scrollTop;
+    }
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", handleScroll);
+  }, [isEmpty]);
 
   useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    if (isThinking) stickToBottomRef.current = true;
+  }, [isThinking]);
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking, thinkingText, liveSteps]);
+
+  // While hidden, scrolling does nothing: catch up on what streamed in meanwhile.
+  useEffect(() => {
+    if (active && stickToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [active]);
 
   async function handleSend() {
     const content = input.trim();
@@ -143,7 +196,6 @@ export function Chat() {
   }
 
   const handleStop = stop;
-  const isEmpty = messages.length === 0;
 
   return (
     <div className="flex flex-1 min-w-0 h-screen bg-background text-foreground font-sans overflow-hidden">
@@ -192,8 +244,13 @@ export function Chat() {
             />
             <ScrollArea className="flex-1 min-h-0 **:data-[slot=scroll-area-thumb]:bg-muted-foreground/30 **:data-[slot=scroll-area-thumb]:hover:bg-muted-foreground/50 **:data-[slot=scroll-area-thumb]:transition-colors">
               <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
-                {messages.map((message) => (
-                  <ChatMessage key={message.id} message={message} />
+                {messages.map((message, index) => (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    isLast={index === messages.length - 1}
+                    onReuse={handleReuse}
+                  />
                 ))}
 
                 {isThinking && (
@@ -221,6 +278,7 @@ export function Chat() {
                   chatId={activeChatId}
                   attachments={attachments}
                   onAttachmentsChange={setAttachments}
+                  textareaRef={textareaRef}
                 />
                 <ChatDisclaimer />
               </div>

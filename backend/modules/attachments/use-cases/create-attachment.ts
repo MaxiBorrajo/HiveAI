@@ -1,16 +1,32 @@
 import { AppError } from "../../../core/api/errors.ts";
 import {
   MAX_FILE_SIZE_BYTES,
-  isSupportedMimeType,
-  isPdfMimeType,
+  MAX_IMAGE_SIZE_BYTES,
+  SUPPORTED_FORMATS_LABEL,
+  isDocxMimeType,
   isExcelMimeType,
+  isImageMimeType,
+  isPdfMimeType,
+  isPptxMimeType,
+  isSupportedMimeType,
+  resolveMimeType,
 } from "../../../core/attachments/attachment-limits.ts";
 import {
+  deleteAttachmentFile,
   saveAttachment,
   saveExtractedText,
 } from "../../../core/attachments/attachment-storage.ts";
 import { extractTextFromPdf } from "../../../core/attachments/pdf-text-extractor.ts";
 import { extractTextFromExcel } from "../../../core/attachments/excel-text-extractor.ts";
+import {
+  extractTextFromDocx,
+  extractTextFromPptx,
+} from "../../../core/attachments/office-text-extractor.ts";
+import {
+  type ExtractedDocument,
+  imageDocument,
+  type ScanState,
+} from "../../../core/attachments/scanned-content.ts";
 import type { AttachmentDeps, AttachmentDto } from "../types.ts";
 import { toAttachmentDto } from "../types.ts";
 
@@ -19,24 +35,43 @@ export interface AttachmentOwner {
   executionId?: number;
 }
 
+type TextExtractor = (
+  bytes: Uint8Array,
+) => string | ExtractedDocument | Promise<string | ExtractedDocument>;
+
+function textExtractorFor(mimeType: string): TextExtractor | undefined {
+  if (isPdfMimeType(mimeType)) return extractTextFromPdf;
+  if (isExcelMimeType(mimeType)) return extractTextFromExcel;
+  if (isDocxMimeType(mimeType)) return extractTextFromDocx;
+  if (isPptxMimeType(mimeType)) return extractTextFromPptx;
+  // Read by OCR for models that cannot see images.
+  if (isImageMimeType(mimeType)) return imageDocument;
+  return undefined;
+}
+
 export async function createAttachment(
   deps: AttachmentDeps,
   file: File,
   direction: "input" | "output",
   owner: AttachmentOwner,
 ): Promise<AttachmentDto> {
-  const mimeType = file.type || "application/octet-stream";
+  const mimeType = resolveMimeType(
+    file.name,
+    file.type || "application/octet-stream",
+  );
 
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  const isImage = isImageMimeType(mimeType);
+  const maxBytes = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES;
+  if (file.size > maxBytes) {
     throw new AppError(
-      `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${MAX_FILE_SIZE_BYTES / 1024 / 1024}MB limit.`,
+      `'${file.name}' is ${(file.size / 1024 / 1024).toFixed(1)}MB, which exceeds the ${maxBytes / 1024 / 1024}MB limit for ${isImage ? "images" : "files"}.`,
       413,
     );
   }
 
   if (!isSupportedMimeType(mimeType)) {
     throw new AppError(
-      `'${file.name}' has an unsupported type (${mimeType}). Supported: plain text, Markdown, CSV, PDF, Excel, and PNG/JPEG/GIF/WebP images.`,
+      `'${file.name}' has an unsupported type (${mimeType}). Supported: ${SUPPORTED_FORMATS_LABEL}.`,
       415,
     );
   }
@@ -45,27 +80,20 @@ export async function createAttachment(
   const storagePath = await saveAttachment(deps.dataDir, bytes, file.name);
 
   let extractedTextPath: string | undefined;
-  if (isPdfMimeType(mimeType)) {
+  let scan: ScanState | null = null;
+  const extractor = textExtractorFor(mimeType);
+  if (extractor) {
     try {
-      const text = await extractTextFromPdf(bytes);
+      const extracted = await extractor(bytes);
+      const { text, sources } = typeof extracted === "string"
+        ? { text: extracted, sources: [] }
+        : extracted;
       extractedTextPath = await saveExtractedText(deps.dataDir, text);
+      if (sources.length > 0) scan = { sources, texts: {}, status: "pending" };
     } catch (error) {
+      await deleteAttachmentFile(deps.dataDir, storagePath);
       const detail = error instanceof Error ? error.message : String(error);
-      throw new AppError(
-        `Could not extract text from '${file.name}': ${detail}`,
-        422,
-      );
-    }
-  } else if (isExcelMimeType(mimeType)) {
-    try {
-      const text = extractTextFromExcel(bytes);
-      extractedTextPath = await saveExtractedText(deps.dataDir, text);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new AppError(
-        `Could not read '${file.name}': ${detail}`,
-        422,
-      );
+      throw new AppError(`Could not read '${file.name}': ${detail}`, 422);
     }
   }
 
@@ -82,7 +110,16 @@ export async function createAttachment(
     extractedTextPath: extractedTextPath ?? null,
     status: "ready",
     createdAt: Date.now(),
+    scan,
   });
+
+  // OCR indexes a chat file itself once its scanned pages are read. Runs
+  // read their files whole: only chats search them.
+  if (scan) {
+    deps.scheduleRecognition?.(row.id);
+  } else if (owner.executionId === undefined && !isImageMimeType(mimeType)) {
+    deps.scheduleIndexing?.(row.id);
+  }
 
   return toAttachmentDto(row);
 }

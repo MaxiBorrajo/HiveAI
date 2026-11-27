@@ -1,5 +1,7 @@
 import { useModels } from "@/features/models/ModelsContext";
 import { ApiKeysModal } from "@/features/api-keys/components/ApiKeysModal";
+import { useDownloads } from "@/features/models/DownloadsContext";
+import { ExploreModelsModal } from "./ExploreModelsModal";
 import { ModelMenu } from "./ModelMenu";
 import { ModelsModal } from "./ModelsModal";
 
@@ -12,6 +14,9 @@ export function ModelsManager() {
     isManageOpen,
     openManage,
     closeManage,
+    isExploreOpen,
+    openExplore,
+    closeExplore,
     isKeysOpen,
     openKeys,
     closeKeys,
@@ -19,6 +24,10 @@ export function ModelsManager() {
     deleteLocalModel,
     embeddingModelStatus,
   } = useModels();
+  const { downloads } = useDownloads();
+  const activeDownloads = downloads.filter(
+    (d) => d.status === "queued" || d.status === "downloading",
+  ).length;
 
   return (
     <>
@@ -27,6 +36,8 @@ export function ModelsManager() {
         current={current}
         onChangeModel={changeModel}
         onOpenManage={openManage}
+        onOpenExplore={openExplore}
+        activeDownloads={activeDownloads}
         onOpenKeys={openKeys}
         onOpen={refreshModels}
       />
@@ -39,6 +50,10 @@ export function ModelsManager() {
         onChangeModel={changeModel}
         onDeleteModel={deleteLocalModel}
         protectedModel={embeddingModelStatus?.model}
+      />
+      <ExploreModelsModal
+        isOpen={isExploreOpen}
+        onOpenChange={(open) => (open ? openExplore() : closeExplore())}
       />
       <ApiKeysModal
         isOpen={isKeysOpen}

@@ -2,13 +2,14 @@ import { useEffect, useRef } from "react";
 import { sendMessage, type LiveToolCall } from "../api/sendMessage.ts";
 import type { AttachmentDto } from "../api/attachments.ts";
 import { getChatMessages } from "../api/getChatMessages.ts";
-import { reportError } from "../../../lib/toastManager.ts";
+import { reportError, reportWarning } from "../../../lib/toastManager.ts";
 import { getErrorMessage } from "../../../lib/errors.ts";
 import { useKeyedState } from "../../../hooks/useKeyedState.ts";
 import type {
   ChatStep,
   ConversationUsage,
   Message,
+  ModelSuggestion,
   StoredMessage,
   ThinkingRun,
 } from "../types.ts";
@@ -23,7 +24,7 @@ import {
 interface ThinkingState {
   isThinking: boolean;
   thinkingText: string;
-  phase: "processing" | "loading_model";
+  phase: "processing" | "loading_model" | "compacting";
   liveSteps: ChatStep[];
   liveTools: LiveToolCall[];
   isBusy: boolean;
@@ -65,6 +66,7 @@ function toMessage(stored: StoredMessage): Message {
     steps: stored.metadata?.steps,
     thinkingRuns: stored.metadata?.thinkingRuns,
     wasStopped: stored.metadata?.wasStopped,
+    modelSuggestion: stored.metadata?.modelSuggestion,
     usage: stored.usage ?? null,
     attachments: stored.attachments,
   };
@@ -72,7 +74,8 @@ function toMessage(stored: StoredMessage): Message {
 
 class RejectedSendError extends Error {}
 
-export function useChatSession() {
+/** `visible` is false while another view is on screen, so nobody sees the answer land. */
+export function useChatSession(visible = true) {
   const {
     chats,
     activeChatId,
@@ -93,10 +96,12 @@ export function useChatSession() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const displayKeyRef = useRef(displayKey);
   const chatsRef = useRef(chats);
+  const visibleRef = useRef(visible);
   useEffect(() => {
     displayKeyRef.current = displayKey;
     chatsRef.current = chats;
-  }, [displayKey, chats]);
+    visibleRef.current = visible;
+  }, [displayKey, chats, visible]);
 
   const { set: setMessages } = messagesState;
   useEffect(() => {
@@ -140,6 +145,7 @@ export function useChatSession() {
     const agentMessageId = crypto.randomUUID();
     let streamStarted = false;
     let thinkingRuns: ThinkingRun[] = [];
+    let modelSuggestion: ModelSuggestion | undefined;
 
     const appendMessage = (message: Message) =>
       messagesState.set((prev) => [...prev, message], key);
@@ -186,6 +192,15 @@ export function useChatSession() {
             key = chatId;
             onChatCreated(chatId);
           },
+          onUserMessage: (storedId) => {
+            messagesState.set(
+              (prev) =>
+                prev.map((m) =>
+                  m.id === userMessageId ? { ...m, id: storedId } : m,
+                ),
+              key,
+            );
+          },
           onThinking: () => {},
           onStep: (step) => {
             thinkingState.set(
@@ -225,20 +240,28 @@ export function useChatSession() {
             }
             patchAgentMessage((m) => ({ ...m, content: m.content + token }));
           },
-          onDone: (finalContent, usedTools, steps, usage, conversationUsage) => {
+          onModelSuggestion: (suggestion) => {
+            modelSuggestion = suggestion;
+          },
+          onDone: (finalContent, usedTools, steps, usage, conversationUsage, files, storedId) => {
             patchAgentMessage((m) => ({
               ...m,
+              ...(storedId ? { id: storedId } : {}),
               content: finalContent,
               usedTools,
               steps,
               thinkingRuns,
               usage,
+              modelSuggestion,
+              ...(files.length > 0 ? { attachments: files } : {}),
             }));
             if (conversationUsage) usageState.set(conversationUsage, key);
             refreshChats();
 
             const isBeingViewed =
-              displayKeyRef.current === key && isWindowFocused();
+              visibleRef.current &&
+              displayKeyRef.current === key &&
+              isWindowFocused();
             if (!isBeingViewed) {
               markChatUnread(key);
               const chatTitle =
@@ -249,6 +272,7 @@ export function useChatSession() {
               );
             }
           },
+          onWarning: (message) => reportWarning("Attachments", message),
           onError: (errorMessage, rejected) => {
             reportError([errorMessage]);
             if (rejected) throw new RejectedSendError(errorMessage);

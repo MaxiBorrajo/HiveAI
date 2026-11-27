@@ -17,6 +17,7 @@ dist-ssr
 
 # Test coverage output
 backend/coverage_profile/
+frontend/coverage/
 
 # Editor directories and files
 .vscode/*
@@ -29,3 +30,7 @@ backend/coverage_profile/
 *.sln
 *.sw?
 
+backend/scripts/benchmark-results/
+
+# Local desktop builds
+build/

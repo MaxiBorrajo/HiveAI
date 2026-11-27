@@ -3,15 +3,7 @@ import { pathToFileURL } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import type { BeeContext, BeePlugin } from "../bee-plugin.ts";
-
-const REQUIRED_FIELDS = [
-  "name",
-  "description",
-  "schema",
-  "process",
-  "selectionTests",
-  "executionTests",
-] as const;
+import { assertPluginShape } from "../plugin-conformance.ts";
 
 const callbackBaseUrl = Deno.args[0] || "";
 
@@ -21,7 +13,11 @@ const callIdStorage = new AsyncLocalStorage<string | undefined>();
 
 async function loadPluginModule(dir: string): Promise<BeePlugin> {
   const entryPoint = resolve(dir, "index.ts");
-  const module = await import(pathToFileURL(entryPoint).href);
+  // The host process is long-lived and Deno caches modules by URL, so without
+  // a unique query a re-validated draft would keep serving its first version.
+  const module = await import(
+    `${pathToFileURL(entryPoint).href}?v=${Date.now()}`
+  );
 
   if (typeof module.default !== "function") {
     throw new TypeError(
@@ -31,13 +27,7 @@ async function loadPluginModule(dir: string): Promise<BeePlugin> {
 
   const instance: BeePlugin = new module.default();
 
-  for (const field of REQUIRED_FIELDS) {
-    if (!(field in instance)) {
-      throw new TypeError(
-        `The plugin does not fulfill the BeePlugin contract: missing '${field}'.`,
-      );
-    }
-  }
+  assertPluginShape(instance);
 
   return instance;
 }

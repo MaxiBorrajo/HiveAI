@@ -1,4 +1,5 @@
 import { HiveMicrokernel } from "../../core/microkernel/hive-microkernel.ts";
+import { selectCases } from "./caseSelection.ts";
 import { initORM } from "../../infrastructure/db/orm.ts";
 import type { LangGraphAbstraction, PluginInfo } from "../../core/ai/visual-builder/types.ts";
 import type { ModelRef } from "../../core/ai/providers/types.ts";
@@ -12,6 +13,7 @@ import { generateIncrementalGraph } from "../../core/ai/visual-builder/generatio
 import { validateGraphAgentToolMentions, validateGraphInterpolationGrammar, validateGraphPluginParameters, validateGraphVariableReferences } from "../../core/ai/visual-builder/generation/validation.ts";
 import { modelRefLabel, ensureOllamaModelAvailable } from "./model-ref.ts";
 import { captureUsage } from "./usage-capture.ts";
+import { reportCaseStart } from "./progress.ts";
 import type { EvalVerdict, EvalLang } from "./metrics.ts";
 
 const ALL_PLUGINS = [WebSearchPlugin, WebReadPlugin, FileOpsPlugin, CurrentDatetimePlugin, CounterPlugin];
@@ -133,6 +135,7 @@ export async function runGeneratorSuite(
   executorRef: ModelRef,
   runId: string,
   lang: EvalLang = "en",
+  quick = false,
 ): Promise<EvalVerdict[]> {
   if (executorRef.provider === "ollama") {
     const available = await ensureOllamaModelAvailable(executorRef.model);
@@ -160,8 +163,9 @@ export async function runGeneratorSuite(
   const label = modelRefLabel(executorRef);
 
   const verdicts: EvalVerdict[] = [];
-  for (const testCase of generatorEvalCases) {
-    console.log(`\nRunning: ${testCase.name}`);
+  const cases = selectCases(generatorEvalCases, () => "generation", quick);
+  for (const [index, testCase] of cases.entries()) {
+    reportCaseStart("generation", index, cases.length, testCase.name);
     const outcome = await runCase(executorRef, availablePlugins, testCase, lang);
     console.log(`  ${outcome.pass ? "PASS" : "FAIL"}`);
     if (!outcome.pass) {

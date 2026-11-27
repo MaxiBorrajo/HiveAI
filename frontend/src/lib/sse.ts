@@ -57,17 +57,45 @@ export async function readSseStream(
   }
 }
 
+/**
+ * With responseType "stream" axios leaves an error response's JSON body unread,
+ * so the backend's explanation (`errors`) would be lost behind "status code 422".
+ */
+async function readErrorBody(error: unknown): Promise<Error> {
+  const response = (error as { response?: { data?: unknown } })?.response;
+  const data = response?.data;
+  try {
+    let body: unknown = data;
+    if (data instanceof ReadableStream) {
+      body = JSON.parse(await new Response(data).text());
+    }
+    const errors = (body as { errors?: unknown })?.errors;
+    if (Array.isArray(errors) && errors.length > 0) {
+      return new Error(errors.filter(Boolean).join(" "));
+    }
+  } catch {
+    // fall through to the original error
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 export async function postSse(
   url: string,
   body: unknown,
   onEvent: SseEventHandler,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await apiClient.post(url, body, {
-    responseType: "stream",
-    adapter: "fetch",
-    signal,
-  });
+  let response;
+  try {
+    response = await apiClient.post(url, body, {
+      responseType: "stream",
+      adapter: "fetch",
+      signal,
+    });
+  } catch (error) {
+    if ((error as { name?: string })?.name === "CanceledError") throw error;
+    throw await readErrorBody(error);
+  }
 
   if (!response.data) {
     throw new Error("The backend responded with no body");

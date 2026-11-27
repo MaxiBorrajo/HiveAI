@@ -1,8 +1,11 @@
 import { postSse } from "../../../lib/sse";
+import { announceAlwaysThinking } from "@/features/model-settings/api/alwaysThinking";
+import type { AttachmentDto } from "./attachments";
 import type {
   ChatStep,
   ConversationUsage,
   MessageUsage,
+  ModelSuggestion,
 } from "@/features/chats/types";
 
 export interface LiveToolCall {
@@ -12,20 +15,28 @@ export interface LiveToolCall {
 
 export interface StreamHandlers {
   onChatCreated: (chatId: string) => void;
+  /** The stored id of the message just sent, to replace its temporary one. */
+  onUserMessage?: (messageId: string) => void;
   onThinking: () => void;
   onStep: (step: ChatStep) => void;
   onToolCalls: (calls: LiveToolCall[]) => void;
-  onStatus: (phase: "loading_model" | "processing") => void;
+  onStatus: (phase: "loading_model" | "processing" | "compacting") => void;
   onThinkingDelta: (content: string, node: string | undefined) => void;
   onToken: (content: string) => void;
+  /** Arrives just before `done`, only when a better model exists for the task. */
+  onModelSuggestion?: (suggestion: ModelSuggestion) => void;
   onDone: (
     content: string,
     usedTools: string[],
     steps: ChatStep[],
     usage: MessageUsage | null,
     conversationUsage: ConversationUsage | null,
+    files: AttachmentDto[],
+    /** The stored id of the answer, to replace its temporary one. */
+    messageId?: string,
   ) => void;
   onError: (message: string, rejected: boolean) => void;
+  onWarning?: (message: string) => void;
 }
 
 export async function sendMessage(
@@ -45,6 +56,8 @@ export async function sendMessage(
     (eventName, payload) => {
       if (eventName === "chat_created") {
         handlers.onChatCreated(payload.chatId);
+      } else if (eventName === "user_message") {
+        handlers.onUserMessage?.(payload.messageId);
       } else if (eventName === "thinking") {
         handlers.onThinking();
       } else if (eventName === "step") {
@@ -57,6 +70,8 @@ export async function sendMessage(
         handlers.onThinkingDelta(payload.content, payload.node);
       } else if (eventName === "token") {
         handlers.onToken(payload.content);
+      } else if (eventName === "model_suggestion") {
+        handlers.onModelSuggestion?.(payload);
       } else if (eventName === "done") {
         handlers.onDone(
           payload.content,
@@ -64,9 +79,15 @@ export async function sendMessage(
           payload.steps ?? [],
           payload.usage ?? null,
           payload.conversationUsage ?? null,
+          payload.files ?? [],
+          payload.messageId,
         );
       } else if (eventName === "error") {
         handlers.onError(payload.message, payload.rejected === true);
+      } else if (eventName === "warning") {
+        handlers.onWarning?.(payload.message);
+      } else if (eventName === "always_thinking") {
+        announceAlwaysThinking(payload.model);
       }
     },
     signal,

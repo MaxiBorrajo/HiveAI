@@ -34,6 +34,11 @@ export const executionContextStorage = new AsyncLocalStorage<{
   autoApprove: boolean;
   signal?: AbortSignal;
   interactive?: boolean;
+  /**
+   * No human is watching: questions go unanswered and, unless `autoApprove`
+   * is set, approvals are declined.
+   */
+  unattended?: boolean;
 }>();
 
 class HumanInteractionQueue {
@@ -56,6 +61,9 @@ class HumanInteractionQueue {
       );
       return { id: "auto-approved", wait: Promise.resolve(true) };
     }
+    if (execContext?.unattended) {
+      return { id: "unattended-declined", wait: Promise.resolve(false) };
+    }
 
     const id = crypto.randomUUID();
     const signal = execContext?.signal;
@@ -73,6 +81,10 @@ class HumanInteractionQueue {
     pluginName: string,
     payload: ClarifyPayload,
   ): { id: string; wait: Promise<string> } {
+    if (executionContextStorage.getStore()?.unattended) {
+      return { id: "unattended-unanswered", wait: Promise.resolve("") };
+    }
+
     const id = crypto.randomUUID();
     const signal = executionContextStorage.getStore()?.signal;
 

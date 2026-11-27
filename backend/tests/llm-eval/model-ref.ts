@@ -67,6 +67,19 @@ export function modelRefFileSafe(ref: ModelRef): string {
  * explicitly (e.g. "lfm2.5:latest"), while users typically omit the implicit
  * ":latest" tag on the CLI — so a plain name match is accepted too.
  */
+/** The digest of a pulled Ollama model — identifies the exact build, so a
+ *  re-pull that changed the weights makes its profile stale. */
+export async function ollamaModelDigest(model: string): Promise<string | undefined> {
+  try {
+    const { models } = await ollama.list();
+    return models.find(
+      (m) => m.name === model || m.model === model || m.name === `${model}:latest`,
+    )?.digest;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function ensureOllamaModelAvailable(model: string): Promise<boolean> {
   try {
     const { models } = await ollama.list();

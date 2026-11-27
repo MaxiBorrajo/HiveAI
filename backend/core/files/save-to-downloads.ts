@@ -1,7 +1,7 @@
 import { basename, extname, join } from "node:path";
 import { homeDir } from "../env.ts";
 
-function sanitizeFilename(filename: string): string {
+export function sanitizeFilename(filename: string): string {
   const base = basename(filename.replace(/\\/g, "/"))
     .replace(/[\u0000-\u001f<>:"|?*]/g, "_")
     .trim();

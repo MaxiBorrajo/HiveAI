@@ -22,7 +22,8 @@ import { ResultRenderer } from "../result/ResultRenderer";
 import { RunComparisonModal } from "./RunComparisonModal";
 import { RunUsageBreakdown } from "./RunUsageBreakdown";
 
-const MAX_COMPARED = 2;
+const MIN_COMPARED = 2;
+const MAX_COMPARED = 4;
 
 function RunInput({ input }: { input: RunSummary["input"] }) {
   const { copied, copy } = useCopyFeedback();
@@ -99,6 +100,11 @@ function RunRow({
             <span className="font-mono text-xs font-medium">
               #{run.iteration}
             </span>
+            {run.trigger === "scheduled" && (
+              <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">
+                Scheduled
+              </span>
+            )}
             <span className="text-xs text-muted-foreground">
               {new Date(run.createdAt).toLocaleString([], {
                 dateStyle: "medium",
@@ -169,6 +175,7 @@ export function ExecutionHistoryPanel({
   } | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [gradedCount, setGradedCount] = useState(0);
 
   const { mounted, shown } = useSlidePresence(open);
 
@@ -176,15 +183,12 @@ export function ExecutionHistoryPanel({
   const selectedIds =
     selected?.executionId === executionId ? selected.historyIds : [];
   const compared =
-    runs && selectedIds.length === MAX_COMPARED
-      ? (runs
+    runs && selectedIds.length >= MIN_COMPARED
+      ? runs
           .filter((run) => selectedIds.includes(run.historyId))
-          .sort((a, b) => a.iteration - b.iteration) as [
-          RunSummary,
-          RunSummary,
-        ])
+          .sort((a, b) => a.iteration - b.iteration)
       : null;
-  const canCompare = compared !== null && compared.length === MAX_COMPARED;
+  const canCompare = compared !== null && compared.length >= MIN_COMPARED;
 
   const toggleSelected = (historyId: number) => {
     if (!executionId) return;
@@ -221,7 +225,7 @@ export function ExecutionHistoryPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, executionId, refreshKey]);
+  }, [open, executionId, refreshKey, gradedCount]);
 
   return (
     <>
@@ -249,13 +253,13 @@ export function ExecutionHistoryPanel({
             </DialogPrimitive.Close>
           </div>
 
-          {runs && runs.length >= MAX_COMPARED && (
+          {runs && runs.length >= MIN_COMPARED && (
             <div className="flex items-center justify-between gap-2">
               {isSelecting ? (
                 <>
                   <p className="text-xs text-muted-foreground">
                     {selectedIds.length === 0
-                      ? "Select two runs to compare them."
+                      ? `Select ${MIN_COMPARED} to ${MAX_COMPARED} runs to compare them.`
                       : `${selectedIds.length} of ${MAX_COMPARED} selected.`}
                   </p>
                   <div className="flex items-center gap-1.5">
@@ -335,7 +339,9 @@ export function ExecutionHistoryPanel({
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
     <RunComparisonModal
+      executionId={executionId}
       runs={compared}
+      onGraded={() => setGradedCount((n) => n + 1)}
       open={isComparing && canCompare}
       onOpenChange={setIsComparing}
     />

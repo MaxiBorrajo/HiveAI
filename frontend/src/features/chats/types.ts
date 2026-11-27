@@ -28,6 +28,20 @@ export type {
 } from "@/lib/usage";
 import type { MessageUsage } from "@/lib/usage";
 import type { AttachmentDto } from "./api/attachments.ts";
+import type {
+  Recommendation,
+  Suggestion,
+  TaskType,
+} from "@/features/models/api/getModelRecommendations";
+
+/** "Looks like you are doing X, try these models", shown under an assistant message. */
+export interface ModelSuggestion {
+  task: TaskType;
+  taskLabel: string;
+  recommendations: Recommendation[];
+  /** Only when nothing the user has fits: what to install or configure */
+  suggestions: Suggestion[];
+}
 
 export interface Message {
   id: string;
@@ -41,6 +55,7 @@ export interface Message {
   thinkingRuns?: ThinkingRun[];
   usage?: MessageUsage | null;
   attachments?: AttachmentDto[];
+  modelSuggestion?: ModelSuggestion;
 }
 
 export interface StoredMessage {
@@ -54,6 +69,7 @@ export interface StoredMessage {
     steps: ChatStep[];
     thinkingRuns?: ThinkingRun[];
     wasStopped?: boolean;
+    modelSuggestion?: ModelSuggestion;
   } | null;
   usage: MessageUsage | null;
   attachments: AttachmentDto[];

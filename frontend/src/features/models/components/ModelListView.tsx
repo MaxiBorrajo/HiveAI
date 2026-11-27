@@ -3,7 +3,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Info, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Gauge, Info, Trash2 } from "lucide-react";
+import { DeleteModelDialog } from "./DeleteModelDialog";
 import type {
   CurrentModels,
   ModelInfo,
@@ -28,6 +30,9 @@ interface ModelListViewProps {
   current: CurrentModels;
   onChangeModel: (choice: ModelChoice) => void;
   onSelectModel: (model: ModelInfo) => void;
+  /** Opens the eval profile of a cloud model (local ones show it in Details).
+   *  Without it, cloud cards don't offer the button. */
+  onEvaluateModel?: (choice: ModelChoice) => void;
   onDeleteModel: (name: string) => void;
   protectedModel?: string;
 }
@@ -67,9 +72,13 @@ export function ModelListView({
   current,
   onChangeModel,
   onSelectModel,
+  onEvaluateModel,
   onDeleteModel,
   protectedModel,
 }: ModelListViewProps) {
+  const [tab, setTab] = useState("ollama");
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
   const active = currentChoice(current);
   const tree = buildProviderTree(groups, { includeUnsupported: true });
   const localEntry = tree.find((e) => e.provider === "ollama");
@@ -82,11 +91,11 @@ export function ModelListView({
   return (
     <>
       <DialogHeader className="p-6 pb-0">
-        <DialogTitle>Manage Models</DialogTitle>
+        <DialogTitle data-testid="manage-models-title">Manage Models</DialogTitle>
       </DialogHeader>
 
-      <Tabs defaultValue="ollama" className="flex-1 min-h-0 px-6 pt-2 pb-6">
-        <TabsList>
+      <Tabs value={tab} onValueChange={setTab} className="flex-1 min-h-0 px-6 pt-2 pb-6">
+        <TabsList data-testid="model-provider-tabs">
           {providers.map((p) => (
             <TabsTrigger key={p.provider} value={p.provider}>
               {p.label}
@@ -99,8 +108,8 @@ export function ModelListView({
             <div className="flex flex-col gap-3">
               {models.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No models found. Make sure Ollama is running and has models
-                  pulled.
+                  No models installed. Use the compass icon in the models menu to explore and download one, and make
+                  sure Ollama is running.
                 </p>
               )}
 
@@ -158,15 +167,7 @@ export function ModelListView({
                                 ? "Select another model before deleting this one"
                                 : "Delete from this computer"
                           }
-                          onClick={() => {
-                            if (
-                              globalThis.confirm(
-                                `Delete '${model.name}' from this computer?`,
-                              )
-                            ) {
-                              onDeleteModel(model.name);
-                            }
-                          }}
+                          onClick={() => setPendingDelete(model.name)}
                           className="h-8 gap-1 px-3"
                         >
                           <Trash2 size={12} />
@@ -215,10 +216,29 @@ export function ModelListView({
                     key={m.model}
                     className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4"
                   >
-                    <p className="font-mono text-sm font-semibold flex items-center flex-wrap gap-2">
-                      {m.model}
-                      <SupportBadge support={m.toolSupport} />
-                    </p>
+                    <div className="flex items-start gap-3">
+                      <p className="flex-1 min-w-0 font-mono text-sm font-semibold flex items-center flex-wrap gap-2">
+                        {m.model}
+                        <SupportBadge support={m.toolSupport} />
+                      </p>
+                      {onEvaluateModel && m.keys.length > 0 && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 gap-1 px-3 shrink-0"
+                          onClick={() =>
+                            onEvaluateModel({
+                              provider: entry.provider,
+                              model: m.model,
+                              keyId: m.keys[0].keyId,
+                            })
+                          }
+                        >
+                          <Gauge size={12} />
+                          <span>Eval profile</span>
+                        </Button>
+                      )}
+                    </div>
                     <SupportReason support={m.toolSupport} />
                     <div className="flex flex-wrap gap-2">
                       {m.keys.map((k) => {
@@ -248,6 +268,12 @@ export function ModelListView({
           </TabsContent>
         ))}
       </Tabs>
+
+      <DeleteModelDialog
+        name={pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={onDeleteModel}
+      />
     </>
   );
 }

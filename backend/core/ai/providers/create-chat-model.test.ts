@@ -86,3 +86,13 @@ Deno.test("validateApiKey - ok, invalid and two keys of the same provider", asyn
     "rejected",
   );
 });
+
+Deno.test("withoutUnlimitedPredictForCloud - drops num_predict -1 for Ollama Cloud models only", async () => {
+  const { withoutUnlimitedPredictForCloud } = await import("./create-chat-model.ts");
+  const opts = { temperature: 0.2, numPredict: -1 };
+  assertEquals(withoutUnlimitedPredictForCloud("beam:cloud", opts), { temperature: 0.2 });
+  assertEquals(withoutUnlimitedPredictForCloud("gpt-oss:120b-cloud", opts), { temperature: 0.2 });
+  assertEquals(withoutUnlimitedPredictForCloud("qwen3:8b", opts), opts);
+  const capped = { numPredict: 2048 };
+  assertEquals(withoutUnlimitedPredictForCloud("beam:cloud", capped), capped);
+});

@@ -200,3 +200,32 @@ Deno.test("plugin config - config is isolated per plugin (same key name, differe
 
   await Deno.remove(dir, { recursive: true });
 });
+
+Deno.test("a custom field resolver lets unregistered plugins (drafts) be configured", async () => {
+  const dir = await Deno.makeTempDir();
+  const secrets = new SecretStore(dir);
+  const repo = new FakeRepo();
+  const deps = {
+    repo: repo as unknown as PluginConfigRepository,
+    secrets,
+    hive: { getPlugin: () => undefined, restartExternalPlugin: () => Promise.resolve() } as unknown as HiveMicrokernel,
+    resolveFields: (name: string) =>
+      Promise.resolve(
+        name === "draft_pg" ? [{ key: "DATABASE_URL", label: "Database URL", secret: true }] : undefined,
+      ),
+  } satisfies PluginConfigDeps;
+
+  assertEquals((await getPluginConfig(deps, "draft_pg")).map((f) => f.key), ["DATABASE_URL"]);
+
+  await setPluginConfig(deps, "draft_pg", "DATABASE_URL", "postgres://u:p@h/db");
+  assertEquals(await secrets.get(configId("draft_pg", "DATABASE_URL")), "postgres://u:p@h/db");
+  const [field] = await getPluginConfig(deps, "draft_pg");
+  assertEquals(field.masked, "••••h/db");
+  assertEquals(field.value, null);
+
+  await assertRejects(() => setPluginConfig(deps, "draft_pg", "OTHER", "x"), AppError, "does not declare");
+  await assertRejects(() => getPluginConfig(deps, "ghost"), AppError, "not found");
+
+  await deletePluginConfig(deps, "draft_pg", "DATABASE_URL");
+  assertEquals(await secrets.get(configId("draft_pg", "DATABASE_URL")), undefined);
+});

@@ -11,6 +11,7 @@ import type {
 } from "../../../../core/ai/visual-builder/types.ts";
 import { parseMaybeJson } from "../../parse-maybe-json.ts";
 import { describeActivePlugins } from "./describe-plugins.ts";
+import { nameExecutionFromGraph } from "./name-execution.ts";
 import type { ModelRef } from "../../../../core/ai/providers/types.ts";
 import { withUsageContext } from "../../../../core/ai/usage/usage-context.ts";
 
@@ -181,6 +182,30 @@ export async function generateExecution(
         finalGraph,
         modelSelection.orchestrator,
       )).id;
+
+    // New flows start with the user's prompt as a placeholder name; once the
+    // graph exists, name it after what the flow does.
+    if (!dryRun && !executionId) {
+      const name = await withUsageContext(
+        {
+          kind: "graph_generation",
+          role: "orchestrator",
+          executionId: targetExecutionId,
+        },
+        () =>
+          nameExecutionFromGraph(
+            modelSelection.orchestrator,
+            content,
+            finalGraph,
+          ),
+      );
+      if (name) {
+        await repo.update(targetExecutionId, { name });
+        console.log(`${LOG} Named execution #${targetExecutionId}: "${name}"`);
+        send("execution_renamed", { executionId: targetExecutionId, name });
+      }
+    }
+
     send("done", {
       executionId: targetExecutionId,
       graphId,

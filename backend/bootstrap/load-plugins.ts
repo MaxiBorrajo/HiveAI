@@ -1,6 +1,23 @@
 import { join } from "node:path";
 import type { HiveMicrokernel } from "../core/microkernel/hive-microkernel.ts";
 
+// Every active tool is sent with each model request. These two rarely matter
+// (the date is already in the system prompt; counters are a demo), so new
+// installs start with them off. An explicit user choice, saved in the DB,
+// always wins, so existing installs keep their current state.
+export const OFF_BY_DEFAULT_PLUGINS: ReadonlySet<string> = new Set([
+  "counter",
+  "current_datetime",
+]);
+
+export function shouldActivateByDefault(
+  name: string,
+  persisted: boolean | undefined,
+): boolean {
+  if (persisted !== undefined) return persisted;
+  return !OFF_BY_DEFAULT_PLUGINS.has(name);
+}
+
 export async function loadPlugins(
   hive: HiveMicrokernel,
   pluginsDir: string,
@@ -16,7 +33,7 @@ export async function loadPlugins(
 
   for (const plugin of hive.getRegisteredPlugins()) {
     const persisted = await hive.getPersistedActiveState(plugin.name);
-    if (persisted !== false) {
+    if (shouldActivateByDefault(plugin.name, persisted)) {
       await hive.activate(plugin.name);
     }
   }

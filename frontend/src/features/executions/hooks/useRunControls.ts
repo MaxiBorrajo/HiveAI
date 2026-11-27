@@ -16,6 +16,8 @@ interface UseRunControlsOptions {
     attachmentIds?: number[],
   ) => Promise<void>;
   onResult: () => void;
+  /** Off while the screen is hidden, so Ctrl+Enter does not run from another view */
+  shortcutsEnabled?: boolean;
 }
 
 export function useRunControls({
@@ -25,6 +27,7 @@ export function useRunControls({
   isEditing,
   runExecution,
   onResult,
+  shortcutsEnabled = true,
 }: UseRunControlsOptions) {
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [runInputs, setRunInputs] = useState<Record<string, any>>({});
@@ -51,7 +54,7 @@ export function useRunControls({
     try {
       await runExecution(overrideInputs ?? runInputs, onResult, attachmentIds);
     } catch (e: any) {
-      reportError([`Stream error: ${getErrorMessage(e)}`]);
+      reportError([getErrorMessage(e)]);
     }
   };
 
@@ -64,6 +67,7 @@ export function useRunControls({
   };
 
   useEffect(() => {
+    if (!shortcutsEnabled) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         if (!isThinking && !isRunning && graph && !isEditing) {
@@ -75,7 +79,7 @@ export function useRunControls({
     globalThis.addEventListener("keydown", handleKeyDown);
     return () => globalThis.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isThinking, isRunning, graph, hasRequiredInputs, isEditing]);
+  }, [isThinking, isRunning, graph, hasRequiredInputs, isEditing, shortcutsEnabled]);
 
   return {
     isRunModalOpen,

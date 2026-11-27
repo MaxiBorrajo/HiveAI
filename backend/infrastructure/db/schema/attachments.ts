@@ -1,9 +1,11 @@
 import {
   integer,
+  primaryKey,
   sqliteTable,
   text,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import type { ScanState } from "../../../core/attachments/scanned-content.ts";
 import { chats } from "./chats.ts";
 import { messages } from "./messages.ts";
 import { executions, executionHistory } from "./executions.ts";
@@ -36,7 +38,26 @@ export const attachments = sqliteTable("attachments", {
     .notNull()
     .default("ready"),
   createdAt: integer("createdAt").notNull(),
+  // Null until every chunk of the file is stored in attachment_chunks.
+  indexedAt: integer("indexedAt"),
+  // Scanned pages and images inside the file, and what OCR read from them.
+  scan: text("scan", { mode: "json" }).$type<ScanState>(),
 });
+
+export const attachmentChunks = sqliteTable(
+  "attachment_chunks",
+  {
+    attachmentId: integer("attachmentId")
+      .notNull()
+      .references(() => attachments.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunkIndex").notNull(),
+    startChar: integer("startChar").notNull(),
+    text: text("text").notNull(),
+    vector: text("vector").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.attachmentId, table.chunkIndex] })],
+);
 
 export type Attachment = typeof attachments.$inferSelect;
 export type NewAttachment = typeof attachments.$inferInsert;
+export type AttachmentChunk = typeof attachmentChunks.$inferSelect;

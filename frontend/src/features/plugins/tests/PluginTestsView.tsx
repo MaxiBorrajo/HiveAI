@@ -14,6 +14,7 @@ import { saveTestResults } from "@/features/plugins/api/saveTestResults";
 import { buildPluginTestGroups } from "@/features/plugins/tests/testRunner";
 import { reportSuccess } from "@/lib/toastManager";
 import { toggleInSet } from "@/lib/toggleInSet";
+import { InteractionDialog } from "@/features/interactions/components/InteractionDialog";
 import { TestCardItem } from "./TestCardItem";
 import { TestSummaryPanel } from "./TestSummaryPanel";
 import { usePluginTestRunner } from "./usePluginTestRunner";
@@ -96,6 +97,7 @@ export function PluginTestsView({
           className="shrink-0 -ml-2"
           title="Back"
           aria-label="Back"
+          data-testid="tests-back-button"
         >
           <ArrowLeft size={16} />
         </Button>
@@ -114,6 +116,7 @@ export function PluginTestsView({
                 onChange={toggleAll}
                 disabled={isRunning || allTests.length === 0}
                 className="size-4 accent-primary"
+                data-testid="tests-select-all"
               />
               <span className="text-xs font-medium">Select all</span>
             </label>
@@ -147,6 +150,7 @@ export function PluginTestsView({
             disabled={selectedIds.size === 0}
             variant={isRunning ? "destructive" : "default"}
             className="h-8 text-xs font-semibold shadow-sm"
+            data-testid="tests-run-button"
           >
             {isRunning ? (
               <Square size={14} className="mr-1.5 fill-current" />
@@ -165,7 +169,10 @@ export function PluginTestsView({
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <span className="tabular-nums text-muted-foreground whitespace-nowrap">
+            <span
+              className="tabular-nums text-muted-foreground whitespace-nowrap"
+              data-testid="tests-progress"
+            >
               {progressPercent}% ({completedCount}/{testsToRunCount})
             </span>
           </div>
@@ -174,6 +181,10 @@ export function PluginTestsView({
 
       <ScrollArea className="flex-1 p-6 pt-4 bg-muted/10">
         <div className="flex flex-col gap-4">
+          {/* Execution tests run the real plugin, which may ask for approval;
+              without this the request would wait forever with nothing to answer it. */}
+          {isRunning && <InteractionDialog />}
+
           {summary && (
             <TestSummaryPanel
               summary={summary}
@@ -195,7 +206,10 @@ export function PluginTestsView({
                 <AccordionTrigger className="px-4 py-3 hover:no-underline bg-muted/30">
                   <div className="flex items-center gap-2 font-semibold">
                     <span>{group.pluginName}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
+                    <span
+                      className="text-xs font-normal text-muted-foreground"
+                      data-testid={`tests-group-count-${group.pluginName}`}
+                    >
                       ({group.tests.length} tests)
                     </span>
                   </div>

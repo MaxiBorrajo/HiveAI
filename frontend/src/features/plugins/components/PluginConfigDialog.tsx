@@ -9,15 +9,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  deletePluginConfigValue,
-  getPluginConfig,
-  setPluginConfigValue,
+  installedPluginConfigApi,
+  type PluginConfigApi,
 } from "../api/pluginConfig";
 import type { PluginConfigFieldValue } from "../types";
 
 interface PluginConfigDialogProps {
   pluginName: string | null;
   onOpenChange: (open: boolean) => void;
+  /** Defaults to the installed plugins' routes; drafts pass their own. */
+  api?: PluginConfigApi;
 }
 
 function errorMessage(error: unknown): string {
@@ -30,10 +31,12 @@ function FieldRow({
   pluginName,
   field,
   onSaved,
+  api,
 }: {
   pluginName: string;
   field: PluginConfigFieldValue;
   onSaved: () => void;
+  api: PluginConfigApi;
 }) {
   const [value, setValue] = useState(field.value ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +48,7 @@ function FieldRow({
     setError(null);
     setSaving(true);
     try {
-      await setPluginConfigValue(pluginName, field.key, value);
+      await api.set(pluginName, field.key, value);
       setValue("");
       onSaved();
     } catch (e) {
@@ -59,7 +62,7 @@ function FieldRow({
     setError(null);
     setSaving(true);
     try {
-      await deletePluginConfigValue(pluginName, field.key);
+      await api.remove(pluginName, field.key);
       setValue("");
       onSaved();
     } catch (e) {
@@ -112,6 +115,7 @@ function FieldRow({
 export function PluginConfigDialog({
   pluginName,
   onOpenChange,
+  api = installedPluginConfigApi,
 }: PluginConfigDialogProps) {
   const [fields, setFields] = useState<PluginConfigFieldValue[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -120,13 +124,13 @@ export function PluginConfigDialog({
   const load = useCallback(async () => {
     if (!pluginName) return;
     try {
-      const { data } = await getPluginConfig(pluginName);
+      const { data } = await api.get(pluginName);
       setFields(data ?? []);
       setLoaded(true);
     } catch (e) {
       setError(errorMessage(e));
     }
-  }, [pluginName]);
+  }, [pluginName, api]);
 
   useEffect(() => {
     if (pluginName) {
@@ -162,6 +166,7 @@ export function PluginConfigDialog({
               pluginName={pluginName!}
               field={field}
               onSaved={load}
+              api={api}
             />
           ))}
         </div>

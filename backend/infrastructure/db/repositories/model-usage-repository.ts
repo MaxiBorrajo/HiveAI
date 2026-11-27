@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
+import { knownKeyId } from "./known-key.ts";
 import {
   chatUsage,
   executionUsage,
@@ -93,9 +94,12 @@ export class ModelUsageRepository implements UsageRecorder {
   constructor(private db: AppDatabase) {}
 
   async record({ usage, link }: UsageEntry): Promise<void> {
+    // A call made with a key that has since been deleted is still worth
+    // recording; its alias is kept and the reference is left empty.
+    const keyId = await knownKeyId(this.db, usage.keyId);
     const [row] = await this.db
       .insert(modelUsage)
-      .values(usage)
+      .values({ ...usage, keyId })
       .returning({ id: modelUsage.id });
     const usageId = row.id;
 

@@ -28,3 +28,7 @@ export async function withLocalNumCtx(
   const numCtx = await resolveLocalNumCtx(model);
   return numCtx ? { ...options, numCtx } : options;
 }
+
+export function invalidateLocalNumCtx(model: string): void {
+  cache.delete(model);
+}

@@ -7,7 +7,7 @@ import type {
   BeePlugin,
   SelectionTestCase,
   ExecutionTestCase,
-} from "../file-ops/bee-plugin.ts";
+} from "./bee-plugin.ts";
 
 const rowSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
 
@@ -80,6 +80,14 @@ export default class ExcelWritePlugin implements BeePlugin<ExcelWriteSchema> {
       query: "export this table",
       kind: "ambiguous",
     },
+    {
+      query: "save these results so I can open them later",
+      kind: "ambiguous",
+    },
+    {
+      query: "put these numbers in a spreadsheet-friendly format",
+      kind: "ambiguous",
+    },
   ];
 
   executionTests: ExecutionTestCase<ExcelWriteSchema>[] = [
@@ -127,6 +135,64 @@ export default class ExcelWritePlugin implements BeePlugin<ExcelWriteSchema> {
       params: {
         path: `${Deno.cwd()}/.test-excel-write-error.xlsx`,
         sheets: undefined as unknown as z.infer<ExcelWriteSchema>["sheets"],
+      },
+      expect: (output: string) => output.toLowerCase().includes("invalid"),
+    },
+    {
+      description: "Write text, numbers, booleans and empty cells",
+      kind: "happy",
+      params: {
+        path: `${Deno.cwd()}/.test-excel-write-happy3.xlsx`,
+        sheets: [
+          {
+            name: "Stock",
+            rows: [{ product: "Pen", price: 1.5, inStock: true, note: null }],
+          },
+        ],
+      },
+      expect: (output: string) => output.includes("1 total row"),
+    },
+    {
+      description: "A path without extension gets .xlsx added",
+      kind: "edge",
+      params: {
+        path: `${Deno.cwd()}/.test-excel-write-edge-noext`,
+        sheets: [{ name: "Data", rows: [{ a: 1 }] }],
+      },
+      expect: (output: string) => output.includes(".test-excel-write-edge-noext.xlsx"),
+    },
+    {
+      description: "Sheets with the same name are both kept",
+      kind: "edge",
+      params: {
+        path: `${Deno.cwd()}/.test-excel-write-edge-dup.xlsx`,
+        sheets: [
+          { name: "Data", rows: [{ a: 1 }] },
+          { name: "Data", rows: [{ a: 2 }] },
+        ],
+      },
+      expect: (output: string) => output.includes("2 sheet"),
+    },
+    {
+      description: "An empty list of sheets fails clearly",
+      kind: "error",
+      params: {
+        path: `${Deno.cwd()}/.test-excel-write-error-nosheets.xlsx`,
+        sheets: [],
+      },
+      expect: (output: string) => output.toLowerCase().includes("invalid"),
+    },
+    {
+      description: "A nested object as a cell value fails clearly",
+      kind: "error",
+      params: {
+        path: `${Deno.cwd()}/.test-excel-write-error-nested.xlsx`,
+        sheets: [
+          {
+            name: "Data",
+            rows: [{ a: { nested: 1 } }] as unknown as z.infer<ExcelWriteSchema>["sheets"][number]["rows"],
+          },
+        ],
       },
       expect: (output: string) => output.toLowerCase().includes("invalid"),
     },

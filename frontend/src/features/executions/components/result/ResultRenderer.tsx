@@ -6,13 +6,19 @@ import type { ExecutionResult } from "@/features/executions/types";
 const HTML_FENCE = /^\s*```(?:html)?\s*\n([\s\S]*?)\n```\s*$/i;
 const HTML_DOC = /^\s*(?:<!doctype\s+html|<html[\s>])/i;
 
-function extractHtmlDocument(result: ExecutionResult): string | null {
+const EMBEDDED_HTML_FENCE =
+  /```(?:html)?[^\S\n]*\n(\s*(?:<!doctype\s+html|<html[\s>])[\s\S]*?)(?:\n```|$)/i;
+
+export function extractHtmlDocument(result: ExecutionResult): string | null {
   const text = stringifyContent(result.content);
   const unfenced = HTML_FENCE.exec(text)?.[1] ?? text;
   const isHtmlFile = result.files?.some((f) => /\.html?$/i.test(f.name));
-  return HTML_DOC.test(unfenced) || (isHtmlFile && unfenced.trimStart().startsWith("<"))
-    ? unfenced
-    : null;
+  if (HTML_DOC.test(unfenced) || (isHtmlFile && unfenced.trimStart().startsWith("<"))) {
+    return unfenced;
+  }
+  // A model often wraps the document in prose ("Saved to ..."), so look for
+  // a fenced HTML document inside the text.
+  return EMBEDDED_HTML_FENCE.exec(text)?.[1] ?? null;
 }
 
 function HtmlResult({ html }: { html: string }) {

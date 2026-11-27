@@ -239,7 +239,7 @@ function headline(usage: RunUsage): HeadlineSide {
   };
 }
 
-function sameInput(
+export function sameInput(
   a: Record<string, unknown>,
   b: Record<string, unknown>,
 ): boolean {
@@ -258,7 +258,8 @@ export function compareRuns(a: RunSummary, b: RunSummary): RunComparison {
         "One of the runs has no consumption data (it predates usage tracking), so only its result can be compared.",
     });
   }
-  if (a.graphId !== b.graphId) {
+  // A run whose graph was deleted has an unknown graph: nothing to compare.
+  if (a.graphId !== null && b.graphId !== null && a.graphId !== b.graphId) {
     warnings.push({
       code: "differentGraph",
       message:

@@ -9,11 +9,15 @@ import { setPluginConfig } from "./use-cases/set-plugin-config.ts";
 import { deletePluginConfig } from "./use-cases/delete-plugin-config.ts";
 import type { PluginConfigDeps } from "./types.ts";
 
-function depsFor(hive: HiveMicrokernel): PluginConfigDeps {
+function depsFor(
+  hive: HiveMicrokernel,
+  resolveFields?: PluginConfigDeps["resolveFields"],
+): PluginConfigDeps {
   return {
     repo: new PluginConfigRepository(getORM()),
     secrets: getSecretStore(),
     hive,
+    resolveFields,
   };
 }
 
@@ -31,9 +35,10 @@ export async function handleGetPluginConfig(
   hive: HiveMicrokernel,
   name: string,
   headers: Record<string, string>,
+  resolveFields?: PluginConfigDeps["resolveFields"],
 ): Promise<Response> {
   try {
-    const fields = await getPluginConfig(depsFor(hive), name);
+    const fields = await getPluginConfig(depsFor(hive, resolveFields), name);
     return ResponseBuilder.success(fields, { headers });
   } catch (error) {
     return handleAppError(error, headers);
@@ -46,10 +51,11 @@ export async function handleSetPluginConfig(
   key: string,
   request: Request,
   headers: Record<string, string>,
+  resolveFields?: PluginConfigDeps["resolveFields"],
 ): Promise<Response> {
   try {
     const body = await request.json().catch(() => ({}));
-    await setPluginConfig(depsFor(hive), name, key, body.value);
+    await setPluginConfig(depsFor(hive, resolveFields), name, key, body.value);
     return ResponseBuilder.success(undefined, { headers });
   } catch (error) {
     return handleAppError(error, headers);
@@ -61,9 +67,10 @@ export async function handleDeletePluginConfig(
   name: string,
   key: string,
   headers: Record<string, string>,
+  resolveFields?: PluginConfigDeps["resolveFields"],
 ): Promise<Response> {
   try {
-    await deletePluginConfig(depsFor(hive), name, key);
+    await deletePluginConfig(depsFor(hive, resolveFields), name, key);
     return ResponseBuilder.success(undefined, { headers });
   } catch (error) {
     return handleAppError(error, headers);

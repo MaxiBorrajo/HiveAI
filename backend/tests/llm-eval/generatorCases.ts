@@ -121,4 +121,28 @@ export const generatorEvalCases: GeneratorEvalCase[] = [
     expectedNodeTypes: ["llm", "plugin"],
     minIntermediateNodes: 2,
   },
+  {
+    name: "no tools at all: a pure writing task still needs an llm node",
+    prompt: "Write a short poem about autumn.",
+    promptEs: "Escribí un poema corto sobre el otoño.",
+    activePlugins: [],
+    expectedNodeTypes: ["llm"],
+    minIntermediateNodes: 1,
+  },
+  {
+    name: "read then summarize: a local file's content needs an llm to condense it",
+    prompt: "Read the file notes.txt and summarize it in three bullet points.",
+    promptEs: "Leé el archivo notes.txt y resumilo en tres viñetas.",
+    activePlugins: ["file_read"],
+    expectedNodeTypes: ["llm"],
+    minIntermediateNodes: 1,
+  },
+  {
+    name: "transform then save: an llm writes the text, a plugin stores it",
+    prompt: "Translate the text I give you into English and save it to a file called translation.txt.",
+    promptEs: "Traducí al inglés el texto que te paso y guardalo en un archivo llamado translation.txt.",
+    activePlugins: ["file_ops"],
+    expectedNodeTypes: ["llm", "plugin"],
+    minIntermediateNodes: 2,
+  },
 ];

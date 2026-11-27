@@ -78,16 +78,24 @@ export function InteractionDialog() {
   if (!pending || payload?.kind !== "approval") return null;
 
   return (
-    <div className="w-full rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-sm">
-      <p className="text-sm font-medium">{payload.title}</p>
-      <p className="mt-1 max-h-[30vh] overflow-y-auto whitespace-pre-line wrap-break-word text-sm text-muted-foreground">
+    <div
+      className="w-full rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-sm"
+      data-testid="interaction-approval"
+    >
+      <p className="text-sm font-medium" data-testid="interaction-title">
+        {payload.title}
+      </p>
+      <p
+        className="mt-1 max-h-[30vh] overflow-y-auto whitespace-pre-line wrap-break-word text-sm text-muted-foreground"
+        data-testid="interaction-description"
+      >
         {payload.description}
       </p>
 
       {payload.details && (
         <div className="mt-2 min-w-0 space-y-2">
           {Object.entries(payload.details).map(([key, value]) => (
-            <div key={key} className="min-w-0">
+            <div key={key} className="min-w-0" data-testid={`interaction-detail-${key}`}>
               {key === "command" ? (
                 <pre className="max-h-40 min-w-0 overflow-y-auto whitespace-pre-wrap wrap-break-word rounded-md bg-muted p-3 font-mono text-xs">
                   {value}
@@ -108,6 +116,7 @@ export function InteractionDialog() {
           size="sm"
           disabled={isResolving}
           onClick={() => handleDecision("reject")}
+          data-testid="interaction-reject"
         >
           Rechazar
         </Button>
@@ -115,6 +124,7 @@ export function InteractionDialog() {
           size="sm"
           disabled={isResolving}
           onClick={() => handleDecision("approve")}
+          data-testid="interaction-approve"
         >
           Aprobar
         </Button>

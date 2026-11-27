@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { BeeContext, BeePlugin } from "./bee-plugin.ts";
+import { assertPluginShape } from "./plugin-conformance.ts";
 import { HiveConfig, type HiveSettings } from "./hive-settings.ts";
 import { humanInteractionQueue } from "./human-interaction.ts";
 import { reportPluginStep } from "./step-capture.ts";
@@ -21,15 +22,6 @@ import { getSecretStore } from "../secrets/index.ts";
 
 export type { TestSuiteQualityReport };
 
-const REQUIRED_FIELDS = [
-  "name",
-  "description",
-  "schema",
-  "process",
-  "selectionTests",
-  "executionTests",
-] as const;
-
 export class HiveMicrokernel {
   private static instance: HiveMicrokernel;
   private plugins: Map<string, BeePlugin> = new Map();
@@ -44,6 +36,7 @@ export class HiveMicrokernel {
     ollamaKvCacheType: "",
     ollamaFlashAttention: "",
     ollamaServerPromptDismissed: false,
+    runInBackground: true,
     callbackBaseUrl: "",
   });
 
@@ -61,6 +54,17 @@ export class HiveMicrokernel {
 
   setPluginStateRepository(repository: PluginStateRepository): void {
     this.pluginStateRepository = repository;
+  }
+
+  /**
+   * Re-applies the persisted active flag of one plugin, e.g. after it was
+   * detached for editing and published again. No-op if nothing was persisted.
+   */
+  async restorePersistedActiveState(name: string): Promise<void> {
+    if (!this.plugins.has(name)) return;
+    const persisted = await this.getPersistedActiveState(name);
+    if (persisted === true) await this.activate(name);
+    else if (persisted === false) await this.deactivate(name);
   }
 
   async restorePersistedActiveStates(): Promise<void> {
@@ -167,7 +171,8 @@ export class HiveMicrokernel {
       return;
     }
     
-    if (pluginBeeContent.trim() !== coreBeeContent.trim()) {
+    const normalizeEol = (text: string) => text.replace(/\r\n/g, "\n").trim();
+    if (normalizeEol(pluginBeeContent) !== normalizeEol(coreBeeContent)) {
       throw new Error(
         `Plugin at '${beePluginPath}' is outdated: its bee-plugin.ts does not match the microkernel's version.`,
       );
@@ -322,13 +327,7 @@ export class HiveMicrokernel {
 
     const pluginInstance: BeePlugin = new module.default();
 
-    for (const field of REQUIRED_FIELDS) {
-      if (!(field in pluginInstance)) {
-        throw new TypeError(
-          `The plugin does not fulfill the BeePlugin contract: missing '${field}'.`,
-        );
-      }
-    }
+    assertPluginShape(pluginInstance);
 
     await this.register(pluginInstance);
     return true;
@@ -336,6 +335,15 @@ export class HiveMicrokernel {
 
   async importExternalPlugin(sourceDir: string): Promise<BeePlugin> {
     return this.externalPlugins.importFrom(sourceDir);
+  }
+
+  /**
+   * Launches a throwaway subprocess for the plugin at `sourceDir` without
+   * touching the external plugin registry, so callers can inspect/execute
+   * it (e.g. run its tests) before deciding to install it for real.
+   */
+  async probeExternalPlugin(sourceDir: string) {
+    return this.externalPlugins.probeLaunch(sourceDir);
   }
 
   async loadPersistedExternalPlugins(): Promise<void> {

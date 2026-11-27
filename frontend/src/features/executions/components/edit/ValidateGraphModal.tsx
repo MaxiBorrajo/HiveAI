@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ interface ValidateGraphModalProps {
   violations: GraphViolation[];
   errors: string[];
   onClose: () => void;
+  onFixWithAi: () => void;
   onSelectNode: (nodeId: string) => void;
 }
 
@@ -23,6 +24,7 @@ export function ValidateGraphModal({
   violations,
   errors,
   onClose,
+  onFixWithAi,
   onSelectNode,
 }: ValidateGraphModalProps) {
   const groups = new Map<string, { name: string; items: GraphViolation[] }>();
@@ -84,7 +86,13 @@ export function ValidateGraphModal({
                   ))}
             </div>
             <DialogFooter>
-              <Button onClick={onClose}>Back to editing</Button>
+              <Button variant="outline" onClick={onClose}>Back to editing</Button>
+              {violations.length > 0 && (
+                <Button onClick={onFixWithAi}>
+                  <Sparkles className="size-3.5" />
+                  Fix with AI
+                </Button>
+              )}
             </DialogFooter>
           </>
         )}

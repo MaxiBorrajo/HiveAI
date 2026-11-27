@@ -30,6 +30,7 @@ export function PluginsMenu({
       <DropdownMenuTrigger
         className="flex items-center justify-center rounded-md size-8 hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
         title="Plugins"
+        data-testid="plugins-menu-trigger"
       >
         <Blocks className="size-5" />
       </DropdownMenuTrigger>
@@ -38,7 +39,7 @@ export function PluginsMenu({
         side="bottom"
         sideOffset={8}
         collisionAvoidance={undefined}
-        className="w-56"
+        className="w-72"
       >
         <DropdownMenuGroup>
           <div className="flex flex-1 items-center justify-between  gap-1.5 px-1.5 py-1">
@@ -65,11 +66,13 @@ export function PluginsMenu({
           ) : (
             plugins.map((plugin) => (
               <DropdownMenuItem key={plugin.id} closeOnClick={false}>
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <span className="text-sm font-mono truncate">
+                {/* min-w-0 lets a long name shrink and truncate instead of covering the switch. */}
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm font-mono" title={plugin.name}>
                     {plugin.name}
                   </span>
                   <div
+                    className="shrink-0"
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -86,7 +89,7 @@ export function PluginsMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={onOpenManage}>
+        <DropdownMenuItem onClick={onOpenManage} data-testid="plugins-menu-manage">
           <Settings className="mr-2 size-4" />
           <span>Manage Plugins...</span>
         </DropdownMenuItem>

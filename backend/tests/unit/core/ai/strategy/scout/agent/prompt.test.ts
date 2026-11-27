@@ -44,3 +44,20 @@ Deno.test("AGENT_EMPTY_RESPONSE_PROMPT asks the model to answer instead of retur
     "empty",
   );
 });
+
+Deno.test("buildAgentSystemPrompt cloud variant is much shorter and never claims to run locally", () => {
+  const local = buildAgentSystemPrompt();
+  const cloud = buildAgentSystemPrompt({ isCloud: true });
+
+  assert(cloud.length < local.length * 0.6);
+  assert(!/local model|never leaves|Nothing in this conversation leaves/i.test(cloud));
+  assertStringIncludes(cloud, new Date().toISOString().split("T")[0]);
+  assertStringIncludes(cloud, "ask_user");
+});
+
+Deno.test("buildAgentSystemPrompt cloud variant keeps date and OS after the stable instructions", () => {
+  const cloud = buildAgentSystemPrompt({ isCloud: true });
+
+  assert(cloud.indexOf("CURRENT DATE") > cloud.indexOf("Answer:"));
+  assert(cloud.indexOf("OPERATING SYSTEM") > cloud.indexOf("CURRENT DATE"));
+});

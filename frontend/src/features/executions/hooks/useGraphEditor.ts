@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Connection } from "@xyflow/react";
+import { arrangeGraph, hasOverlaps } from "../visual-builder/graphMapper";
+import type { LayoutDirection } from "../visual-builder/layoutDirection";
 import { saveExecutionGraph } from "../api/saveExecutionGraph";
 import {
   addNode,
@@ -10,6 +12,7 @@ import {
   removeEdges,
   removeNodes,
   updateNode,
+  updateNodeConfigs,
 } from "../lib/graphOps";
 import type {
   GraphNode,
@@ -58,6 +61,9 @@ export function useGraphEditor({
     [violations],
   );
 
+  const [previousLayout, setPreviousLayout] = useState<Map<string, GraphNode["uiPosition"]> | null>(null);
+  const [arrangeVersion, setArrangeVersion] = useState(0);
+
   const clearViolations = () => {
     setViolations([]);
     setSaveErrors([]);
@@ -70,14 +76,16 @@ export function useGraphEditor({
 
   const startEditing = () => {
     if (!graph) return;
-    setDraftGraph(graph);
+    setDraftGraph(graph.nodes.length > 0 && hasOverlaps(graph) ? arrangeGraph(graph) : graph);
     clearViolations();
+    setPreviousLayout(null);
     setIsEditing(true);
   };
 
   const discard = () => {
     setDraftGraph(graph);
     clearViolations();
+    setPreviousLayout(null);
     setIsEditing(false);
   };
 
@@ -101,8 +109,35 @@ export function useGraphEditor({
   const editNode = (id: string, patch: Partial<Pick<GraphNode, "name" | "config">>) =>
     mutate((g) => updateNode(g, id, patch));
 
+  const editNodeConfigs = (ids: string[], edit: (config: Record<string, any>) => Record<string, any>) =>
+    mutate((g) => updateNodeConfigs(g, ids, edit));
+
   const deleteNodes = (ids: string[]) => mutate((g) => removeNodes(g, ids));
   const deleteEdges = (ids: string[]) => mutate((g) => removeEdges(g, ids));
+
+  const arrange = (direction: LayoutDirection) => {
+    if (!draftGraph || draftGraph.nodes.length === 0) return;
+    // Keep the layout from before the first arrange, so Undo goes back to it even after several arranges.
+    setPreviousLayout((prev) => prev ?? new Map(draftGraph.nodes.map((n) => [n.id, n.uiPosition])));
+    setArrangeVersion((v) => v + 1);
+    mutate((g) => arrangeGraph(g, direction));
+  };
+
+  const undoArrange = () => {
+    if (!previousLayout) return;
+    const saved = previousLayout;
+    setPreviousLayout(null);
+    setArrangeVersion((v) => v + 1);
+    mutate((g) => ({
+      ...g,
+      nodes: g.nodes.map((n) => {
+        if (!saved.has(n.id)) return n;
+        const { uiPosition: _current, ...rest } = n;
+        const uiPosition = saved.get(n.id);
+        return uiPosition ? { ...rest, uiPosition } : rest;
+      }),
+    }));
+  };
 
   const save = async (): Promise<boolean> => {
     if (!executionId || !draftGraph) return false;
@@ -119,6 +154,7 @@ export function useGraphEditor({
       setGraph(result.graph);
       setDraftGraph(result.graph);
       setIsEditing(false);
+      setPreviousLayout(null);
       setSaveStatus("idle");
       return true;
     } catch (error) {
@@ -144,8 +180,13 @@ export function useGraphEditor({
     reconnect,
     moveNode,
     editNode,
+    editNodeConfigs,
     deleteNodes,
     deleteEdges,
+    arrange,
+    undoArrange,
+    canUndoArrange: previousLayout !== null,
+    arrangeVersion,
     save,
     closeSaveModal,
   };

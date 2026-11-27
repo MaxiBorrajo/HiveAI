@@ -140,7 +140,7 @@ type RunShellSchema = typeof schema;
 export default class RunShellPlugin implements BeePlugin<RunShellSchema> {
   name = "run_shell";
   description =
-    "Executes raw shell commands via bash, with full pipeline and redirection support. This is the most capable tool in the hive: anything the file/search plugins can do individually (finding a file, reading its contents, checking if something exists, editing or writing to it), bash can do too via standard commands (find, grep, cat, sed, awk, ls, etc.) — and it can chain several of those steps into a single command with pipes, so a multi-step investigation (find a file, then grep inside it, then show matching lines) can be one call instead of several separate tool calls. It's also the only way to reach anything a native plugin doesn't cover at all: any external CLI tool (git, npm, python, docker, etc.), system administration tasks, checking processes, installing packages, version control status/diffs. A human must approve the command before it runs. Prefer a native plugin when it directly and simply covers exactly what's asked (it's more predictable and needs no approval); reach for bash instead when the task needs multiple chained steps, an external CLI, or something no native plugin produces.";
+    "Executes shell commands via bash (pipes and redirection supported). Use it for chained multi-step work in one call (find, grep, cat, sed, ls...), external CLIs (git, npm, python, docker...), processes, package installs and version-control status/diffs, or anything no native plugin covers. A human must approve the command before it runs. Prefer a narrower native plugin when it covers exactly what is asked.";
 
   schema = schema;
   returnDescription =

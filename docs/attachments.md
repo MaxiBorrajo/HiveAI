@@ -1,0 +1,121 @@
+# Attachments
+
+Files attached to a chat message or to an execution run go through the same
+pipeline: they are validated and converted on upload
+(`backend/modules/attachments/use-cases/create-attachment.ts`) and turned into
+model content when sent (`backend/core/attachments/build-attachment-content.ts`).
+
+## Supported formats
+
+| Format | Extensions | Reaches the model as |
+| --- | --- | --- |
+| Plain text | `.txt` | Text |
+| Markdown | `.md`, `.markdown` | Text |
+| CSV | `.csv` | Text |
+| JSON | `.json` | Text |
+| PDF with a text layer | `.pdf` | Extracted text |
+| Word | `.docx` | Extracted text; table cells separated by `\|` |
+| Excel | `.xlsx`, `.xls` | One CSV block per sheet |
+| PowerPoint | `.pptx` | Extracted text, one block per slide |
+| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` | Image, only on models with vision |
+
+The legacy binary formats `.doc` and `.ppt` are not supported.
+
+## Rules
+
+- The extension decides the format. The type reported by the browser is only
+  used when the extension is unknown, because it varies by operating system.
+- Files are limited to 50 MB, and images to 5 MB because providers reject
+  larger ones. The UI and the backend both check it.
+- A file that cannot be read, or a Word or PowerPoint file with no text, is
+  rejected on upload.
+- An image sent to a model without vision goes as the text OCR read from it,
+  with a warning that the model does not see the image. If it has no text, or
+  OCR is still reading it, the message is rejected.
+- The text of all the attachments in one message is limited to 100,000
+  characters on cloud models and to about half of the context window on local
+  models, because Ollama silently drops whatever exceeds it. Past the limit,
+  the text is cut, the model sees a marker where it stops, and the user gets a
+  warning. Files that no longer fit are left out.
+
+## Scanned pages and images in documents
+
+A PDF page with almost no text but with an image is treated as a scan. Blank
+pages are not. Images inside Word and PowerPoint files (PNG and JPEG, up to 20
+per file) are treated the same way, since they often carry text such as a logo
+or a stamp. They reach the model in this order:
+
+1. A page with a text layer goes as text, as before.
+2. If the model has vision, scanned pages and images go as images, up to 10 per
+   message.
+3. Otherwise, and past that limit, they go as text read by OCR.
+4. If OCR could not read them, the user gets a warning that says why.
+
+OCR runs locally with Tesseract (Spanish and English) in the background right
+after upload, one file at a time, and the attachment shows its progress. Its
+language data is downloaded once into the data folder (`ocr/`); after that, OCR
+works offline. The recognized text is truncated and indexed for search like any
+other text: a chat file is indexed once OCR finishes.
+
+## Files the chat creates
+
+During a chat turn the model has a `create_file` tool
+(`backend/core/ai/strategy/shared/native-tools.ts`). It takes a file name and
+its content; the extension decides the format:
+
+| Extension | Saved as |
+| --- | --- |
+| `.md`, `.txt`, `.csv`, `.json` | The text as written. JSON must be valid |
+| `.docx` | A Word document built from the Markdown the model writes: headings, paragraphs, lists, quotes, code blocks, tables, bold, italic and links |
+| `.pdf` | A PDF built from the same Markdown, laid out with the standard PDF fonts (`pdf-lib`), so it works offline. Those fonts cover Western European text: other accented letters lose the accent and emoji are left out |
+| Code (`.py`, `.js`, `.html`, `.sql`, ...) | Plain text |
+
+- The file is saved as an output attachment of the reply, shown under it with
+  a download button and a preview (Markdown rendered, CSV as a table, JSON
+  indented, the text of Word documents and PDFs).
+- It belongs to the chat: it is indexed for search like any other file, so
+  later messages can ask about it.
+- A failed file (bad JSON, unsupported format, over 50 MB) does not end the
+  turn: the model gets the reason and can fix it, and the user gets a warning.
+- The tool exists only in chat turns; execution nodes cannot call it.
+
+## Files an execution delivers
+
+An execution whose end node has the `file` output type delivers a file:
+
+- If a plugin node wrote that file to disk (`file_ops`, `excel_write`), the
+  run copies it, as before.
+- Otherwise the run builds it from the end node's content (usually the last
+  LLM node's text), named as the end node declares (`result.md` if it declares
+  no name), with the same formats as the chat. Reasoning that some local models
+  write into their answer (`<think>` blocks) is left out.
+
+The file is attached to the run, where the result panel lists it with a
+preview and a download button. If it cannot be built (for example, a name
+ending in `.pdf`), the run still ends with its text result and shows a warning.
+See `modules/executions/use-cases/run-execution/deliverable-files.ts`.
+
+## Searching files in a chat
+
+Chat files are split into chunks and embedded locally with
+`nomic-embed-text`, so this works offline and with cloud models. Each turn
+searches every file in the chat and adds the most relevant excerpts to the
+message: up to 12,000 characters on cloud models and about a quarter of the
+context window on local ones. That is how a long file's later parts, and
+files from earlier turns, reach the model.
+
+- Indexing runs in the background, one file at a time, and never delays a
+  message. While a file is being indexed, the user gets a warning and only the
+  part that is ready can be found.
+- It resumes after a restart. Files older than this feature are indexed the
+  next time their chat is used.
+- Files are indexed up to 500 chunks (roughly 350 pages).
+- Images are not indexed. Execution runs read their files whole and do not
+  search them.
+- Excerpts suit specific questions. A request about a whole long document only
+  sees what was included in the turn it was attached.
+
+Adding a format takes an entry in `MIME_TYPE_BY_EXTENSION`
+(`backend/core/attachments/attachment-limits.ts`), an extractor in
+`textExtractorFor` if it is not plain text, and an entry in
+`SUPPORTED_EXTENSIONS` (`frontend/src/features/chats/api/attachments.ts`).

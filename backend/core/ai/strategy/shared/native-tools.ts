@@ -3,6 +3,12 @@ import { z } from "zod";
 import { getORM } from "../../../../infrastructure/db/orm.ts";
 import { MessageRepository } from "../../../../infrastructure/db/repositories/message-repository.ts";
 import { humanInteractionQueue } from "../../../microkernel/human-interaction.ts";
+import {
+  createGeneratedFile,
+  GENERATED_FORMATS_LABEL,
+  generatedFilesStorage,
+  type GeneratedFilesContext,
+} from "../../../attachments/generated-files.ts";
 
 const RECALL_TOOL_NAME = "recall_past_conversations";
 const ASK_USER_TOOL_NAME = "ask_user";
@@ -24,6 +30,19 @@ const AskUserSchema = z.object({
     .optional()
     .describe(
       "If the answer is naturally one of a small, known set of choices (e.g. the candidate file paths you found, or a fixed set of preferences), list them here so the user can pick with one click instead of typing. Omit this entirely for open-ended questions (e.g. asking for a name, a value, free text).",
+    ),
+});
+
+const CREATE_FILE_TOOL_NAME = "create_file";
+
+const CreateFileSchema = z.object({
+  fileName: z
+    .string()
+    .describe("File name with its extension, e.g. 'report.docx', 'sales.csv', 'notes.md', 'script.py'."),
+  content: z
+    .string()
+    .describe(
+      "The whole content of the file. For .docx and .pdf write Markdown (# headings, paragraphs, - or 1. lists, **bold**, *italic*, | tables |): it is turned into a Word document or a PDF. For .csv use a header row.",
     ),
 });
 
@@ -77,20 +96,46 @@ function buildAskUserTool(): NativeTool {
       const answer = await wait;
 
       return answer
-        ? `You asked the user: "${question}"\nThe user answered: "${answer}"\nUse this answer now to continue the task you were already working on — call whatever tool you originally needed with this information filled in. Do not ask the same question again, and do not treat this answer as a new, unrelated request.`
+        ? `You asked the user: "${question}"\nThe user answered: "${answer}"\nContinue the task you were already doing using this answer.`
         : "The user did not answer in time. Proceed with your best judgment, or explain to the user that you need this information to continue.";
     },
     {
       name: ASK_USER_TOOL_NAME,
       description:
-        "Ask the user a direct clarifying question when a required detail for another tool is missing or ambiguous in their request (e.g. which folder, which file among several candidates, a preference only they can state) AND no available tool could discover it on its own. Do not use this as a substitute for exploring first — only after you've exhausted what tools can find out. If the valid answers are a small known set (e.g. the specific candidates you found), pass them as `options` so the user can pick one instead of typing. This pauses your turn until the user replies.",
+        "Ask the user one direct question when a required detail is missing or ambiguous and no tool could find it out (e.g. which folder, which of several files, a preference only they can state). Explore with tools first. If the valid answers are a small known set, pass them as `options`. Pauses your turn until the user replies.",
       schema: AskUserSchema,
     },
   );
 }
 
+function buildCreateFileTool(context: GeneratedFilesContext): NativeTool {
+  return tool(
+    async ({ fileName, content }: z.infer<typeof CreateFileSchema>) => {
+      try {
+        const file = await createGeneratedFile(context, fileName, content);
+        return `Created '${file.originalName}' (${file.sizeBytes} bytes). It is attached to your reply, where the user can preview and download it: mention it briefly instead of repeating its content.`;
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        context.onFailure(`Could not create '${fileName}': ${detail}`);
+        throw new Error(`the file was not created. ${detail}`);
+      }
+    },
+    {
+      name: CREATE_FILE_TOOL_NAME,
+      description:
+        `Creates a file and attaches it to your reply in this chat, where the user can preview and download it. USE CASES: the user wants a result as a file (a document, report, table, CSV, JSON, Markdown, Word document, PDF or code file): "give me this as a CSV", "generate a Word document with...", "make me a PDF of...", "write a script that...". The format comes from the extension: ${GENERATED_FORMATS_LABEL}. Do not use it to save a file at a path on the user's computer: use file_ops for that.`,
+      schema: CreateFileSchema,
+    },
+  );
+}
+
 export function buildNativeTools(chatId: number | string): NativeTool[] {
-  return [buildRecallTool(Number(chatId)), buildAskUserTool()];
+  const generatedFiles = generatedFilesStorage.getStore();
+  return [
+    buildRecallTool(Number(chatId)),
+    buildAskUserTool(),
+    ...(generatedFiles ? [buildCreateFileTool(generatedFiles)] : []),
+  ];
 }
 
 export function getNativeTool(
