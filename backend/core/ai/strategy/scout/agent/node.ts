@@ -23,6 +23,7 @@ import {
   buildAgentSystemPrompt,
   AGENT_OUT_OF_ITERATIONS_PROMPT,
   AGENT_EMPTY_RESPONSE_PROMPT,
+  AGENT_EMPTY_FALLBACK_MESSAGE,
 } from "./prompt.ts";
 import { MAX_AGENT_ITERATIONS, MAX_AGENT_DURATION_MS } from "../constants.ts";
 import { resolveTokenSavings } from "../../../token-savings/config.ts";
@@ -125,6 +126,30 @@ export const Agent: GraphNode<typeof ScoutState> = async (state, config) => {
       `[SCOUT - Agent] Tool calls requested (retry):`,
       response.tool_calls,
     );
+  }
+
+  // Still nothing: last attempt without tools, so the model can only write
+  // text. If even that is empty, say so instead of leaving a blank reply.
+  if (!response.content && !response.tool_calls?.length && !outOfIterations) {
+    console.log(
+      `[SCOUT - Agent] Still empty — last attempt without tools`,
+    );
+    try {
+      response = (await agentModel.invoke(
+        [
+          ...systemMessages,
+          ...history,
+          new HumanMessage(AGENT_OUT_OF_ITERATIONS_PROMPT),
+        ],
+        { signal: config.signal },
+      )) as AIMessage;
+    } catch (error) {
+      if (config.signal?.aborted) throw error;
+      console.warn(`[SCOUT - Agent] Tool-less attempt failed:`, error);
+    }
+    if (!response.content && !response.tool_calls?.length) {
+      response = new AIMessage(AGENT_EMPTY_FALLBACK_MESSAGE);
+    }
   }
 
   const durationMs = performance.now() - start;

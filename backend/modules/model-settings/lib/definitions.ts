@@ -34,10 +34,11 @@ export const MODEL_SETTING_DEFINITIONS: ModelSettingDefinition[] = [
     description:
       "Context window size in tokens, defining the maximum prompt and history length the model can process simultaneously.",
     type: "number",
-    defaultValue: 8192,
+    defaultValue: null,
     minValue: 512,
     maxValue: 131072,
     step: 256,
+    note: "When unset (auto), the model's own context window is used, capped at 32768 tokens. A larger window needs more memory (the KV cache grows with it): if the model loads slowly or runs out of memory, set a lower value.",
     requiresServiceRestart: false,
   },
   {

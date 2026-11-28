@@ -2,6 +2,7 @@ import { count, eq, desc } from "drizzle-orm";
 import type { AppDatabase } from "../orm.ts";
 import { knownKeyId } from "./known-key.ts";
 import {
+  chats,
   executions,
   executionGraphs,
   executionHistory,
@@ -60,6 +61,10 @@ export class ExecutionRepository {
   }
 
   async delete(id: number): Promise<void> {
+    // Older databases created chats.executionId without ON DELETE CASCADE
+    // (the column was added by an earlier version of migration 0008), so the
+    // FK would block the delete. Remove the execution's chats explicitly.
+    await this.db.delete(chats).where(eq(chats.executionId, id));
     await this.db.delete(executions).where(eq(executions.id, id));
   }
 

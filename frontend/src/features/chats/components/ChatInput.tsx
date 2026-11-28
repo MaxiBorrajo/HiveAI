@@ -67,7 +67,6 @@ export function ChatInput({
     current,
     hasAvailableModels,
     embeddingModelStatus,
-    openManage,
     openExplore,
     refreshModels,
   } = useModels();
@@ -181,9 +180,9 @@ export function ChatInput({
             variant="secondary"
             size="sm"
             className="ml-auto shrink-0"
-            onClick={hasAvailableModels ? openManage : openExplore}
+            onClick={openExplore}
           >
-            {hasAvailableModels ? "Select models" : "Explore models"}
+            Explore models
           </Button>
         </div>
       )}

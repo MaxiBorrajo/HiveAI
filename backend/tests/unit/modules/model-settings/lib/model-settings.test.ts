@@ -18,7 +18,7 @@ Deno.test("applyOverrides - with no overrides every setting holds its default", 
     settings.find((s) => s.name === name)?.currentValue;
   assertEquals(value("kv_cache_type"), "f16");
   assertEquals(value("flash_attention"), true);
-  assertEquals(value("n_ctx"), 8192);
+  assertEquals(value("n_ctx"), null);
   assertEquals(value("limit_output"), false);
   assertEquals(value("n_batch"), 512);
   assertEquals(value("mmap"), true);
@@ -37,8 +37,8 @@ Deno.test("extractOverrides - persists only values that differ from the default"
 Deno.test("mapSettingsToOllamaOptions - maps defaults, including think", () => {
   const options = mapSettingsToOllamaOptions(applyOverrides({}));
 
+  // n_ctx is "auto": left unset so the model's own context window applies.
   assertEquals(options, {
-    numCtx: 8192,
     numBatch: 512,
     useMmap: true,
     useMlock: false,

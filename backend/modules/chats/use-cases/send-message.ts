@@ -1,6 +1,7 @@
 import { createSseResponse } from "../../../core/api/sse.ts";
 import { ResponseBuilder } from "../../../core/api/response.ts";
 import { type HiveMicrokernel } from "../../../core/microkernel/hive-microkernel.ts";
+import { SCOUT_RECURSION_LIMIT } from "../../../core/ai/strategy/scout/constants.ts";
 import {
   Scout,
   type ChatStep,
@@ -625,6 +626,7 @@ export async function sendMessage(
                 },
                 {
                   streamMode: ["messages", "values"],
+                  recursionLimit: SCOUT_RECURSION_LIMIT,
                   signal: AbortSignal.any([req.signal, loopStop.signal]),
                 },
               );

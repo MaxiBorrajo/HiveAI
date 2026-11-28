@@ -13,6 +13,7 @@ import {
   type Summarizer,
   summarizerFromModel,
 } from "../token-savings/llm-summary.ts";
+import { withLocalNumCtx } from "./local-context.ts";
 import { resolveSmallModelRef } from "../token-savings/small-model.ts";
 
 export interface ChatModelOptions {
@@ -48,7 +49,10 @@ export async function createChatModel(
   options: ChatModelOptions = {},
   resolveSecret: SecretResolver = secretResolver,
 ): Promise<ProviderChatModel> {
-  const { tokenSavings, ...modelOptions } = options;
+  const { tokenSavings, ...rawOptions } = options;
+  // No explicit n_ctx ("auto"): use the model's own context window instead of
+  // Ollama's 4096 default.
+  const modelOptions = await withLocalNumCtx(ref.provider, ref.model, rawOptions);
   const model = await buildModel(ref, modelOptions, resolveSecret);
   if (isCloudProvider(ref.provider)) {
     applyTokenSavings(

@@ -893,6 +893,13 @@ function toReadableUrl(rawUrl: string): string {
 // Plugin
 // ---------------------------------------------------------------------------
 
+/**
+ * Appended to every failed read so small models do not spiral into new
+ * searches: they get an explicit, bounded next step.
+ */
+const FAILED_READ_NEXT_STEP =
+  "Next step: do NOT retry this URL and do NOT start a new search yet. Call web_read on a different URL from your earlier search results. If two or three sources fail, answer with what the search snippets and the pages you did read give you, and tell the user which sources could not be opened.";
+
 export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
   name = "web_read";
   description =
@@ -1079,6 +1086,13 @@ export default class WebReadPlugin implements BeePlugin<WebReadSchema> {
   }
 
   async process(input: z.infer<WebReadSchema>): Promise<string> {
+    const result = await this.read(input);
+    return /^Failed to (read|extract)/.test(result)
+      ? `${result}\n\n${FAILED_READ_NEXT_STEP}`
+      : result;
+  }
+
+  private async read(input: z.infer<WebReadSchema>): Promise<string> {
     const parsed = this.schema.safeParse(input);
     if (!parsed.success) {
       return `The provided parameters are invalid. Error: ${parsed.error.message}`;

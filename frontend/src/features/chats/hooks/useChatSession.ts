@@ -93,7 +93,12 @@ export function useChatSession(visible = true) {
   const usageState = useKeyedState<ConversationUsage | null>(displayKey, null);
 
   const justCreatedChatIdRef = useRef<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // One controller per running chat: several chats can stream at once, so a
+  // single ref would let one run overwrite (or clear) another's.
+  const abortControllersRef = useRef(new Map<string, AbortController>());
+  // Keys with a stream in flight. Reloading such a chat from the server would
+  // replace the live (optimistic) messages and orphan the streaming reply.
+  const busyKeysRef = useRef(new Set<string>());
   const displayKeyRef = useRef(displayKey);
   const chatsRef = useRef(chats);
   const visibleRef = useRef(visible);
@@ -111,6 +116,7 @@ export function useChatSession(visible = true) {
       justCreatedChatIdRef.current = null;
       return;
     }
+    if (busyKeysRef.current.has(activeChatId)) return;
 
     let cancelled = false;
     getChatMessages(activeChatId).then(({ data }) => {
@@ -177,7 +183,8 @@ export function useChatSession(visible = true) {
     if (activeChatId) touchChat(activeChatId);
 
     const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    abortControllersRef.current.set(key, abortController);
+    busyKeysRef.current.add(key);
 
     try {
       await sendMessage(
@@ -185,12 +192,21 @@ export function useChatSession(visible = true) {
         content,
         {
           onChatCreated: (chatId) => {
-            justCreatedChatIdRef.current = chatId;
+            // Only jump to the new chat if the user is still looking at the
+            // draft that created it; otherwise let it run in the background.
+            const stillViewing = displayKeyRef.current === startKey;
+            if (stillViewing) justCreatedChatIdRef.current = chatId;
             messagesState.moveKey(startKey, chatId);
             thinkingState.moveKey(startKey, chatId);
             usageState.moveKey(startKey, chatId);
+            const controller = abortControllersRef.current.get(key);
+            abortControllersRef.current.delete(key);
+            if (controller) abortControllersRef.current.set(chatId, controller);
+            busyKeysRef.current.delete(key);
+            busyKeysRef.current.add(chatId);
             key = chatId;
-            onChatCreated(chatId);
+            if (stillViewing) onChatCreated(chatId);
+            else refreshChats();
           },
           onUserMessage: (storedId) => {
             messagesState.set(
@@ -325,7 +341,8 @@ export function useChatSession(visible = true) {
         );
       }
     } finally {
-      abortControllerRef.current = null;
+      abortControllersRef.current.delete(key);
+      busyKeysRef.current.delete(key);
       thinkingState.set(IDLE_THINKING, key);
     }
     return true;
@@ -341,6 +358,6 @@ export function useChatSession(visible = true) {
     liveTools: thinkingState.value.liveTools,
     conversationUsage: usageState.value,
     send,
-    stop: () => abortControllerRef.current?.abort(),
+    stop: () => abortControllersRef.current.get(displayKey)?.abort(),
   };
 }

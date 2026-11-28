@@ -49,8 +49,24 @@ async function readFirstLine(
   }
 }
 
-function buildPassthroughSchema(): z.ZodType {
-  return z.record(z.string(), z.unknown());
+/**
+ * Schema the host exposes to the model for an external plugin. It must carry
+ * the plugin's real `properties`: a bare record has none, and Ollama's
+ * tool-parser generation rejects tools whose parameters lack a `properties`
+ * object. Falls back to an open object (still with `properties: {}`) when the
+ * reported JSON schema cannot be converted.
+ */
+function buildPassthroughSchema(
+  jsonSchema?: Record<string, unknown>,
+): z.ZodType {
+  if (jsonSchema && typeof jsonSchema === "object") {
+    try {
+      return z.fromJSONSchema(jsonSchema as never) as z.ZodType;
+    } catch {
+      // fall through to the open schema
+    }
+  }
+  return z.looseObject({});
 }
 
 export interface ExternalPluginHandle {
@@ -187,7 +203,7 @@ export async function launchExternalPlugin(
   const plugin: BeePlugin = {
     name: manifest.name,
     description: manifest.description,
-    schema: buildPassthroughSchema(),
+    schema: buildPassthroughSchema(manifest.schema),
     selectionTests: manifest.selectionTests,
     executionTests: manifest.executionTests.map((t) => ({
       ...t,

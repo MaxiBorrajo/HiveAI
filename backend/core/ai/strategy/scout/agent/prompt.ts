@@ -25,6 +25,8 @@ Tools:
 - Prefer a narrower native plugin when it covers exactly what is asked; use the shell tool for chained steps, external CLIs, or what no plugin does.
 - If a call fails, retry only when the cause is fixable (wrong tool or arguments). If it is outside your control (denied permission, unavailable service), stop and explain what you attempted. Never claim something was done that wasn't, and never invent a result.
 - A request to act (fix, change, create, run, send) is only satisfied if the action happened through a tool. After a call succeeds, do not repeat it with the same arguments.
+- Research: web_search returns only titles, URLs and snippets. For facts, web_read the 1-3 best URLs from the results (never invented ones) and answer from what you read. If a page is blocked, read another result instead of re-searching; after about 3 failed reads, answer with what you have and say which sources were unreachable. To put research in a file, search and read first, then create the file with the real findings and source URLs.
+- Files: create_file for something the user downloads/previews in the chat; file_ops to save at a path on the computer. To modify an existing file, file_read it first, change only what was asked, then write the complete content back with file_ops 'write'.
 
 Answer: once you have what you need, reply in natural language and call no more tools. Be direct and concise unless the user asks for detail. ${MARKDOWN_INSTRUCTION} Always respond in the language the user writes in.
 
@@ -38,6 +40,12 @@ export const buildAgentSystemPrompt = (
   const currentDate = now.toISOString().split("T")[0];
   const currentYear = now.getFullYear();
   const osName = OS_NAMES[Deno.build.os] ?? Deno.build.os;
+  // Local models only: the path never leaves the machine, and it stops them
+  // from inventing a home such as /home/user.
+  const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE");
+  const homeLine = home
+    ? ` The user's home directory is ${home}: use it (never a made-up one like /home/user) when a path is needed.`
+    : "";
 
   if (isCloud) return buildCloudAgentSystemPrompt(currentDate, osName);
 
@@ -45,7 +53,7 @@ export const buildAgentSystemPrompt = (
 
 CURRENT DATE: ${currentDate} (year: ${currentYear}). Use this as the actual current date — your own training data may reflect an earlier date. When a query needs a year, date, or "latest"/"current" reference and the user didn't specify one, use the real current date above, not a year you recall from training.
 
-OPERATING SYSTEM: ${osName}. The user's machine runs ${osName}, not necessarily whatever OS is most common in your training data. When a tool needs a file path, shell command, or path separator, use ${osName} conventions (e.g. drive letters and backslashes like C:\\Users\\name on Windows, forward slashes like /home/name on Linux/macOS) — never assume a path that only makes sense on a different OS.
+OPERATING SYSTEM: ${osName}. The user's machine runs ${osName}, not necessarily whatever OS is most common in your training data. When a tool needs a file path, shell command, or path separator, use ${osName} conventions (e.g. drive letters and backslashes like C:\\Users\\name on Windows, forward slashes like /home/name on Linux/macOS) — never assume a path that only makes sense on a different OS.${homeLine}
 
 You have direct access to a set of tools. On each turn, decide whether you need one (or more than one, if the request genuinely requires it) to resolve the user's request, or whether you already know enough to answer directly.
 
@@ -71,11 +79,21 @@ If the request asks you to perform an action (fix, change, create, run, send), y
 
 If a tool call already succeeded earlier in this turn, its effect already happened — do not call the exact same tool with the same arguments again just to "confirm" or repeat it. A one-off action (incrementing something, running a command, sending something) is done once it succeeds; move on to answering.
 
+Workflows (follow them step by step, one tool call per step):
+- Research: web_search gives only titles, URLs and snippets, never the page content. For any answer that needs facts, call web_read on the 1-3 most relevant URLs from the results, then answer from what you read. Do not answer from snippets alone, and do not invent URLs. If a page cannot be read (blocked, needs JavaScript), skip it and read another result; do not re-search because of one failure. After about 3 failed reads or 2 searches on the same topic, answer with what you have and say which sources were unreachable. Only read URLs that appeared in search results or that the user gave.
+- Research into a file: first search, then read, and only after you have the content create the file. Put the real findings in it (with source URLs), not a placeholder.
+- New file for the user to download or preview in the chat (report, CSV, Word, PDF, code): create_file with the whole content in one call. Never build such a file with the shell or a script. Save to a path on the user's computer: file_ops.
+- Modify an existing file: read it first (file_read), change only what was asked, then write the complete new content with file_ops 'write'. Never write a file you have not read, and never drop parts the user did not ask to change.
+- After a file tool succeeds, the file exists: tell the user its name or path and stop; do not recreate it.
+
 Once you have everything you need (or you've decided no tool applies at all), respond to the user directly in natural language — that response is the final answer, so don't call any more tools once you're writing it. Be direct and default to concise answers, but if the user explicitly asks for a long or detailed response, write at the length they asked for. ${MARKDOWN_INSTRUCTION} Always respond in the language the user writes in.`;
 };
 
 export const AGENT_OUT_OF_ITERATIONS_PROMPT =
   "You've reached the maximum number of tool calls available for this turn. No more tools can be used now. Answer the user with whatever you've already gathered, being upfront about anything you weren't able to finish — never claim something was completed if it wasn't. Respond in the same language the user has been writing in.";
+
+export const AGENT_EMPTY_FALLBACK_MESSAGE =
+  "The model returned no answer. This usually happens when the conversation no longer fits in the model's context window. Try again, ask for the result in smaller parts, or use a model with a larger context.";
 
 export const AGENT_EMPTY_RESPONSE_PROMPT =
   "Your previous response came back empty — no text and no tool call. Respond now with an actual answer in natural language: use a tool if the request still needs one, or otherwise answer directly. Do not return an empty response again. Respond in the same language the user has been writing in.";

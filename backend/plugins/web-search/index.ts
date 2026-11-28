@@ -735,7 +735,7 @@ function formatResults(
   const tail = extras?.length ? `\n\n${extras.join("\n\n")}` : "";
   return `Search results for '${query}':\n\n${body}${tail}\n\n(via ${
     PROVIDER_LABEL[provider]
-  })`;
+  })\n\nNext step: these are only snippets. To answer with facts, call web_read with the URL of the 1-3 most relevant results.`;
 }
 
 export default class WebSearchPlugin implements BeePlugin<WebSearchSchema> {
