@@ -134,6 +134,12 @@ export async function generateExecution(
     }
 
     const repo = new ExecutionRepository(db);
+    if (executionId && !(await repo.findById(executionId))) {
+      send("error", {
+        message: `Execution #${executionId} no longer exists. Reload the list and try again.`,
+      });
+      return;
+    }
     const currentGraph = options.currentGraph ?? (executionId
       ? await loadCurrentGraph(repo, executionId)
       : undefined);
@@ -173,6 +179,14 @@ export async function generateExecution(
       ),
     );
     if (!finalGraph) return;
+
+    // The execution may have been deleted while the (long) generation ran.
+    if (!(await repo.findById(targetExecutionId))) {
+      send("error", {
+        message: `Execution #${targetExecutionId} was deleted during generation; the graph was not saved.`,
+      });
+      return;
+    }
 
     const graphId = dryRun
       ? null
